@@ -1,0 +1,521 @@
+#pragma once
+// TETRA measurement collector: samples demodulator and decoder statistics once
+// per second in its own thread (independent of whether the GUI menu is open),
+// keeps the latest snapshot for the GUI and optionally appends it to a CSV file.
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstdint>
+#include <cstdio>
+#include <ctime>
+#include <functional>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <vector>
+
+#include "dsp/pi4dqpsk.h"
+#include "dsp/dqpsk_sym_extr.h"
+#include "dsp/osmotetra_dec.h"
+#include "subscribers.h"
+#include "gps.h"
+
+#define TETRA_PLUGIN_VERSION "0.14.5"
+
+struct TetraMeasSnapshot {
+    bool valid = false;
+    time_t timestamp = 0;
+
+    // RF / demodulator
+    float levelDbfs = -200.0f;
+    float peakDbfs = -200.0f;
+    double inputRate = 0.0;      // samples/s actually arriving at the demodulator (10 s average)
+    double inputRatePpm = 0.0;   // deviation from the nominal 72 kS/s
+    float merDb = 0.0f;
+    float merExclDb = 0.0f;      // MER with I/Q origin offset removed
+    float iqOffsetDb = -100.0f;  // I/Q origin offset (carrier leakage / RX DC) in dB rel. signal
+    double vfoFreqHz = 0.0;      // tuned VFO frequency
+    bool absErrValid = false;    // received carrier vs. SYSINFO DL frequency
+    double absErrHz = 0.0;
+    float evmPct = 100.0f;
+    float evmPeakPct = 100.0f;
+    float carrierOffsetHz = 0.0f;
+    float carrierPpm = 0.0f;
+    double refFreqHz = 0.0;
+    bool refFromSysinfo = false;
+    float symbolRatePpm = 0.0f;
+    bool symSync = false;
+    bool fllTracking = false;
+
+    // Burst level
+    int rxState = 0; // 0 unlocked, 1 know frame start, 2 locked
+    uint32_t bursts = 0;           // in the last interval
+    uint32_t tolerated = 0;        // in the last interval
+    uint32_t syncLost = 0;         // in the last interval
+    double ber = -1.0;             // last interval, -1 = no data
+    double berTotal = -1.0;        // since reset
+    uint32_t syncLostTotal = 0;
+    uint32_t resyncSlip = 0, resyncNoSlip = 0;  // since reset
+    int lastSlipBits = 0;
+
+    // CRC per channel: 0=BSCH 1=SB2/BNCH 2=half-slot 3=SCH/F signalling
+    uint32_t crcOk[4] = { 0, 0, 0, 0 };
+    uint32_t crcFail[4] = { 0, 0, 0, 0 };
+    uint32_t crcOkTotal[4] = { 0, 0, 0, 0 };
+    uint32_t crcFailTotal[4] = { 0, 0, 0, 0 };
+
+    // Network
+    int mcc = 0, mnc = 0, cc = 0;
+    int dlFreq = 0, ulFreq = 0;
+    int ts[4] = { 0, 0, 0, 0 };
+
+    // Position (GPS mouse)
+    GpsFix gps;
+
+    // Cell lock: -1 = no lock set, 0 = other/no cell received, 1 = locked cell
+    int cellMatch = -1;
+    float levelCalDb = 0.0f;
+};
+
+class TetraMeasurements {
+public:
+    ~TetraMeasurements() { stop(); }
+
+    // vfoFreq returns the current VFO center frequency in Hz (reference when no SYSINFO)
+    void start(dsp::demod::PI4DQPSK* demod, dsp::DQPSKSymbolExtractor* extr, dsp::osmotetradec* dec,
+               std::function<double()> vfoFreq, std::function<bool()> decoderActive) {
+        stop();
+        _demod = demod;
+        _extr = extr;
+        _dec = dec;
+        _vfoFreq = vfoFreq;
+        _decoderActive = decoderActive;
+        havePrev = false;
+        syncSeconds = 0;
+        running = true;
+        worker = std::thread(&TetraMeasurements::run, this);
+    }
+
+    void stop() {
+        {
+            std::lock_guard<std::mutex> lck(cvMtx);
+            running = false;
+        }
+        cv.notify_all();
+        if (worker.joinable()) { worker.join(); }
+        stopLog();
+    }
+
+    TetraMeasSnapshot get() {
+        std::lock_guard<std::mutex> lck(snapMtx);
+        return snap;
+    }
+
+    void resetTotals() { resetRequested = true; }
+
+    // ---- event log (sync loss / re-lock / gain and AFC steps) ----
+    struct Event {
+        time_t t;
+        std::string text;
+    };
+    void addEvent(const std::string& text) {
+        Event e { time(nullptr), text };
+        {
+            std::lock_guard<std::mutex> lck(evMtx);
+            events.push_back(e);
+            if (events.size() > 200) { events.erase(events.begin()); }
+        }
+        std::lock_guard<std::mutex> lck(logMtx);
+        if (eventFile) {
+            struct tm lt;
+#ifdef _WIN32
+            localtime_s(&lt, &e.t);
+#else
+            localtime_r(&e.t, &lt);
+#endif
+            char ts[32];
+            strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &lt);
+            fprintf(eventFile, "%s;%s\n", ts, text.c_str());
+            fflush(eventFile);
+        }
+    }
+    std::vector<Event> getEvents() {
+        std::lock_guard<std::mutex> lck(evMtx);
+        return events;
+    }
+    void clearEvents() {
+        std::lock_guard<std::mutex> lck(evMtx);
+        events.clear();
+    }
+
+    void setGps(NmeaGps* gps) { _gps = gps; }
+    void setLevelCal(float db) { levelCal.store(db); }
+
+    // Cell lock for coverage measurements (0 = don't care for that field)
+    struct CellLock {
+        bool active = false;
+        int mcc = 0, mnc = 0, cc = 0;
+        int dlFreq = 0;
+    };
+    void setCellLock(const CellLock& l) {
+        std::lock_guard<std::mutex> lck(lockMtx);
+        cellLock = l;
+    }
+    CellLock getCellLock() {
+        std::lock_guard<std::mutex> lck(lockMtx);
+        return cellLock;
+    }
+
+    // Station log: first appearance of every ISSI while logging (amateur mode)
+    void setStationSource(TetraSubscriberTable* subs, std::function<std::string(uint32_t)> describe, std::function<bool()> enabled) {
+        std::lock_guard<std::mutex> lck(logMtx);
+        _subs = subs;
+        _describe = describe;
+        _stationsEnabled = enabled;
+    }
+
+    // --- CSV logging ---
+    bool startLog(const std::string& dir, std::string& errOut) {
+        std::lock_guard<std::mutex> lck(logMtx);
+        if (logFile) { return true; }
+        time_t now = time(nullptr);
+        struct tm lt;
+#ifdef _WIN32
+        localtime_s(&lt, &now);
+#else
+        localtime_r(&now, &lt);
+#endif
+        char name[64];
+        strftime(name, sizeof(name), "tetra_%Y%m%d_%H%M%S.csv", &lt);
+        logPath = dir + "/" + name;
+        logFile = fopen(logPath.c_str(), "w");
+        if (!logFile) {
+            errOut = "Cannot open " + logPath;
+            return false;
+        }
+        fprintf(logFile, "# TETRA demodulator v" TETRA_PLUGIN_VERSION "\n");
+        fprintf(logFile, "time;level_dbfs;mer_db;evm_rms_pct;evm_peak_pct;carrier_offset_hz;carrier_ppm;ref_freq_hz;"
+                         "symbol_rate_ppm;rx_state;bursts;bursts_tolerated;sync_lost;ber;"
+                         "crc_bsch_ok;crc_bsch_fail;crc_sb2_ok;crc_sb2_fail;crc_ndb_ok;crc_ndb_fail;crc_schf_ok;crc_schf_fail;"
+                         "mcc;mnc;cc;dl_freq_hz;ul_freq_hz;ts1;ts2;ts3;ts4;"
+                         "level_dbm;cell_match;gps_fix;lat;lon;alt_m;speed_kmh;sats;hdop\n");
+        fflush(logFile);
+        eventFile = fopen((logPath.substr(0, logPath.size() - 4) + "_events.csv").c_str(), "w");
+        if (eventFile) { fprintf(eventFile, "time;event\n"); fflush(eventFile); }
+        if (_subs) {
+            _subs->takeNew(); // only log stations appearing from now on
+            stationPath = logPath.substr(0, logPath.size() - 4) + "_stations.csv";
+            stationFile = fopen(stationPath.c_str(), "w");
+            _subs->takeNewTraffic(); // only log traffic from now on
+            trafficFile = fopen((logPath.substr(0, logPath.size() - 4) + "_traffic.csv").c_str(), "w");
+            if (trafficFile) { fprintf(trafficFile, "time;ts;pdu;from;to;to_is_group;content;lat;lon\n"); fflush(trafficFile); }
+            if (stationFile) {
+                fprintf(stationFile, "time;issi;callsign;info\n");
+                fflush(stationFile);
+            }
+        }
+        return true;
+    }
+
+    void stopLog() {
+        std::lock_guard<std::mutex> lck(logMtx);
+        if (logFile) {
+            fclose(logFile);
+            logFile = nullptr;
+        }
+        if (stationFile) {
+            fclose(stationFile);
+            stationFile = nullptr;
+        }
+        if (eventFile) {
+            fclose(eventFile);
+            eventFile = nullptr;
+        }
+        if (trafficFile) {
+            fclose(trafficFile);
+            trafficFile = nullptr;
+        }
+    }
+
+    bool isLogging() {
+        std::lock_guard<std::mutex> lck(logMtx);
+        return logFile != nullptr;
+    }
+
+    std::string getLogPath() {
+        std::lock_guard<std::mutex> lck(logMtx);
+        return logPath;
+    }
+
+private:
+    void run() {
+        auto next = std::chrono::steady_clock::now();
+        while (true) {
+            next += std::chrono::seconds(1);
+            {
+                std::unique_lock<std::mutex> lck(cvMtx);
+                if (cv.wait_until(lck, next, [this] { return !running; })) { break; }
+            }
+            sample();
+        }
+    }
+
+    void sample() {
+        TetraMeasSnapshot s;
+        s.valid = true;
+        s.timestamp = time(nullptr);
+
+        s.levelDbfs = _demod->getLevelDbfs();
+        s.peakDbfs = _demod->getPeakDbfs();
+        {
+            // Input sample rate over a sliding 10 s window: missing samples
+            // (USB drops, CPU overload) show up as a negative deviation.
+            auto tnow = std::chrono::steady_clock::now();
+            uint64_t cnt = _demod->getSampleCount();
+            rateHist.push_back({ tnow, cnt });
+            while (rateHist.size() > 11) { rateHist.erase(rateHist.begin()); }
+            if (rateHist.size() >= 3) {
+                double dt = std::chrono::duration<double>(rateHist.back().first - rateHist.front().first).count();
+                double dn = (double)(rateHist.back().second - rateHist.front().second);
+                if (dt > 1.0) {
+                    s.inputRate = dn / dt;
+                    s.inputRatePpm = (s.inputRate / 72000.0 - 1.0) * 1e6;
+                }
+            }
+        }
+        s.carrierOffsetHz = _demod->getCarrierOffsetHz();
+        s.symbolRatePpm = _demod->getSymbolRatePpm();
+        s.merDb = _extr->getMerDb();
+        s.merExclDb = _extr->getMerExclOffsetDb();
+        s.iqOffsetDb = _extr->getIqOffsetDb();
+        s.evmPct = _extr->getEvmPct();
+        s.evmPeakPct = _extr->getEvmPeakPct();
+        s.symSync = _extr->sync;
+        // Narrow the FLL after 2 s of stable symbol sync, widen it on loss
+        syncSeconds = s.symSync ? syncSeconds + 1 : 0;
+        _demod->setTracking(syncSeconds >= 2);
+        s.fllTracking = _demod->isTracking();
+
+        bool decActive = _decoderActive ? _decoderActive() : true;
+        if (decActive) {
+            s.rxState = _dec->getRxState();
+            uint32_t bursts = _dec->getStatBursts();
+            uint32_t kb = _dec->getStatKnownBits();
+            uint32_t ke = _dec->getStatKnownErr();
+            uint32_t tol = _dec->getStatTolerated();
+            uint32_t lost = _dec->getStatSyncLost();
+            uint32_t ok[4], fail[4];
+            for (int i = 0; i < 4; i++) {
+                ok[i] = _dec->getCrcOk(i);
+                fail[i] = _dec->getCrcFail(i);
+            }
+
+            if (resetRequested.exchange(false) || !havePrev) {
+                resetFlagForSlip = true;
+                // Start (or restart) totals from the current counter values
+                baseKb = kb; baseKe = ke; baseLost = lost;
+                for (int i = 0; i < 4; i++) { baseOk[i] = ok[i]; baseFail[i] = fail[i]; }
+            }
+            if (havePrev) {
+                // unsigned subtraction is wrap-safe
+                s.bursts = bursts - prevBursts;
+                s.tolerated = tol - prevTol;
+                s.syncLost = lost - prevLost;
+                uint32_t dkb = kb - prevKb, dke = ke - prevKe;
+                s.ber = dkb ? (double)dke / (double)dkb : -1.0;
+                for (int i = 0; i < 4; i++) {
+                    s.crcOk[i] = ok[i] - prevOk[i];
+                    s.crcFail[i] = fail[i] - prevFail[i];
+                }
+            }
+            uint32_t tkb = kb - baseKb, tke = ke - baseKe;
+            s.berTotal = tkb ? (double)tke / (double)tkb : -1.0;
+            s.syncLostTotal = lost - baseLost;
+            {
+                uint32_t rs = _dec->getStatResyncSlip(), rn = _dec->getStatResyncNoSlip(), re = _dec->getStatResyncEvents();
+                if (!evInit || resetFlagForSlip) { baseSlip = rs; baseNoSlip = rn; }
+                s.resyncSlip = rs - baseSlip;
+                s.resyncNoSlip = rn - baseNoSlip;
+                s.lastSlipBits = _dec->getLastSlipBits();
+                if (evInit) {
+                    if (lost != prevLostEv) {
+                        addEvent("SYNC LOST x" + std::to_string(lost - prevLostEv) +
+                                 " (MER " + std::to_string((int)std::lround(s.merDb)) + " dB, level " +
+                                 std::to_string((int)std::lround(s.levelDbfs)) + " dBFS)");
+                    }
+                    if (re != prevResync) {
+                        int slip = _dec->getLastSlipBits();
+                        addEvent(std::string("RE-LOCK after ") + std::to_string(_dec->getLastResyncBits() / 510) + " slots, " +
+                                 (slip ? std::string("timing slip -> samples lost/inserted (USB/CPU/SDR glitch)")
+                                       : "no timing slip -> burst corrupted (signal)"));
+                    }
+                }
+                prevLostEv = lost;
+                prevResync = re;
+                evInit = true;
+                resetFlagForSlip = false;
+            }
+            for (int i = 0; i < 4; i++) {
+                s.crcOkTotal[i] = ok[i] - baseOk[i];
+                s.crcFailTotal[i] = fail[i] - baseFail[i];
+            }
+            prevBursts = bursts; prevKb = kb; prevKe = ke; prevTol = tol; prevLost = lost;
+            for (int i = 0; i < 4; i++) { prevOk[i] = ok[i]; prevFail[i] = fail[i]; }
+            havePrev = true;
+
+            s.mcc = _dec->getMcc();
+            s.mnc = _dec->getMnc();
+            s.cc = _dec->getCc();
+            s.dlFreq = _dec->getDlFreq();
+            s.ulFreq = _dec->getUlFreq();
+            for (int i = 0; i < 4; i++) { s.ts[i] = _dec->getTimeslotContent(i); }
+        }
+
+        if (_vfoFreq) { s.vfoFreqHz = _vfoFreq(); }
+        if (s.rxState == 2 && s.dlFreq > 0 && s.vfoFreqHz > 1e6) {
+            // independent of AFC: where the carrier really is vs. where SYSINFO says
+            s.absErrHz = s.vfoFreqHz + s.carrierOffsetHz - (double)s.dlFreq;
+            s.absErrValid = true;
+        }
+        // ppm reference: DL frequency from SYSINFO when locked, otherwise the VFO frequency
+        if (s.rxState == 2 && s.dlFreq > 0) {
+            s.refFreqHz = (double)s.dlFreq;
+            s.refFromSysinfo = true;
+        } else if (_vfoFreq) {
+            s.refFreqHz = _vfoFreq();
+        }
+        s.levelCalDb = levelCal.load();
+        if (_gps) { s.gps = _gps->get(); }
+        {
+            CellLock l = getCellLock();
+            if (l.active) {
+                bool ok = (s.rxState == 2) && (s.mcc == l.mcc) && (s.mnc == l.mnc) && (s.cc == l.cc) &&
+                          (l.dlFreq == 0 || std::abs(s.dlFreq - l.dlFreq) < 1000);
+                s.cellMatch = ok ? 1 : 0;
+            }
+        }
+        if (s.refFreqHz > 1e6) {
+            s.carrierPpm = (float)((double)s.carrierOffsetHz / s.refFreqHz * 1e6);
+        }
+
+        {
+            std::lock_guard<std::mutex> lck(snapMtx);
+            snap = s;
+        }
+        writeLog(s);
+    }
+
+    void writeLog(const TetraMeasSnapshot& s) {
+        std::lock_guard<std::mutex> lck(logMtx);
+        if (!logFile) { return; }
+        struct tm lt;
+#ifdef _WIN32
+        localtime_s(&lt, &s.timestamp);
+#else
+        localtime_r(&s.timestamp, &lt);
+#endif
+        char ts[32];
+        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &lt);
+        fprintf(logFile, "%s;%.1f;%.2f;%.2f;%.1f;%.1f;%.3f;%.0f;%.2f;%d;%u;%u;%u;%.3e;"
+                         "%u;%u;%u;%u;%u;%u;%u;%u;%d;%d;%d;%d;%d;%d;%d;%d;%d;",
+                ts, s.levelDbfs, s.merDb, s.evmPct, s.evmPeakPct, s.carrierOffsetHz, s.carrierPpm, s.refFreqHz,
+                s.symbolRatePpm, s.rxState, s.bursts, s.tolerated, s.syncLost, s.ber,
+                s.crcOk[0], s.crcFail[0], s.crcOk[1], s.crcFail[1], s.crcOk[2], s.crcFail[2], s.crcOk[3], s.crcFail[3],
+                s.mcc, s.mnc, s.cc, s.dlFreq, s.ulFreq, s.ts[0], s.ts[1], s.ts[2], s.ts[3]);
+        if (s.levelCalDb != 0.0f) { fprintf(logFile, "%.1f;", s.levelDbfs + s.levelCalDb); }
+        else { fprintf(logFile, ";"); }
+        fprintf(logFile, "%d;", s.cellMatch);
+        if (s.gps.valid) {
+            fprintf(logFile, "1;%.6f;%.6f;%.1f;%.1f;%d;%.1f\n", s.gps.lat, s.gps.lon, s.gps.altM, s.gps.speedKmh, s.gps.sats, s.gps.hdop);
+        }
+        else {
+            fprintf(logFile, "0;;;;;%d;\n", s.gps.sats);
+        }
+        if (trafficFile && _subs) {
+            bool en = _stationsEnabled ? _stationsEnabled() : true;
+            auto tr = _subs->takeNewTraffic();
+            if (en) {
+                for (auto& e : tr) {
+                    struct tm tl;
+#ifdef _WIN32
+                    localtime_s(&tl, &e.t);
+#else
+                    localtime_r(&e.t, &tl);
+#endif
+                    char tts[32];
+                    strftime(tts, sizeof(tts), "%Y-%m-%dT%H:%M:%S", &tl);
+                    std::string txt = e.text;
+                    for (auto& c : txt) { if (c == ';' || c == '\n') { c = ','; } }
+                    if (e.hasPos) {
+                        fprintf(trafficFile, "%s;%u;%s;%u;%u;%d;%s;%.6f;%.6f\n", tts, e.tn, e.pdu.c_str(), e.from, e.to, e.toGroup ? 1 : 0, txt.c_str(), e.lat, e.lon);
+                    } else {
+                        fprintf(trafficFile, "%s;%u;%s;%u;%u;%d;%s;;\n", tts, e.tn, e.pdu.c_str(), e.from, e.to, e.toGroup ? 1 : 0, txt.c_str());
+                    }
+                }
+                if (!tr.empty()) { fflush(trafficFile); }
+            }
+        }
+        if (stationFile && _subs) {
+            bool en = _stationsEnabled ? _stationsEnabled() : true;
+            std::vector<uint32_t> fresh = _subs->takeNew();
+            if (en) {
+                for (uint32_t ssi : fresh) {
+                    std::string d = _describe ? _describe(ssi) : std::string(";");
+                    fprintf(stationFile, "%s;%u;%s\n", ts, ssi, d.c_str());
+                }
+                if (!fresh.empty()) { fflush(stationFile); }
+            }
+        }
+        // flush every 10 lines to limit disk wakeups while staying crash-safe
+        if (++linesSinceFlush >= 10) {
+            fflush(logFile);
+            linesSinceFlush = 0;
+        }
+    }
+
+    dsp::demod::PI4DQPSK* _demod = nullptr;
+    dsp::DQPSKSymbolExtractor* _extr = nullptr;
+    dsp::osmotetradec* _dec = nullptr;
+    std::function<double()> _vfoFreq;
+    std::function<bool()> _decoderActive;
+    NmeaGps* _gps = nullptr;
+    std::atomic<float> levelCal { 0.0f };
+    std::mutex lockMtx;
+    CellLock cellLock;
+
+    std::thread worker;
+    std::mutex cvMtx;
+    std::condition_variable cv;
+    bool running = false;
+
+    std::mutex snapMtx;
+    TetraMeasSnapshot snap;
+
+    std::atomic<bool> resetRequested { false };
+    bool havePrev = false;
+    bool resetFlagForSlip = false;
+    std::vector<std::pair<std::chrono::steady_clock::time_point, uint64_t>> rateHist;
+    int syncSeconds = 0;
+    uint32_t prevBursts = 0, prevKb = 0, prevKe = 0, prevTol = 0, prevLost = 0;
+    uint32_t prevOk[4] = { 0 }, prevFail[4] = { 0 };
+    uint32_t baseKb = 0, baseKe = 0, baseLost = 0;
+    uint32_t baseOk[4] = { 0 }, baseFail[4] = { 0 };
+
+    std::mutex logMtx;
+    FILE* logFile = nullptr;
+    FILE* stationFile = nullptr;
+    FILE* eventFile = nullptr;
+    FILE* trafficFile = nullptr;
+    std::mutex evMtx;
+    std::vector<Event> events;
+    uint32_t prevResync = 0, prevResyncSlip = 0, prevLostEv = 0, baseSlip = 0, baseNoSlip = 0;
+    bool evInit = false;
+    std::string stationPath;
+    TetraSubscriberTable* _subs = nullptr;
+    std::function<std::string(uint32_t)> _describe;
+    std::function<bool()> _stationsEnabled;
+    std::string logPath;
+    int linesSinceFlush = 0;
+};

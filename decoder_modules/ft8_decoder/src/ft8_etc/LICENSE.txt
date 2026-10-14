@@ -1,0 +1,7 @@
+
+The code in this directory was adapted from MSHV project on 05-Jan-2023 by san@sysdate.com
+and contains important parts from version 269 of project source code.
+
+Respect to the original authors, respect to the MSHV author.
+
+GNU License is inherited, and applies to this derived (adapted) code.

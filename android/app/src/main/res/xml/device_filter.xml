@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <usb-device vendor-id="03eb" product-id="800c"  /> <!-- Airspy HF+ Discovery -->
+    <usb-device vendor-id="1d50" product-id="60a1"  /> <!--  Airspy  -->
+    <usb-device vendor-id="1df7" product-id="2500"  /> <!-- SDRRlay RSP1 -->
+    <usb-device vendor-id="1df7" product-id="3000"  /> <!-- SDRRlay RSP1a -->
+    <usb-device vendor-id="1df7" product-id="3010"  /> <!-- SDRRlay RSP2/pro -->
+    <usb-device vendor-id="1df7" product-id="3020"  /> <!-- SDRRlay RSPduo  -->
+    <usb-device vendor-id="1df7" product-id="3030"  /> <!-- SDRRlay RSPdx  -->
+    <usb-device vendor-id="1d50" product-id="6089"  /> <!--  hackrf  -->
+    <usb-device vendor-id="1d50" product-id="6108"  /> <!--  Myriad-RF LimeSDR  -->
+    <usb-device vendor-id="0bda" product-id="2838"  /> <!--  RTL-SDR  -->
+    <usb-device vendor-id="05da" product-id="2838"  /> <!--  RTL-SDR ? -->
+</resources>

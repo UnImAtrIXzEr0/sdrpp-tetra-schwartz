@@ -1,0 +1,66 @@
+build/
+.vscode/
+.vs/
+.idea/
+*.old
+*.dll
+*.exe
+*.zip
+*.wav
+.DS_Store
+root_dev/
+root_dev_srv/
+Folder.DotSettings.user
+CMakeSettings.json
+poggers_decoder
+m17_decoder/libcorrect
+SDR++.app
+android/deps
+android/app/assets
+android/app/bin
+.aider*
+.env
+node_modules
+cmake-*
+source_modules/dragonlabs_source
+source_modules/badgesdr_source
+decoder_modules/mystery_decoder
+decoder_modules/tetra_decoder
+qemu/
+
+/root
+/related
+/go
+/android/.gradle
+/xcode
+*.log
+__pycache__/
+*.pyc
+
+# Stray root-level generated files
+/*.patch
+/*.svg
+
+# Stray Node.js files (project doesn't use Node)
+package.json
+package-lock.json
+
+# Personal notes
+e2e_testing_changes.md
+
+# Android local machine config
+local.properties
+
+# Android debug keystores (sensitive)
+debug*.keystore
+
+# Gradle wrapper binary (reproducible from properties)
+gradle-wrapper.jar
+gradle-wrapper.properties
+
+# Separate nested project (has own .git)
+tools/
+
+# Editor/compiler caches
+.cache/
+.tempdir/

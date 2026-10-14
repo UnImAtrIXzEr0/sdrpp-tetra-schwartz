@@ -1,0 +1,398 @@
+#include <backend.h>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "implot/implot.h"
+#include <GLFW/glfw3.h>
+#include <utils/flog.h>
+#include <utils/opengl_include_code.h>
+#include <version.h>
+#include <core.h>
+#include <filesystem>
+#include <stb_image.h>
+#include <stb_image_resize.h>
+#include <gui/gui.h>
+#include <gui/menus/display.h>
+#include <utils/usleep.h>
+#include <http_debug_server.h>
+
+#ifndef WIN32
+#include <dlfcn.h>
+#endif
+
+#ifdef BUILD_TESTS
+#include "../../tests/test_utils.h"
+#endif
+
+
+namespace backend {
+    const char* OPENGL_VERSIONS_GLSL[] = {
+        "#version 120",
+        "#version 300 es",
+        "#version 120"
+    };
+
+    const int OPENGL_VERSIONS_MAJOR[] = {
+        3,
+        3,
+        2
+    };
+
+    const int OPENGL_VERSIONS_MINOR[] = {
+        0,
+        1,
+        1
+    };
+
+    const bool OPENGL_VERSIONS_IS_ES[] = {
+        false,
+        true,
+        false
+    };
+
+#define OPENGL_VERSION_COUNT (sizeof(OPENGL_VERSIONS_GLSL) / sizeof(char*))
+
+    bool maximized = false;
+    bool fullScreen = false;
+    int winHeight;
+    int winWidth;
+    bool _maximized = maximized;
+    int fsWidth, fsHeight, fsPosX, fsPosY;
+    int _winWidth, _winHeight;
+    GLFWwindow* window;
+    GLFWmonitor* monitor;
+
+    static void glfw_error_callback(int error, const char* description) {
+        flog::error("Glfw Error {0}: {1}", error, description);
+    }
+
+    static void maximized_callback(GLFWwindow* window, int n) {
+        if (n == GLFW_TRUE) {
+            maximized = true;
+        }
+        else {
+            maximized = false;
+        }
+    }
+
+    int init(std::string resDir) {
+        // Load config
+        core::configManager.acquire();
+        winWidth = core::configManager.conf["windowSize"]["w"];
+        winHeight = core::configManager.conf["windowSize"]["h"];
+        maximized = core::configManager.conf["maximized"];
+        fullScreen = core::configManager.conf["fullscreen"];
+        core::configManager.release();
+
+        // Setup window
+        glfwSetErrorCallback(glfw_error_callback);
+        if (!glfwInit()) {
+            return 1;
+        }
+
+#ifdef __APPLE__
+        // GL 3.2 + GLSL 150
+        const char* glsl_version = "#version 150";
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);           // Required on Mac
+
+        // Create window with graphics context
+        monitor = glfwGetPrimaryMonitor();
+        window = glfwCreateWindow(winWidth, winHeight, EDITION_TITLE " - experimental beta", NULL, NULL);
+        if (window == NULL)
+            return 1;
+        glfwMakeContextCurrent(window);
+#else
+        const char* glsl_version = "#version 120";
+        monitor = NULL;
+        for (int i = 0; i < OPENGL_VERSION_COUNT; i++) {
+            glsl_version = OPENGL_VERSIONS_GLSL[i];
+            glfwWindowHint(GLFW_CLIENT_API, OPENGL_VERSIONS_IS_ES[i] ? GLFW_OPENGL_ES_API : GLFW_OPENGL_API);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, OPENGL_VERSIONS_MAJOR[i]);
+            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, OPENGL_VERSIONS_MINOR[i]);
+#if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4)
+            glfwWindowHintString(GLFW_WAYLAND_APP_ID, "sdrpp");
+#endif
+
+            // Create window with graphics context
+            monitor = glfwGetPrimaryMonitor();
+            window = glfwCreateWindow(winWidth, winHeight, EDITION_TITLE " - experimental beta", NULL, NULL);
+            if (window == NULL) {
+                flog::info("OpenGL {0}.{1} {2}was not supported", OPENGL_VERSIONS_MAJOR[i], OPENGL_VERSIONS_MINOR[i], OPENGL_VERSIONS_IS_ES[i] ? "ES " : "");
+                continue;
+            }
+            flog::info("Using OpenGL {0}.{1}{2}", OPENGL_VERSIONS_MAJOR[i], OPENGL_VERSIONS_MINOR[i], OPENGL_VERSIONS_IS_ES[i] ? " ES" : "");
+            glfwMakeContextCurrent(window);
+            break;
+        }
+
+#endif
+
+        // Load app icon
+        if (!std::filesystem::is_regular_file(resDir + "/icons/sdrpp.png")) {
+            flog::error("Icon file '{0}' doesn't exist!", resDir + "/icons/sdrpp.png");
+            return 1;
+        }
+
+        GLFWimage icons[10];
+        icons[0].pixels = stbi_load(((std::string)(resDir + "/icons/sdrpp.png")).c_str(), &icons[0].width, &icons[0].height, 0, 4);
+        icons[1].pixels = (unsigned char*)malloc(16 * 16 * 4);
+        icons[1].width = icons[1].height = 16;
+        icons[2].pixels = (unsigned char*)malloc(24 * 24 * 4);
+        icons[2].width = icons[2].height = 24;
+        icons[3].pixels = (unsigned char*)malloc(32 * 32 * 4);
+        icons[3].width = icons[3].height = 32;
+        icons[4].pixels = (unsigned char*)malloc(48 * 48 * 4);
+        icons[4].width = icons[4].height = 48;
+        icons[5].pixels = (unsigned char*)malloc(64 * 64 * 4);
+        icons[5].width = icons[5].height = 64;
+        icons[6].pixels = (unsigned char*)malloc(96 * 96 * 4);
+        icons[6].width = icons[6].height = 96;
+        icons[7].pixels = (unsigned char*)malloc(128 * 128 * 4);
+        icons[7].width = icons[7].height = 128;
+        icons[8].pixels = (unsigned char*)malloc(196 * 196 * 4);
+        icons[8].width = icons[8].height = 196;
+        icons[9].pixels = (unsigned char*)malloc(256 * 256 * 4);
+        icons[9].width = icons[9].height = 256;
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[1].pixels, 16, 16, 16 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[2].pixels, 24, 24, 24 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[3].pixels, 32, 32, 32 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[4].pixels, 48, 48, 48 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[5].pixels, 64, 64, 64 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[6].pixels, 96, 96, 96 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[7].pixels, 128, 128, 128 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[8].pixels, 196, 196, 196 * 4, 4);
+        stbir_resize_uint8(icons[0].pixels, icons[0].width, icons[0].height, icons[0].width * 4, icons[9].pixels, 256, 256, 256 * 4, 4);
+        glfwSetWindowIcon(window, 10, icons);
+        stbi_image_free(icons[0].pixels);
+        for (int i = 1; i < 10; i++) {
+            free(icons[i].pixels);
+        }
+
+        // Add callback for max/min if GLFW supports it
+#if (GLFW_VERSION_MAJOR == 3) && (GLFW_VERSION_MINOR >= 3)
+        if (maximized) {
+            glfwMaximizeWindow(window);
+        }
+
+        glfwSetWindowMaximizeCallback(window, maximized_callback);
+#endif
+
+        // Setup Dear ImGui context
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImPlot::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        (void)io;
+        io.IniFilename = NULL;
+
+        // Setup Platform/Renderer bindings
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+
+        if (!ImGui_ImplOpenGL3_Init(glsl_version)) {
+            // If init fail, try to fall back on GLSL 1.2
+            flog::warn("Could not init using OpenGL with normal GLSL version, falling back to GLSL 1.2");
+            if (!ImGui_ImplOpenGL3_Init("#version 120")) {
+                flog::error("Failed to initialize OpenGL with GLSL 1.2");
+                return -1;
+            }
+        }
+
+        // Set window size and fullscreen state
+        glfwGetWindowSize(window, &_winWidth, &_winHeight);
+        if (fullScreen) {
+            flog::info("Fullscreen: ON");
+            fsWidth = _winWidth;
+            fsHeight = _winHeight;
+            glfwGetWindowPos(window, &fsPosX, &fsPosY);
+            const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+            glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 0);
+        }
+
+        // Everything went according to plan
+        return 0;
+    }
+
+    void beginFrame() {
+        // Start the Dear ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+    }
+
+    void render(bool vsync) {
+        // Rendering
+        ImGui::Render();
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(gui::themeManager.clearColor.x, gui::themeManager.clearColor.y, gui::themeManager.clearColor.z, gui::themeManager.clearColor.w);
+        glClear(GL_COLOR_BUFFER_BIT);
+        auto ctm = currentTimeNanos() / 1000;
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        ctm = currentTimeNanos() / 1000 - ctm;
+        lastDrawTimeBackend = ctm; // only glfw time.
+
+        glfwSwapInterval(vsync);
+        glfwSwapBuffers(window);
+
+        if (glSleepTime != 0) {
+            usleep(glSleepTime * 1000);
+        }
+    }
+
+    void getMouseScreenPos(double& x, double& y) {
+        glfwGetCursorPos(window, &x, &y);
+    }
+
+    void setMouseScreenPos(double x, double y) {
+        // Tell GLFW to move the cursor and then manually fire the event
+        glfwSetCursorPos(window, x, y);
+        ImGui_ImplGlfw_CursorPosCallback(window, x, y);
+    }
+
+    // External test function declaration
+    extern "C" void test_increment_counter();
+
+    int renderLoop() {
+        // Main loop
+        while (!glfwWindowShouldClose(window)) {
+#ifdef BUILD_TESTS
+            // Check if we should exit for testing purposes
+            if (sdrpp::test::renderLoopHook.shouldExitRenderLoop()) {
+                break;
+            }
+            // Increment the render loop counter for testing
+            sdrpp::test::renderLoopHook.insideRenderLoop();
+
+#endif
+
+            glfwPollEvents();
+
+            beginFrame();
+
+
+            if (_maximized != maximized) {
+                _maximized = maximized;
+                core::configManager.acquire();
+                core::configManager.conf["maximized"] = _maximized;
+                if (!maximized) {
+                    glfwSetWindowSize(window, core::configManager.conf["windowSize"]["w"], core::configManager.conf["windowSize"]["h"]);
+                }
+                core::configManager.release(true);
+            }
+
+            glfwGetWindowSize(window, &_winWidth, &_winHeight);
+
+            if (ImGui::IsKeyPressed(GLFW_KEY_F11)) {
+                fullScreen = !fullScreen;
+                if (fullScreen) {
+                    flog::info("Fullscreen: ON");
+                    fsWidth = _winWidth;
+                    fsHeight = _winHeight;
+                    glfwGetWindowPos(window, &fsPosX, &fsPosY);
+                    const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+                    glfwSetWindowMonitor(window, monitor, 0, 0, mode->width, mode->height, 0);
+                    core::configManager.acquire();
+                    core::configManager.conf["fullscreen"] = true;
+                    core::configManager.release();
+                }
+                else {
+                    flog::info("Fullscreen: OFF");
+                    glfwSetWindowMonitor(window, nullptr, fsPosX, fsPosY, fsWidth, fsHeight, 0);
+                    core::configManager.acquire();
+                    core::configManager.conf["fullscreen"] = false;
+                    core::configManager.release();
+                }
+            }
+
+            if ((_winWidth != winWidth || _winHeight != winHeight) && !maximized && _winWidth > 0 && _winHeight > 0) {
+                winWidth = _winWidth;
+                winHeight = _winHeight;
+                core::configManager.acquire();
+                core::configManager.conf["windowSize"]["w"] = winWidth;
+                core::configManager.conf["windowSize"]["h"] = winHeight;
+                core::configManager.release(true);
+            }
+
+            if (winWidth > 0 && winHeight > 0) {
+                ImGui::SetNextWindowPos(ImVec2(0, 0));
+                ImGui::SetNextWindowSize(ImVec2(_winWidth, _winHeight));
+                gui::mainWindow.draw();
+
+                if (httpdebug::getSdrStartRequest()) {
+                    gui::mainWindow.setPlayState(true);
+                    httpdebug::setSdrPlaying(true);
+                }
+                if (httpdebug::getSdrStopRequest()) {
+                    gui::mainWindow.setPlayState(false);
+                    httpdebug::setSdrPlaying(false);
+                }
+
+                std::string srcReq = httpdebug::getSourceChangeRequest();
+                if (!srcReq.empty()) {
+                    sigpath::sourceManager.selectSource(srcReq);
+                }
+
+                httpdebug::procfs::processQueue();
+
+                httpdebug::ImGuiAction action;
+                while (httpdebug::popAction(action)) {
+                    switch (action.type) {
+                    case httpdebug::ImGuiAction::Click:
+                        ImGui::GetIO().MousePos.x = action.x;
+                        ImGui::GetIO().MousePos.y = action.y;
+                        ImGui::GetIO().MouseDown[0] = true;
+                        break;
+                    case httpdebug::ImGuiAction::MouseMove:
+                        ImGui::GetIO().MousePos.x = action.x;
+                        ImGui::GetIO().MousePos.y = action.y;
+                        break;
+                    case httpdebug::ImGuiAction::KeyPress:
+                        ImGui::GetIO().KeysDown[action.key] = true;
+                        break;
+                    case httpdebug::ImGuiAction::TypeText:
+                        for (char c : action.text) {
+                            ImGui::GetIO().InputQueueCharacters.push_back(c);
+                        }
+                        break;
+                    case httpdebug::ImGuiAction::Focus:
+                        ImGui::SetFocusID(action.targetId, ImGui::GetCurrentWindow());
+                        break;
+                    case httpdebug::ImGuiAction::ClickById: {
+                        ImGuiContext* ctx = ImGui::GetCurrentContext();
+                        for (ImGuiWindow* window : ctx->Windows) {
+                            if (window->ID == action.targetId || window->IDStack.contains(action.targetId)) {
+                                ImGui::SetWindowPos(window, ImVec2(100, 100));
+                                ImGui::SetFocusID(action.targetId, window);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    }
+                }
+            }
+
+            render();
+            httpdebug::clearWidgetRegistry();
+        }
+
+        return 0;
+    }
+
+    int end() {
+        // Cleanup
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImPlot::DestroyContext();
+        ImGui::DestroyContext();
+
+        glfwDestroyWindow(window);
+        glfwTerminate();
+
+        return 0; // TODO: Int really needed?
+    }
+}

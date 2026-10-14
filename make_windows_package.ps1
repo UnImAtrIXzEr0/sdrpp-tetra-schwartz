@@ -1,0 +1,141 @@
+$build_dir=$args[0]
+$root_dir=$args[1]
+
+mkdir sdrpp_windows_x64
+
+$RELDIR="RelWithDebInfo"
+
+# Copy root
+cp -Recurse $root_dir/* sdrpp_windows_x64/
+
+# Licence and origin notices (GPL-3.0, AGPL-3.0 for osmo-tetra, NOTICE)
+$src_dir = Split-Path $root_dir -Parent
+cp "$src_dir/license" sdrpp_windows_x64/LICENSE-GPL-3.0.txt
+cp "$src_dir/decoder_modules/ch_tetra_demodulator/src/decoder/COPYING" sdrpp_windows_x64/LICENSE-AGPL-3.0-osmo-tetra.txt
+cp "$src_dir/NOTICE.md" sdrpp_windows_x64/NOTICE.md
+
+cp C:/vcpkg/installed/x64-windows/bin/itpp.dll sdrpp_windows_x64/
+
+# Copy core
+cp $build_dir/$RELDIR/* sdrpp_windows_x64/
+cp 'C:/Program Files/PothosSDR/bin/volk.dll' sdrpp_windows_x64/
+
+# Copy source modules
+cp $build_dir/source_modules/airspy_source/$RELDIR/airspy_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/airspy.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/airspyhf_source/$RELDIR/airspyhf_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/airspyhf.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/audio_source/$RELDIR/audio_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/bladerf_source/$RELDIR/bladerf_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/bladeRF.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/file_source/$RELDIR/file_source.dll sdrpp_windows_x64/modules/
+cp $build_dir/source_modules/hl2_source/$RELDIR/hl2_source.dll sdrpp_windows_x64/modules/
+
+#cp $build_dir/source_modules/fobossdr_source/$RELDIR/fobossdr_source.dll sdrpp_windows_x64/modules/
+#cp 'C:/Program Files/RigExpert/Fobos/bin/fobos.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/hackrf_source/$RELDIR/hackrf_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/hackrf.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/hermes_source/$RELDIR/hermes_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/limesdr_source/$RELDIR/limesdr_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/hydrasdr_source/$RELDIR/hydrasdr_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/hydrasdr-host/bin/hydrasdr.dll' sdrpp_windows_x64/
+
+cp 'C:/Program Files/PothosSDR/bin/LimeSuite.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/network_source/$RELDIR/network_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/perseus_source/$RELDIR/perseus_source.dll sdrpp_windows_x64/modules/
+
+cp 'C:/Program Files/PothosSDR/bin/perseus-sdr.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/plutosdr_source/$RELDIR/plutosdr_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/libiio.dll' sdrpp_windows_x64/
+cp 'C:/Program Files/PothosSDR/bin/libad9361.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/rfnm_source/$RELDIR/rfnm_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/RFNM/bin/rfnm.dll' sdrpp_windows_x64/
+cp 'C:/Program Files/RFNM/bin/spdlog.dll' sdrpp_windows_x64/
+cp 'C:/Program Files/RFNM/bin/fmt.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/rfspace_source/$RELDIR/rfspace_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/rtl_sdr_source/$RELDIR/rtl_sdr_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/PothosSDR/bin/rtlsdr.dll' sdrpp_windows_x64/
+
+cp $build_dir/source_modules/rtl_tcp_source/$RELDIR/rtl_tcp_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/sdrplay_source/$RELDIR/sdrplay_source.dll sdrpp_windows_x64/modules/ -ErrorAction SilentlyContinue
+cp 'C:/Program Files/SDRplay/API/x64/sdrplay_api.dll' sdrpp_windows_x64/ -ErrorAction SilentlyContinue
+
+cp $build_dir/source_modules/sdrpp_server_source/$RELDIR/sdrpp_server_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/soapy_source/$RELDIR/soapy_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/spyserver_source/$RELDIR/spyserver_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/kiwisdr_source/$RELDIR/kiwisdr_source.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/source_modules/usrp_source/$RELDIR/usrp_source.dll sdrpp_windows_x64/modules/
+cp 'C:/Program Files/uhd/bin/uhd.dll' sdrpp_windows_x64/ -ErrorAction SilentlyContinue
+# Boost is linked statically into UHD by default on MSVC; copy any dynamic
+# boost DLLs if present (dynamic linking) next to uhd.dll or from vcpkg bin.
+Get-ChildItem 'C:/Program Files/uhd/bin/boost_*.dll' -ErrorAction SilentlyContinue | ForEach-Object { cp $_.FullName sdrpp_windows_x64/ }
+Get-ChildItem 'C:/vcpkg/installed/x64-windows/bin/boost_*.dll' -ErrorAction SilentlyContinue | ForEach-Object { cp $_.FullName sdrpp_windows_x64/ }
+
+# Copy sink modules
+cp $build_dir/sink_modules/audio_sink/$RELDIR/audio_sink.dll sdrpp_windows_x64/modules/
+cp $build_dir/sink_modules/brown_audio_sink/$RELDIR/brown_audio_sink.dll sdrpp_windows_x64/modules/
+cp "C:/Program Files (x86)/RtAudio/bin/rtaudio.dll" sdrpp_windows_x64/
+
+cp $build_dir/sink_modules/network_sink/$RELDIR/network_sink.dll sdrpp_windows_x64/modules/
+
+
+# Copy decoder modules
+cp $build_dir/decoder_modules/ft8_decoder/$RELDIR/ft8_decoder.dll sdrpp_windows_x64/modules/
+cp $build_dir/decoder_modules/ch_extravhf_decoder/$RELDIR/ch_extravhf_decoder.dll sdrpp_windows_x64/modules/
+cp $build_dir/decoder_modules/ch_tetra_demodulator/$RELDIR/ch_tetra_demodulator.dll sdrpp_windows_x64/modules/
+cp $build_dir/decoder_modules/atv_decoder/$RELDIR/atv_decoder.dll sdrpp_windows_x64/modules/
+cp $build_dir/decoder_modules/m17_decoder/$RELDIR/m17_decoder.dll sdrpp_windows_x64/modules/
+
+
+cp "C:/Program Files/codec2/lib/libcodec2.dll" sdrpp_windows_x64/
+
+cp $build_dir/decoder_modules/meteor_demodulator/$RELDIR/meteor_demodulator.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/decoder_modules/radio/$RELDIR/radio.dll sdrpp_windows_x64/modules/
+
+
+# Copy misc modules
+cp $build_dir/misc_modules/discord_integration/$RELDIR/discord_integration.dll sdrpp_windows_x64/modules/
+cp $build_dir/misc_modules/noise_reduction_logmmse/$RELDIR/noise_reduction_logmmse.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/frequency_manager/$RELDIR/frequency_manager.dll sdrpp_windows_x64/modules/
+cp $build_dir/misc_modules/websdr_view/$RELDIR/websdr_view.dll sdrpp_windows_x64/modules/
+cp $build_dir/misc_modules/reports_monitor/$RELDIR/reports_monitor.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/iq_exporter/$RELDIR/iq_exporter.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/recorder/$RELDIR/recorder.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/rigctl_client/$RELDIR/rigctl_client.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/rigctl_server/$RELDIR/rigctl_server.dll sdrpp_windows_x64/modules/
+
+cp $build_dir/misc_modules/scanner/$RELDIR/scanner.dll sdrpp_windows_x64/modules/
+
+
+# Copy supporting libs
+cp 'C:/Program Files/PothosSDR/bin/libusb-1.0.dll' sdrpp_windows_x64/
+cp 'C:/Program Files/PothosSDR/bin/pthreadVC2.dll' sdrpp_windows_x64/
+
+Compress-Archive -Path sdrpp_windows_x64/ -DestinationPath sdrpp_windows_x64.zip
+
+rm -Force -Recurse sdrpp_windows_x64
