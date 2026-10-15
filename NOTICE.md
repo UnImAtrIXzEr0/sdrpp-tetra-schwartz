@@ -34,7 +34,9 @@ based on SDR++Brown v1.2.1. Main changes (details in the git history):
   measurements (MER/EVM, I/Q offset, carrier and symbol clock, BER, CRC,
   input rate), optional AFC and automatic RF gain, editable duplex tables and
   an amateur radio mode, layer-3 decoding (calls, talkers, SDS, LIP
-  positions, scan lists), network and neighbour cell information, GPS
+  positions, scan lists), network and neighbour cell information, TX analysis (spectrum,
+  adjacent channel power, occupied bandwidth, shoulders, carrier leakage,
+  I/Q imbalance), GPS
   coverage logging with KML/HTML map export, CSV logs.
 - Core: VFO selection, click-through and audio fixes, audio sinks that no
   longer stall the receive chain, start-up defaults, hidden built-in menus,
