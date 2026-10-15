@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>SDR++ TETRA-SCHWARTZ – User manual</title>
+<link rel="stylesheet" href="manual.css"></head><body>
+
+<h1 id="toc" style="break-before:auto">Contents</h1>
+<div class="toc">
+  <div class="l1"><a href="#s1">1 Overview</a></div>
+  <div class="l2"><a href="#s1-1">What the program does</a></div>
+  <div class="l2"><a href="#s1-2">Legal notes</a></div>
+  <div class="l1"><a href="#s2">2 Installation and first start</a></div>
+  <div class="l2"><a href="#s2-1">Windows</a> · <a href="#s2-2">Linux (AppImage)</a></div>
+  <div class="l2"><a href="#s2-3">Drivers and additional software</a></div>
+  <div class="l2"><a href="#s2-4">Settings at the first start</a></div>
+  <div class="l1"><a href="#s3">3 The user interface</a></div>
+  <div class="l2"><a href="#s3-2">Module Manager</a> · <a href="#s3-3">Own windows</a></div>
+  <div class="l1"><a href="#s4">4 Setting up the SDR</a></div>
+  <div class="l2"><a href="#s4-2">Recommendations per SDR type</a></div>
+  <div class="l2"><a href="#s4-3">Calibration</a> · <a href="#s4-4">Level</a></div>
+  <div class="l1"><a href="#s5">5 TETRA demodulator: basics</a></div>
+  <div class="l1"><a href="#s6">6 Measurements</a></div>
+  <div class="l1"><a href="#s7">7 Network, cell and duplex tables</a></div>
+  <div class="l1"><a href="#s8">8 Stations and traffic</a></div>
+  <div class="l1"><a href="#s9">9 TX analysis (spectrum)</a></div>
+  <div class="l1"><a href="#s10">10 Trends, timeslots, stability, reception limit</a></div>
+  <div class="l1"><a href="#s11">11 Additional carriers</a></div>
+  <div class="l1"><a href="#s12">12 Burst analysis (uplink)</a></div>
+  <div class="l1"><a href="#s13">13 Multipath</a></div>
+  <div class="l1"><a href="#s14">14 Alarms</a></div>
+  <div class="l1"><a href="#s15">15 Measurement report</a></div>
+  <div class="l1"><a href="#s16">16 GPS, coverage measurement and maps</a></div>
+  <div class="l1"><a href="#s17">17 Measurement scenarios</a></div>
+  <div class="l1"><a href="#s18">18 Troubleshooting</a></div>
+  <div class="l1"><a href="#s19">19 Appendix</a></div>
+  <div class="l2"><a href="#s19-1">Files and folders</a> · <a href="#s19-2">CSV columns</a></div>
+  <div class="l2"><a href="#s19-3">Glossary</a> · <a href="#s19-4">Origin and licences</a></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s1" class="pb"><span class="num">1</span>Overview</h1>
+<p class="lead">SDR++ TETRA-SCHWARTZ is an experimental amateur radio edition of SDR++ for analysing TETRA networks. It receives with an SDR, decodes TETRA transmissions and measures the signal quality the way you know it from a test bench – from the constellation diagram to the coverage map.</p>
+<div class="box info"><b class="t">Explicitly for experimental amateur radio purposes</b>The program is intended exclusively for experimental amateur radio purposes – for experiments, self-training and technical investigations in the amateur radio service. It is not a calibrated measuring instrument and is not intended for commercial, professional or public-authority use.</div>
+
+<h2 id="s1-1">What the program does</h2>
+<div class="cols">
+<div>
+<ul>
+  <li><b>Demodulation and decoding</b> of TETRA (π/4-DQPSK, 18 ksym/s) with an 8-point constellation and ETSI tolerances.</li>
+  <li><b>Modulation quality:</b> MER, EVM, I/Q offset, I/Q imbalance, phase/amplitude error, carrier and symbol clock offset, BER, CRC statistics.</li>
+  <li><b>Network information:</b> cell, neighbour cells, network time, timeslot usage.</li>
+  <li><b>Stations and traffic</b> in amateur radio mode with call signs (radioid.net) and talk groups.</li>
+  <li><b>TX analysis:</b> spectrum, adjacent channel power, occupied bandwidth, shoulders, carrier leakage.</li>
+</ul>
+</div>
+<div>
+<ul>
+  <li><b>Burst analysis</b> of handhelds: ramps, length, ripple, time mask, timing, ramp spectrum, noise on the uplink.</li>
+  <li><b>Multipath</b>, <b>frequency stability</b> (Allan deviation) and <b>reception limit</b>.</li>
+  <li><b>Long-term monitoring:</b> trends up to 24 h, CSV logs, alarms, measurement report.</li>
+  <li><b>Coverage measurement</b> with a GPS mouse and maps for Google Earth and OpenStreetMap.</li>
+  <li><b>Several carriers</b> compared at the same time.</li>
+</ul>
+</div>
+</div>
+
+<figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Fig. 1 – Main window: the menu with the TETRA demodulator on the left, spectrum and waterfall with the TETRA VFO on the right.</figcaption></figure>
+
+<h3>How the program works</h3>
+<p>The SDR delivers a wide I/Q data stream. From it the program cuts several narrow “taps” (VFOs): the TETRA VFO for demodulator and decoder and – only when switched on – further, invisible taps for TX analysis, burst analysis, multipath and additional carriers. All taps must lie within the bandwidth of the SDR.</p>
+<figure>
+<svg viewBox="0 0 860 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5a6774"/></marker></defs>
+  <rect x="10" y="95" width="110" height="60" rx="8" fill="#003a6c"/><text x="65" y="122" fill="#fff" text-anchor="middle" font-weight="700">SDR</text><text x="65" y="140" fill="#cfe0f3" text-anchor="middle" font-size="10.5">I/Q, e.g. 2–10 MS/s</text>
+  <line x1="120" y1="125" x2="170" y2="125" stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"/>
+  <rect x="172" y="95" width="110" height="60" rx="8" fill="#1d6fb8"/><text x="227" y="122" fill="#fff" text-anchor="middle" font-weight="700">Spectrum</text><text x="227" y="140" fill="#e3edf7" text-anchor="middle" font-size="10.5">waterfall</text>
+  <g font-size="11.5">
+  <line x1="282" y1="125" x2="330" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="95" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="150" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="205" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="332" y="20" width="200" height="40" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="432" y="38" text-anchor="middle" font-weight="700" fill="#003a6c">TETRA VFO (72 kS/s)</text><text x="432" y="53" text-anchor="middle" fill="#5a6774" font-size="10.5">demodulator → decoder</text>
+  <rect x="332" y="75" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="93" text-anchor="middle" font-weight="700" fill="#003a6c">TX analysis (250 kHz)</text><text x="432" y="108" text-anchor="middle" fill="#5a6774" font-size="10.5">spectrum, ACP, OBW</text>
+  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Bursts / multipath (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">uplink, downlink slot grid</text>
+  <rect x="332" y="185" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="203" text-anchor="middle" font-weight="700" fill="#003a6c">More carriers (72 kS/s each)</text><text x="432" y="218" text-anchor="middle" fill="#5a6774" font-size="10.5">level, MER, offset</text>
+  <line x1="532" y1="40" x2="590" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="592" y="15" width="255" height="50" rx="7" fill="#003a6c"/><text x="720" y="36" fill="#fff" text-anchor="middle" font-weight="700">Measurements · network · stations · audio</text><text x="720" y="53" fill="#cfe0f3" text-anchor="middle" font-size="10.5">every second → trends, CSV log, alarms</text>
+  <line x1="532" y1="95" x2="590" y2="125" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="532" y1="150" x2="590" y2="135" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="532" y1="205" x2="590" y2="145" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="592" y="105" width="255" height="55" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="720" y="128" text-anchor="middle" font-weight="700" fill="#003a6c">own windows, report</text><text x="720" y="145" text-anchor="middle" fill="#5a6774" font-size="10.5">active only when switched on</text>
+  </g>
+</svg>
+<figcaption>Fig. 2 – Signal path: one SDR, several independent taps.</figcaption></figure>
+
+<h2 id="s1-2">Legal notes</h2>
+<div class="box warn"><b class="t">Only for experimental amateur radio and your own networks</b>
+The program is explicitly intended for experimental amateur radio purposes: for amateur radio TETRA repeaters, your own test set-ups and measurements on your own equipment. In many countries – in Germany, for example, under § 5 TDDDG (formerly TTDSG) – it is prohibited to listen to transmissions of other radio services that are not intended for the general public or for you, and to pass on their content. This also applies to subscriber numbers, identities and text messages. Observe the regulations of your country. The program cannot transmit. These notes are not legal advice.</div>
+<div class="box info"><b class="t">Experimental beta version</b>
+Measured values are implemented with care but have not been compared with calibrated measuring instruments. Limits in the program are guide values – for binding statements always refer to the standard (ETSI EN 300 392-2, EN 300 394-1).</div>
+
+<!-- ============================================================ -->
+<h1 id="s2"><span class="num">2</span>Installation and first start</h1>
+<h2 id="s2-1">Windows</h2>
+<ol class="steps">
+  <li>Download the ZIP file <code>SDRPP-TETRA-SCHWARTZ_v…_windows_x64</code> and extract it <b>completely</b> into a folder of its own (do not start it from inside the ZIP).</li>
+  <li>Start <code>sdrpp.exe</code>. Because the program is not signed, Windows SmartScreen warns: <span class="ui">More info</span> → <span class="ui">Run anyway</span>. If the browser already blocks the download, explicitly keep the file in the download list.</li>
+  <li>Settings, logs and name lists are kept in the same folder. For an update, extract the new folder next to the old one; the configuration (<code>config.json</code>, <code>*_config.json</code>) can be copied over.</li>
+</ol>
+<h2 id="s2-2">Linux (AppImage, Ubuntu 24.04)</h2>
+<pre>chmod +x SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage
+sudo apt install libfuse2t64          # once, for AppImages
+./SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage</pre>
+<p>The configuration is stored in <code>~/.config/sdrpp_brown_appimage</code>. For USB SDRs the user needs access to the devices (udev rules of the respective SDR package, e.g. <code>rtl-sdr</code>, <code>hackrf</code>, <code>uhd-host</code>).</p>
+
+<h2 id="s2-3">Drivers and additional software</h2>
+<table>
+<tr><th>SDR</th><th>Windows</th><th>Linux</th></tr>
+<tr><td>RTL-SDR, Airspy, HackRF</td><td>install the WinUSB driver with Zadig</td><td>udev rules (packages <code>rtl-sdr</code>, <code>airspy</code>, <code>hackrf</code>)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR USB driver (Analog Devices)</td><td>no driver; access via USB or network (<code>ip:192.168.2.1</code>)</td></tr>
+<tr><td>USRP (B2xx)</td><td>included; FPGA images with <code>uhd_images_downloader</code></td><td><code>sudo apt install uhd-host &amp;&amp; sudo uhd_images_downloader</code></td></tr>
+<tr><td>BladeRF, LimeSDR</td><td>included</td><td>udev rules from the manufacturers' packages</td></tr>
+<tr><td>SDRplay</td><td>install the SDRplay API (the service must be running)</td><td>install the SDRplay API; deliberately not bundled</td></tr>
+<tr><td>Spectran (HTTP)</td><td colspan="2">Spectran software with the HTTP server enabled; connect via host name and port</td></tr>
+</table>
+
+<h2 id="s2-4">Settings at the first start</h2>
+<ul>
+  <li>Start frequency <b>439 MHz</b> (70 cm TETRA), colour theme <b>RoSc 2</b>.</li>
+  <li>TETRA demodulator in <span class="ui">Amateur radio</span> mode, 8-point constellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> and <span class="ui">Auto RF gain</span> on, audio to <span class="ui">Audio</span>.</li>
+  <li>Modules not needed for TETRA are hidden or off: Radio, Frequency Manager, Band Plan, FT8/FT4, noise reduction, WebSDR, Rigctl, VFO Color, Debug. Everything can be shown again in the <a href="#s3-2">Module Manager</a>.</li>
+  <li>The source list only contains the supported SDRs (see <a href="#s4-2">chapter 4</a>).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h1 id="s3" class="pb"><span class="num">3</span>The user interface</h1>
+<div class="cols">
+<div>
+<figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Fig. 3 – Menu column with the TETRA demodulator.</figcaption></figure>
+</div>
+<div>
+<h3>Areas</h3>
+<ul>
+  <li><b>Top bar:</b> start/stop, volume, frequency display (mouse wheel or click on the digits), VFO selection, signal level.</li>
+  <li><b>Menu column</b> on the left: <span class="ui">Source</span> (SDR), <span class="ui">TETRA Demodulator</span>, <span class="ui">Sinks</span> (audio), <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>. Every section can be expanded and collapsed and rearranged by dragging.</li>
+  <li><b>Spectrum and waterfall</b> on the right. The TETRA VFO is the highlighted band; dragging with the mouse moves it, a click into the waterfall sets it to that frequency.</li>
+</ul>
+<h3>Hints</h3>
+<ul>
+  <li>Almost every measured value has a <b>tooltip</b>: hold the mouse over it for a moment.</li>
+  <li>The width of the menu column can be changed; contents wrap instead of disappearing on the right.</li>
+  <li>Tables: move columns and change their width with the mouse; a right-click on the header shows or hides columns. The arrangement is saved.</li>
+</ul>
+</div>
+</div>
+
+<h2 id="s3-2">Module Manager</h2>
+<p>In the <span class="ui">Module Manager</span> every module has two switches: <span class="ui">Menu</span> shows it in the menu column, <span class="ui">On</span> enables it. Below, the built-in menus (VFO Color, Debug, Band Plan, Display, Theme) can be shown, and further SDR types can be added to the source list under <span class="ui">Sources in the source list</span>. The SDR currently in use always stays visible.</p>
+
+<h2 id="s3-3">Own windows</h2>
+<p>Under <span class="ui">Own window</span> in the TETRA demodulator, the constellation (with measurements), stations, network, TX analysis, trends, carriers, bursts and multipath can be moved into separate, freely movable windows – handy on a second screen. The menu then shows <span class="ui">Bring to front</span>. Position and size are remembered.</p>
+
+<!-- ============================================================ -->
+<h1 id="s4" class="pb"><span class="num">4</span>Setting up the SDR</h1>
+<h2>Basic rules</h2>
+<ul>
+  <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For burst timing (uplink and downlink at the same time) and additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
+  <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
+  <li><b>Level:</b> TETRA channel between −35 and −20 dBFS, peaks below −6 dBFS. <span class="ui">Auto RF gain</span> takes care of this if the SDR supports it.</li>
+  <li><b>Warm-up:</b> wait 10–15 minutes after switching on before calibrating the frequency or measuring stability.</li>
+</ul>
+
+<h2 id="s4-2">Recommendations per SDR type</h2>
+<table>
+<tr><th style="width:19%">SDR</th><th>Settings</th><th style="width:26%">Auto RF gain / calibration</th></tr>
+<tr><td>RTL-SDR</td><td>2.4 MS/s; <span class="ui">Tuner AGC</span> off; bias-T only for active antennas. Cheap sticks drift a lot – prefer TCXO models.</td><td>tuner gain steps; PPM correction (1 ppm steps)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>2–4 MS/s (for duplex measurements up to 20 MS/s if USB/network keep up); gain mode <span class="ui">Manual</span>. A Pluto+ with an external 10 MHz reference is the best choice for frequency measurements.</td><td>gain in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
+<tr><td>Airspy</td><td>mode <span class="ui">Sensitive</span> or <span class="ui">Linear</span>; sample rate 3 or 10 MS/s.</td><td>steps 0–21; no frequency correction in the GUI</td></tr>
+<tr><td>USRP B2xx</td><td>sample rate 2–20 MS/s, choose antenna port RX2 or TX/RX accordingly; external reference possible.</td><td>gain in dB</td></tr>
+<tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> only for weak signals (overload!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>BladeRF</td><td>gain mode <span class="ui">Manual</span>.</td><td>overall gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>LimeSDR</td><td>suitable antenna input (<code>LNAW</code> for 70 cm).</td><td>0–73 dB; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>SDRplay</td><td><span class="ui">IF AGC</span> off; set the LNA state manually according to the signal strength.</td><td>IF gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>Spectran (HTTP)</td><td>set level (reference level) and frequency correction in the Spectran software.</td><td>not from this program</td></tr>
+</table>
+<div class="box"><b class="t">Tip for Pluto/Zynq on Windows</b>If there are dropouts (“Re-locks … with timing slip”), lower the sample rate and connect the device directly to a USB 3 port without a hub. The buffers are already set to 20 ms × 8.</div>
+
+<h2 id="s4-3">Calibration</h2>
+<p>In <span class="ui">Measurements</span>, <span class="ui">Carrier vs. SYSINFO</span> shows how far the received carrier deviates from the frequency the base station itself announces. <span class="ui">Calibrate SDR</span> sets the frequency correction of the SDR so that this deviation disappears.</p>
+<div class="box warn"><b class="t">Calibrate only on a trusted cell</b>The value contains the error of the base station <i>and</i> of the SDR. Only calibrate on a station whose frequency you know (GPS-disciplined, or measured beforehand with a reference-locked SDR), and only after the warm-up.</div>
+
+<h2 id="s4-4">Level in dBm</h2>
+<p>The SDR measures in dBFS (relative to full scale). <span class="ui">Level cal. (dB)</span> converts this to dBm: feed in a signal of known power (signal generator) and set the value so that the display is correct. The calibration only applies to the same gain and frequency – switch <span class="ui">Auto RF gain</span> off for it.</p>
+
+<!-- ============================================================ -->
+<h1 id="s5"><span class="num">5</span>TETRA demodulator: basics</h1>
+<ol class="steps">
+  <li>Choose the SDR in <span class="ui">Source</span> and start it with ▶.</li>
+  <li>Find the TETRA carrier in the waterfall (a 25 kHz wide, uniform band) and drag the TETRA VFO onto it or enter the frequency. The <span class="ui">AFC</span> pulls the VFO along as soon as the decoder locks.</li>
+  <li>Choose the operating mode: <span class="ui">Amateur radio</span> (duplex tables for 70 cm, call signs, talk groups) or <span class="ui">ETSI</span>.</li>
+  <li>Check: <span class="ui">RF status</span> “OK”, MER above ~15 dB, MCC/MNC and frequencies appear in the network section.</li>
+</ol>
+<div class="cols">
+<div>
+<h3>Constellation</h3>
+<p>π/4-DQPSK has eight target points (<span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit.</p>
+<p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display. The measurements still show it.</p>
+<h3>Decoder mode</h3>
+<p><span class="ui">OSMO-TETRA</span> decodes within the program (normal case). <span class="ui">NETSYMS</span> sends the symbols over the network to an external program.</p>
+</div>
+<div>
+<figure><img src="shots/win_const.png"><figcaption>Fig. 4 – Constellation and measurements in an own window.</figcaption></figure>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s6" class="pb"><span class="num">6</span>Measurements</h1>
+<p>The values are updated every second – also with the menu closed – and feed trends, CSV log and alarms.</p>
+<table>
+<tr><th style="width:22%">Display</th><th>Meaning</th><th style="width:24%">Good values</th></tr>
+<tr><td>Level, RF status</td><td>power in the TETRA channel and peak value; RF status warns about overload or a too weak signal.</td><td>−35 … −20 dBFS, peak &lt; −6 dBFS</td></tr>
+<tr><td>MER, EVM</td><td>modulation error ratio (signal to error vector) and error vector in % (rms and peak).</td><td>MER &gt; 20 dB; EVM &lt; 10 % rms</td></tr>
+<tr><td>MER w/o offset</td><td>MER without the I/Q offset – shows what the modulator achieves without carrier leakage.</td><td></td></tr>
+<tr><td>I/Q offset</td><td>carrier leakage (transmitter) or DC component (receiver) relative to the signal.</td><td>&lt; −30 dB</td></tr>
+<tr><td>I/Q imbalance (IRR)</td><td>image rejection of the transmitter from an I/Q model.</td><td>&gt; 30 dB</td></tr>
+<tr><td>Error split</td><td>error split into phase and amplitude; much more phase points to phase noise.</td><td></td></tr>
+<tr><td>Carrier offset</td><td>carrier offset to the VFO (small with AFC).</td><td></td></tr>
+<tr><td>Symbol clock</td><td>deviation of the symbol clock in ppm (transmitter + SDR clock).</td><td>a few ppm</td></tr>
+<tr><td>Input rate</td><td>actually arriving sample rate (60 s regression); negative deviation = lost samples.</td><td>±(uncertainty)</td></tr>
+<tr><td>Audio drops</td><td>discarded speech data because the audio output cannot keep up.</td><td>none</td></tr>
+<tr><td>Carrier vs. SYSINFO</td><td>received carrier minus announced frequency – basis for <span class="ui">Calibrate SDR</span>.</td><td>±0.2 ppm (ETSI, base station)</td></tr>
+<tr><td>AFC, Auto RF gain</td><td>VFO follows the carrier (max. ±6 kHz); gain is adjusted every 4 s.</td><td></td></tr>
+<tr><td>Raw BER</td><td>bit errors in known bits (training sequences) before channel decoding.</td><td>&lt; 1·10⁻³</td></tr>
+<tr><td>Bursts/s, re-locks</td><td>decoded bursts; resynchronisation <i>with</i> timing slip = lost samples (USB/CPU), <i>without</i> = disturbed burst (signal).</td><td>no re-locks</td></tr>
+<tr><td>CRC table</td><td>error rate per channel (BSCH, SB2, half slot, SCH/F) in the last second and in total.</td><td>&lt; 1 %</td></tr>
+<tr><td>Events</td><td>event list: sync losses, AFC and gain steps, alarms.</td><td></td></tr>
+</table>
+<p><span class="ui">Reset totals</span> resets sums and statistics. <span class="ui">Start CSV log</span> writes one line per second into the log folder (see <a href="#s19-2">appendix</a>), plus files for events, stations, traffic and additional carriers.</p>
+
+<!-- ============================================================ -->
+<h1 id="s7"><span class="num">7</span>Network, cell and duplex tables</h1>
+<div class="cols">
+<div>
+<p>The <span class="ui">Network &amp; cell</span> section shows what the base station broadcasts about itself: MCC/MNC, colour code, downlink and uplink frequency, services (encryption, voice, data), cell selection parameters, network time and neighbour cells. <span class="ui">Tune</span> moves the VFO to a neighbour cell.</p>
+<h3>Duplex tables</h3>
+<p>The uplink frequency follows from the downlink and the duplex spacing. The spacing is not transmitted directly but as an index into a table. In amateur radio mode these values apply for 70 cm:</p>
+<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
+<tr><td>Spacing (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
+<p>All tables can be edited under <span class="ui">Duplex spacing table</span>; they are saved in <code>tetra_duplex_ham.json</code>. <span class="ui">Table = default</span> restores the defaults.</p>
+</div>
+<div><figure><img src="shots/win_network.png"><figcaption>Fig. 5 – Network and cell (identities blurred).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s8"><span class="num">8</span>Stations and traffic</h1>
+<p>In amateur radio mode, <span class="ui">Stations &amp; Traffic</span> collects all subscribers and groups:</p>
+<ul>
+  <li><b>Stations:</b> ISSI (in amateur radio = DMR ID; 7 digits user, 6 digits repeater), call sign and location from radioid.net, timeslot, last heard, scanned groups, activity.</li>
+  <li><b>Groups:</b> GSSI with the name of the talk group (Brandmeister), current and last speaker, registered stations.</li>
+  <li><b>Traffic:</b> call set-up, transmission grant, SDS text messages and positions in plain text.</li>
+</ul>
+<p><span class="ui">Download name lists</span> loads the name lists (radioid.net and Brandmeister) into the configuration folder; without internet the files can also be placed there by hand. <span class="ui">Hide call control</span> hides control messages so that only SDS and status remain.</p>
+<figure><img src="shots/win_stations.png"><figcaption>Fig. 6 – Stations and traffic (identities blurred).</figcaption></figure>
+
+<!-- ============================================================ -->
+<h1 id="s9"><span class="num">9</span>TX analysis (spectrum)</h1>
+<div class="cols">
+<div>
+<p><span class="ui">Run analysis (250 kHz tap)</span> starts a 250 kHz wide tap around the channel and measures:</p>
+<ul>
+  <li><b>Channel power</b> through the TETRA filter.</li>
+  <li><b>ACP</b> at ±25, ±50, ±75 kHz in dBc, with (adjustable) limits.</li>
+  <li><b>Occupied BW (99 %)</b> and <b>−26 dB bandwidth</b> compared with the ideal TETRA spectrum.</li>
+  <li><b>Shoulders</b> and <b>edge slope</b> – shoulders point to non-linearity of the power amplifier.</li>
+  <li><b>Carrier line</b> – carrier leakage as a spectral line.</li>
+</ul>
+<p><span class="ui">RBW</span> and <span class="ui">Avg</span> set resolution and averaging. <span class="ui">Store floor</span> stores the noise of the receiver (transmitter off or input terminated with 50 Ω); values close to this limit are marked grey.</p>
+<div class="box warn"><b class="t">Limits of the measurement</b>The adjacent channel measurement is limited by the dynamic range and phase noise of the SDR – typically −60 to −70 dBc. For values close to the limit, use a strong, clean signal and a low gain.</div>
+</div>
+<div><figure><img src="shots/win_txa.png"><figcaption>Fig. 7 – TX analysis: measured spectrum, ideal TETRA spectrum (thin) and ACP windows.</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s10" class="pb"><span class="num">10</span>Trends, timeslots, stability, reception limit</h1>
+<h2>Over time</h2>
+<div class="cols">
+<div>
+<p>The <span class="ui">Trends &amp; timeslots</span> section keeps the last 24 hours with one value per second: level, MER, CRC errors, carrier offset, traffic per timeslot and bursts/s. For long time spans every pixel combines several seconds; line = mean, band = minimum to maximum, red marks = sync losses. The mouse shows the values at any point in time.</p>
+<p><span class="ui">Open a CSV log</span> opens a saved log in the same view – so measurements over several days can be evaluated, too. <span class="ui">Back to live</span> returns to the running measurement.</p>
+<h3>Timeslot usage</h3>
+<p>Every downlink burst announces what its timeslot is used for. The table counts traffic, assigned control, common control and free per timeslot, plus the uplink traffic. Frame 18 (always control) is left out.</p>
+</div>
+<div><figure><img src="shots/win_trends_log.png"><figcaption>Fig. 8 – Trends of a loaded 6-hour log (synthetic example data): level drop during an antenna test, traffic in the evening.</figcaption></figure></div>
+</div>
+
+<h2>Frequency stability</h2>
+<p>The <span class="ui">Frequency stability</span> tab shows the deviation between the received carrier and the SYSINFO frequency in ppb over time, and the <b>Allan deviation</b>: how much the frequency fluctuates on average over 1 s, 2 s, 4 s … A decrease with the averaging time is normal measurement noise; a rise at long times shows drift (temperature, ageing).</p>
+<div class="cols"><div>
+<div class="box info"><b class="t">Meaningful only with a reference</b>The value contains base station and SDR. Without a GPS-disciplined reference at the SDR you mainly measure your own crystal.</div>
+<p><b>Reading the chart:</b> the frequency over time at the top, the Allan deviation on a log-log scale below. The longest section without gaps is evaluated; seconds without synchronisation interrupt it.</p>
+</div><div><figure><img src="shots/win_stability.png" style="max-height:105mm"><figcaption>Fig. 8a – Frequency over time and Allan deviation.</figcaption></figure></div></div>
+
+<h2>Level vs. quality – reception limit</h2>
+<p>The <span class="ui">Level vs. quality</span> tab sorts all seconds by level (1 dB steps) and shows CRC errors and MER for each step. The <b>reception limit</b> is the lowest level above which no step exceeds the <span class="ui">CRC limit</span> (default 1 %). It is a practical threshold for coverage maps. With a calibrated level (dBm) it is comparable between measurements.</p>
+<figure><img src="shots/win_quality.png" style="max-width:80%"><figcaption>Fig. 8b – CRC errors and MER per level step with the determined reception limit (synthetic example data).</figcaption></figure>
+
+<!-- ============================================================ -->
+<h1 id="s11"><span class="num">11</span>Additional carriers</h1>
+<div class="cols">
+<div>
+<p><span class="ui">Carriers (multi-carrier)</span> evaluates up to eight additional carriers within the SDR bandwidth at the same time: level, distance to the main carrier, MER, carrier offset and synchronisation – only the main carrier is decoded.</p>
+<ul>
+  <li>Enter a frequency → <span class="ui">Add carrier</span>, or <span class="ui">Add neighbour cells</span> takes the neighbour cells from the network information.</li>
+  <li>The level history of all carriers appears below (10 min to 24 h).</li>
+  <li>While a CSV log is running, <code>…_carriers.csv</code> is written as well.</li>
+</ul>
+<p>Each carrier costs about as much CPU time as another VFO.</p>
+</div>
+<div><figure><img src="shots/win_carriers.png"><figcaption>Fig. 9 – Comparison of several carriers.</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s12" class="pb"><span class="num">12</span>Burst analysis (uplink)</h1>
+<p>Handhelds transmit in bursts – short transmissions in their timeslot. The burst analysis measures them through a 25 kHz channel filter. The frequency is the uplink from the network information (<span class="ui">Uplink (SYSINFO)</span>), a manual frequency or the TETRA VFO (e.g. a base station in discontinuous mode).</p>
+<div class="cols">
+<div>
+<h3>Burst shape and time mask</h3>
+<ul>
+  <li><b>Length (−3 dB):</b> burst length; nominal 231 symbols (12.8 ms) for normal, 103 for half bursts.</li>
+  <li><b>Ramp up/down:</b> time from −20 to −1 dBc and back.</li>
+  <li><b>Ripple:</b> ripple in the useful part (averaged).</li>
+  <li><b>Outside the burst:</b> power before and after the burst (dBc) – limited by the receiver noise (“at the floor”).</li>
+</ul>
+<p>The chart shows the shape averaged over the last bursts with the <span class="ui">Time mask</span> (red). The mask values are adjustable and only guide values.</p>
+<h3>Timing relative to the downlink</h3>
+<p>With <span class="ui">Timing vs. downlink</span> the program opens a second, sample-aligned tap on the TETRA VFO (downlink of the same cell), finds the slot grid there and measures when each burst rises after the start of its uplink timeslot. Most important is the <b>comparison between radios</b> and the spread; the absolute value also contains propagation differences (3.3 µs per km of detour).</p>
+</div>
+<div><figure><img src="shots/win_bursts.png"><figcaption>Fig. 10 – Burst analysis with profile, timing and ramp spectrum (synthetic test signal).</figcaption></figure></div>
+</div>
+<figure>
+<svg viewBox="0 0 860 150" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="11.5">
+  <text x="10" y="32" fill="#003a6c" font-weight="700">Downlink</text>
+  <text x="10" y="102" fill="#003a6c" font-weight="700">Uplink</text>
+  <g stroke="#9fb0c2" fill="#e3edf7">
+    <rect x="90" y="15" width="150" height="28"/><rect x="240" y="15" width="150" height="28"/><rect x="390" y="15" width="150" height="28"/><rect x="540" y="15" width="150" height="28"/><rect x="690" y="15" width="150" height="28"/>
+    <rect x="90" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="240" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="390" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="540" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="690" y="85" width="150" height="28" fill="#f1f5f9"/>
+  </g>
+  <g fill="#003a6c" text-anchor="middle"><text x="165" y="34">TS1</text><text x="315" y="34">TS2</text><text x="465" y="34">TS3</text><text x="615" y="34">TS4</text><text x="765" y="34">TS1</text></g>
+  <g fill="#5a6774" text-anchor="middle"><text x="165" y="104">TS3</text><text x="315" y="104">TS4</text><text x="765" y="104">TS2</text><text x="615" y="104">TS1</text></g>
+  <rect x="398" y="88" width="136" height="22" rx="3" fill="#1d6fb8"/><text x="466" y="103" fill="#fff" text-anchor="middle" font-weight="700">Burst (TS1)</text>
+  <path d="M390,65 L390,120" stroke="#c0392b" stroke-dasharray="4 3"/>
+  <path d="M390,128 L398,128" stroke="#c0392b" stroke-width="2"/><text x="400" y="142" fill="#c0392b">measured timing</text>
+  <path d="M90,52 C200,52 280,70 390,78" stroke="#5a6774" fill="none" marker-end="url(#ar)"/><text x="160" y="68" fill="#5a6774">uplink = downlink + 2 timeslots</text>
+</svg>
+<figcaption>Fig. 11 – Slot grid: the uplink is offset from the downlink by two timeslots (2 × 14.17 ms).</figcaption></figure>
+
+<h3>Ramp spectrum (switching transients)</h3>
+<p>Most of the interference in the adjacent channels is produced when switching on and off. <span class="ui">Ramp spectrum</span> measures the channel power at −50, −25, ±0, +25, +50 kHz in 1.8 ms windows during the ramp-up, in the middle and during the ramp-down, relative to the middle. Orange: ramp more than 6 dB above the middle (splatter).</p>
+<h3>Noise on the uplink</h3>
+<p><span class="ui">Noise between bursts</span> measures the power in the channel while nobody transmits – on the uplink of a repeater that is its receive noise and interference. The history over up to 24 h shows interferers that make the repeater “deaf”; an alarm can react to it.</p>
+<div class="box warn"><b class="t">Never connect a transmitter directly</b>Never connect a handheld to the SDR without sufficient attenuation (e.g. 60–70 dB, power-rated attenuator). For measurements an antenna a few metres away is usually enough.</div>
+
+<!-- ============================================================ -->
+<h1 id="s13"><span class="num">13</span>Multipath</h1>
+<div class="cols">
+<div>
+<p>Every downlink burst contains a known training sequence. From it, <span class="ui">Multipath (downlink)</span> estimates the channel impulse response and averages it into a power delay profile. The comparison with the profile of an ideal signal (green) reveals echoes:</p>
+<ul>
+  <li><b>Strongest echo:</b> delay (µs), detour (km) and level of the strongest echo above −15 dB.</li>
+  <li><b>Extra delay spread:</b> additional delay spread compared with the ideal signal.</li>
+</ul>
+<p>Echoes from about 55 µs (17 km detour) to 222 µs are detected; shorter ones only widen the main path. TETRA receivers cope with echoes up to about ¼ symbol (14 µs) without loss. <span class="ui">Averaging</span>: 2 s for drives, 60 s or unlimited for fixed locations.</p>
+</div>
+<div><figure><img src="shots/win_multipath.png"><figcaption>Fig. 12 – Multipath profile with an echo at 111 µs (synthetic test signal).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s14"><span class="num">14</span>Alarms</h1>
+<p>For long-term monitoring, limits can be set under <span class="ui">Alarms</span>:</p>
+<table class="plain">
+<tr><th>Condition</th><th>Example</th></tr>
+<tr><td>Level below</td><td>−90 dBFS or dBm (calibrated)</td></tr>
+<tr><td>MER below</td><td>15 dB</td></tr>
+<tr><td>CRC errors above</td><td>5 %</td></tr>
+<tr><td>Lock / sync lost</td><td>immediately</td></tr>
+<tr><td>Uplink noise above</td><td>−100 dBFS (the burst analysis must run on the uplink)</td></tr>
+</table>
+<p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. Optionally an alarm starts the CSV log, on Windows also with a sound. Active alarms appear in red at the top of the TETRA menu.</p>
+
+<!-- ============================================================ -->
+<h1 id="s15"><span class="num">15</span>Measurement report</h1>
+<div class="cols">
+<div>
+<p><span class="ui">Report</span> → <span class="ui">Create report</span> creates an HTML file in the log folder and opens it in the browser. It contains:</p>
+<ul>
+  <li>summary (level, MER, EVM, CRC, sync losses, frequency offset),</li>
+  <li>cell and key values, histories as charts,</li>
+  <li>timeslot usage, reception limit, Allan deviation,</li>
+  <li>TX analysis, burst analysis with profile, multipath, additional carriers,</li>
+  <li>the latest events.</li>
+</ul>
+<p>The period is the time span selected under <span class="ui">Trends</span> (or the loaded log). Location, antenna or occasion can be entered under <span class="ui">Notes</span>. As PDF: print in the browser → “Save as PDF”.</p>
+</div>
+<div><figure><img src="shots/report.png"><figcaption>Fig. 13 – Measurement report (excerpt).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s16" class="pb"><span class="num">16</span>GPS, coverage measurement and maps</h1>
+<p>With a GPS mouse every second of the CSV log gets a position. From this, coverage maps with coloured measurement points and a heatmap are created.</p>
+<figure>
+<svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
+  <g>
+  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 Connect GPS</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">NMEA, port, baud rate</text>
+  <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Lock the cell</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">Lock current cell</text>
+  <rect x="355" y="20" width="150" height="70" rx="9" fill="#1d6fb8"/><text x="430" y="50" fill="#fff" text-anchor="middle" font-weight="700">3 Start the log</text><text x="430" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Start CSV log, drive</text>
+  <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Export</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Export map (KML + OSM)</text>
+  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 View</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">browser / Google Earth</text>
+  </g>
+  <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
+</svg>
+<figcaption>Fig. 14 – Steps of a coverage measurement.</figcaption></figure>
+
+<h2>Connecting the GPS mouse</h2>
+<ol class="steps">
+  <li>Connect the GPS mouse (USB or serial, NMEA output). On Windows it appears as a COM port, on Linux usually as <code>/dev/ttyACM0</code> or <code>/dev/ttyUSB0</code> (add the user to the <code>dialout</code> group).</li>
+  <li>Under <span class="ui">GPS &amp; coverage map</span> choose the port (<span class="ui">Rescan</span> refreshes the list), set the baud rate (usually 4800 or 9600) and press <span class="ui">Connect</span>.</li>
+  <li>Wait until position, number of satellites and HDOP are shown. With “Waiting for NMEA data”, port or baud rate are wrong.</li>
+</ol>
+<h2>Measurement drive</h2>
+<ol class="steps">
+  <li>Let the decoder lock onto the desired cell and press <span class="ui">Lock current cell</span>: seconds in which another cell or no cell is received then count as “no service”.</li>
+  <li>Calibrate the level if possible (<span class="ui">Level cal.</span>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
+  <li><span class="ui">Start CSV log</span> and drive off. Antenna firmly on the roof, same set-up as on earlier drives.</li>
+  <li>After the drive, <span class="ui">Stop CSV log</span>.</li>
+</ol>
+<h2>Creating maps</h2>
+<p><span class="ui">Map value</span> selects the colour scale: <b>Level</b> (−115…−65 dBm or −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> or <b>Quality (CRC)</b> – green up to the CRC limit from chapter 10, yellow up to ten times that, red above; black = no service. <span class="ui">Export map (KML + OSM)</span> writes two files next to the log:</p>
+<div class="cols">
+<div>
+<h3>In the browser (OpenStreetMap)</h3>
+<p>Open <code>…_level_map.html</code> with a double-click (internet connection needed for the map tiles). At the top right the layers <i>Points</i>, <i>Heatmap</i> and <i>No service only</i> can be switched; a click on a point shows time, level, MER, BER and CRC errors.</p>
+<h3>In Google Earth</h3>
+<p>Open <code>…_level.kml</code> in Google Earth (desktop, or web: <i>Projects → Import KML file</i>). Every point is coloured, the description contains the measured values. In Google Earth Pro the file can be combined with elevation profile and terrain.</p>
+<h3>Own evaluations</h3>
+<p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route.</p>
+</div>
+<div>
+<figure><img src="shots/map_level.png"><figcaption>Fig. 15 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Fig. 16 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
+</div>
+</div>
+<div class="box"><b class="t">Good heatmaps</b>Drive slowly or cover the same route several times – every second is one point. At high speed the points are far apart. Do not mix measurements with different antennas or gain.</div>
+
+<!-- ============================================================ -->
+<h1 id="s17" class="pb"><span class="num">17</span>Measurement scenarios</h1>
+<p>The following procedures are suggestions – they can be combined freely.</p>
+
+<div class="scen"><h3>A · Transmitter quality of a repeater (downlink)</h3>
+<div class="meta">Goal: modulation quality and spectrum of the base station · duration: 10 minutes</div>
+<ol class="steps">
+  <li>SDR in line of sight or with a directional antenna; signal well above the noise (stable MER display). Band centre ≥ 100 kHz away from the carrier.</li>
+  <li>Let <span class="ui">Auto RF gain</span> settle, then read MER, EVM, I/Q offset, IRR and error split.</li>
+  <li><span class="ui">Run analysis</span> of the TX analysis; beforehand <span class="ui">Store floor</span> with the transmitter off (or the input terminated).</li>
+  <li>Assess ACP, occupied bandwidth, shoulders and carrier leakage; for values close to the measurement limit lower the gain.</li>
+  <li><span class="ui">Create report</span> for documentation.</li>
+</ol>
+<p><b>Interpretation:</b> high I/Q offset with poor MER but good <i>MER w/o offset</i> → carrier leakage of the modulator. Much phase error → phase noise of the oscillator. Pronounced shoulders → overdriven power amplifier.</p></div>
+
+<div class="scen"><h3>B · Frequency accuracy of the base station</h3>
+<div class="meta">Goal: frequency error in ppb and stability · requires a GPS-disciplined SDR (e.g. Pluto+ with 10 MHz)</div>
+<ol class="steps">
+  <li>Connect the SDR to the reference, warm up for at least 15 minutes.</li>
+  <li>Watch <span class="ui">Carrier vs. SYSINFO</span> (target: ±200 ppb according to ETSI).</li>
+  <li>Under <span class="ui">Trends</span> → <span class="ui">Frequency stability</span> let it run for at least one hour; read the Allan deviation.</li>
+  <li>If required, let the measurement run overnight (CSV log) and open the log later.</li>
+</ol></div>
+
+<div class="scen"><h3>C · Coverage measurement with heatmap</h3>
+<div class="meta">Goal: coverage map and practical reception limit</div>
+<ol class="steps">
+  <li>Calibrate the level (dBm), Auto RF gain off, connect GPS, lock the cell (chapter 16).</li>
+  <li>Start the CSV log, drive through the area – also to the edge of the coverage.</li>
+  <li>Open the log under <span class="ui">Trends</span> → <span class="ui">Level vs. quality</span>: read the reception limit and set the <span class="ui">CRC limit</span> accordingly.</li>
+  <li>Export and compare the <b>Level</b> and <b>Quality (CRC)</b> maps; measure gaps (black) again specifically.</li>
+</ol></div>
+
+<div class="scen"><h3>D · Long-term monitoring of a repeater</h3>
+<div class="meta">Goal: detect outages and degradations · duration: days</div>
+<ol class="steps">
+  <li>Set up a fixed receiver with stable gain (Auto RF gain off).</li>
+  <li><span class="ui">Alarms</span>: switch on level, MER, CRC and sync, hold time e.g. 30 s, “Start CSV log on alarm”.</li>
+  <li>Optionally the burst analysis on the uplink for the noise level and its alarm.</li>
+  <li>Look at the trends daily or open the log; in case of anomalies <span class="ui">Create report</span>.</li>
+</ol></div>
+
+<div class="scen"><h3>E · Checking a handheld (uplink)</h3>
+<div class="meta">Goal: burst shape, timing and splatter of a radio</div>
+<ol class="steps">
+  <li>Set the SDR so that downlink <i>and</i> uplink are within the bandwidth; TETRA VFO on the downlink, decoder locked.</li>
+  <li>Start <span class="ui">Burst analysis</span> with source <span class="ui">Uplink (SYSINFO)</span>, switch on <span class="ui">Timing vs. downlink</span> and <span class="ui">Ramp spectrum</span>.</li>
+  <li>Make a few transmissions with the radio (or send an SDS); receiver close to the radio (mind the attenuation!).</li>
+  <li>Check burst length, ramps, ripple and mask; compare timing and spread with other radios; look at the ramp spectrum for splatter.</li>
+</ol></div>
+
+<div class="scen"><h3>F · Hunting interference at the repeater receiver</h3>
+<div class="meta">Goal: detect intermittent interferers on the uplink</div>
+<ol class="steps">
+  <li>Run the burst analysis on the uplink; note <span class="ui">Noise between bursts</span> as baseline.</li>
+  <li>Set the alarm “UL noise above” a few dB above the baseline.</li>
+  <li>Look for time patterns in the history (<span class="ui">Noise history</span>, 24 h) – e.g. daily times point to devices in the neighbourhood.</li>
+</ol></div>
+
+<div class="scen"><h3>G · Comparing neighbour cells</h3>
+<ol class="steps">
+  <li>Decoder on one cell; neighbour cells appear under <span class="ui">Network &amp; cell</span>.</li>
+  <li><span class="ui">Carriers</span> → <span class="ui">Add neighbour cells</span>.</li>
+  <li>Compare level differences and MER over time (e.g. from the same location at different times of day).</li>
+</ol></div>
+
+<div class="scen"><h3>H · Multipath at a new location</h3>
+<ol class="steps">
+  <li>Decoder locked, MER above 15 dB.</li>
+  <li>Start <span class="ui">Multipath</span> with <span class="ui">Averaging</span> 60 s; note echoes and delay spread.</li>
+  <li>On drives choose 2 s and compare places with strong echoes with poor MER.</li>
+</ol></div>
+
+<!-- ============================================================ -->
+<h1 id="s18" class="pb"><span class="num">18</span>Troubleshooting</h1>
+<table>
+<tr><th style="width:30%">Problem</th><th>Cause and remedy</th></tr>
+<tr><td>Decoder does not lock</td><td>VFO exactly on the carrier; check the level (RF status); ETSI/Amateur mode correct; band centre not on the carrier.</td></tr>
+<tr><td>“Re-locks with timing slip”</td><td>Samples are lost (USB, CPU). Lower the sample rate, another USB port, no hubs, close other programs; watch <span class="ui">Input rate</span>.</td></tr>
+<tr><td>“reduce gain”, peaks close to 0 dBFS</td><td>Overload – lower the gain; watch for strong signals elsewhere in the band (waterfall).</td></tr>
+<tr><td>Auto RF gain does nothing</td><td>SDR without interface or hardware AGC on (RTL: Tuner AGC off, Pluto/BladeRF: Manual, SDRplay: IF AGC off).</td></tr>
+<tr><td>Frequency deviates</td><td>Calibrate the SDR (chapter 4.3) or use an external reference.</td></tr>
+<tr><td>No audio</td><td>Choose an audio device for the TETRA demodulator under <span class="ui">Sinks</span>; volume in the TETRA menu; encrypted calls cannot be heard.</td></tr>
+<tr><td>Burst analysis: “outside the SDR span”</td><td>The uplink lies outside the bandwidth – raise the sample rate or move the centre frequency.</td></tr>
+<tr><td>Timing: “slot grid not found”</td><td>The TETRA VFO must be on the downlink of the same cell and locked.</td></tr>
+<tr><td>Windows blocks the download</td><td>Choose “Keep” in the browser's download list; then confirm the SmartScreen notice.</td></tr>
+<tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
+<tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h1 id="s19" class="pb"><span class="num">19</span>Appendix</h1>
+<h2 id="s19-1">Files and folders</h2>
+<table class="plain">
+<tr><th>File / folder</th><th>Content</th></tr>
+<tr><td><code>config.json</code>, <code>*_config.json</code></td><td>settings (Windows: program folder; Linux AppImage: <code>~/.config/sdrpp_brown_appimage</code>)</td></tr>
+<tr><td><code>tetra_demodulator_config.json</code></td><td>settings of the TETRA demodulator</td></tr>
+<tr><td><code>tetra_duplex_ham.json</code></td><td>duplex tables (amateur radio)</td></tr>
+<tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>name lists</td></tr>
+<tr><td><code>imgui_layout.ini</code></td><td>window positions and table columns</td></tr>
+<tr><td><code>tetra_logs/</code></td><td>CSV logs, maps, reports (folder adjustable)</td></tr>
+</table>
+<h2 id="s19-2">CSV log</h2>
+<p>One line per second, separator semicolon. Companion files: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>.</p>
+<table class="plain">
+<tr><th style="width:36%">Columns</th><th>Content</th></tr>
+<tr><td><code>time</code></td><td>local time ISO 8601</td></tr>
+<tr><td><code>level_dbfs</code>, <code>level_dbm</code></td><td>level; dBm only with calibration</td></tr>
+<tr><td><code>mer_db</code>, <code>evm_rms_pct</code>, <code>evm_peak_pct</code></td><td>modulation quality</td></tr>
+<tr><td><code>carrier_offset_hz</code>, <code>carrier_ppm</code>, <code>ref_freq_hz</code>, <code>symbol_rate_ppm</code></td><td>frequency and clock</td></tr>
+<tr><td><code>rx_state</code>, <code>bursts</code>, <code>bursts_tolerated</code>, <code>sync_lost</code>, <code>ber</code></td><td>decoder state (2 = locked)</td></tr>
+<tr><td><code>crc_*_ok</code>, <code>crc_*_fail</code></td><td>CRC per channel in this second</td></tr>
+<tr><td><code>mcc</code>, <code>mnc</code>, <code>cc</code>, <code>dl_freq_hz</code>, <code>ul_freq_hz</code>, <code>ts1…ts4</code></td><td>cell</td></tr>
+<tr><td><code>cell_match</code>, <code>gps_fix</code>, <code>lat</code>, <code>lon</code>, <code>alt_m</code>, <code>speed_kmh</code>, <code>sats</code>, <code>hdop</code></td><td>cell lock and position</td></tr>
+<tr><td><code>ts1_traffic_pct … ts4_traffic_pct</code></td><td>traffic share per timeslot</td></tr>
+<tr><td><code>carrier_vs_sysinfo_hz</code></td><td>carrier minus SYSINFO frequency</td></tr>
+</table>
+
+<h2 id="s19-3">Glossary</h2>
+<table class="glossary plain">
+<tr><td><b>AACH</b></td><td>Access Assignment Channel – in every downlink burst; announces the use of the timeslots.</td></tr>
+<tr><td><b>ACP</b></td><td>Adjacent Channel Power – power in the adjacent channel, in dBc.</td></tr>
+<tr><td><b>AFC</b></td><td>Automatic frequency control of the VFO.</td></tr>
+<tr><td><b>Allan deviation</b></td><td>Measure of frequency fluctuations as a function of the averaging time τ.</td></tr>
+<tr><td><b>dBc / dBFS / dBm</b></td><td>relative to the carrier / to full scale / to 1 mW.</td></tr>
+<tr><td><b>EVM, MER</b></td><td>Error Vector Magnitude, Modulation Error Ratio – measures of modulation errors.</td></tr>
+<tr><td><b>GSSI, ISSI</b></td><td>Group and individual subscriber identity (in amateur radio the DMR ID).</td></tr>
+<tr><td><b>MCC, MNC, CC</b></td><td>Country, network and colour code of the cell.</td></tr>
+<tr><td><b>NTS</b></td><td>Normal Training Sequence – known bit pattern in every burst (synchronisation, channel estimation).</td></tr>
+<tr><td><b>OBW</b></td><td>Occupied Bandwidth – bandwidth containing 99 % of the power.</td></tr>
+<tr><td><b>SDS</b></td><td>Short Data Service – text messages, status, positions (LIP).</td></tr>
+<tr><td><b>SYSINFO</b></td><td>System information of the base station (frequencies, services, parameters).</td></tr>
+<tr><td><b>TDMA, timeslot</b></td><td>Four timeslots per frame, 14.17 ms each; uplink offset by two timeslots.</td></tr>
+</table>
+
+<h2 id="s19-4">Origin and licences</h2>
+<p>SDR++ TETRA-SCHWARTZ is a modified version (fork) of SDR++ (Alexandre Rouma, ON5RYZ, and contributors) based on SDR++Brown, with the TETRA demodulator plugin by cropinghigh and the osmo-tetra decoder (Osmocom). Licences: GPL-3.0, for osmo-tetra AGPL-3.0; the ETSI speech codec is downloaded from ETSI at build time. Changes of this edition: © 2026 UnImAtrIXzEr0. It is intended exclusively for experimental amateur radio purposes. Details: <code>NOTICE.md</code> and the about dialog in the program. This is not an official release of SDR++ or SDR++Brown.</p>
+
+</body></html>

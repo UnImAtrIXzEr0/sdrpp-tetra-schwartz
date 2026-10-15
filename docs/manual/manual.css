@@ -67,3 +67,4 @@ figure svg { max-width: 100%; height: auto; }
 .cover .sub { font-size: 13pt; opacity: 0.9; margin-top: 5mm; max-width: 140mm; }
 .cover .wave { opacity: 0.35; }
 .cover .foot { display: flex; justify-content: space-between; font-size: 10pt; opacity: 0.92; border-top: 1px solid rgba(255,255,255,0.35); padding-top: 4mm; }
+.cover .badge { display: inline-block; margin-top: 7mm; padding: 1.6mm 4mm; border: 1px solid rgba(255,255,255,0.6); border-radius: 5mm; font-size: 10.5pt; font-weight: 600; letter-spacing: 0.3pt; }

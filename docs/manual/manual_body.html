@@ -38,6 +38,7 @@
 <!-- ============================================================ -->
 <h1 id="s1" class="pb"><span class="num">1</span>Überblick</h1>
 <p class="lead">SDR++ TETRA-SCHWARTZ ist eine experimentelle Amateurfunk-Ausgabe von SDR++ für die Analyse von TETRA-Netzen. Sie empfängt mit einem SDR, dekodiert TETRA-Aussendungen und misst die Signalqualität so, wie man es von einem Messplatz kennt – vom Konstellationsdiagramm bis zur Versorgungskarte.</p>
+<div class="box info"><b class="t">Ausdrücklich für experimentelle Amateurfunkzwecke</b>Das Programm ist ausschließlich für experimentelle Amateurfunkzwecke gedacht – für Versuche, Selbstausbildung und technische Untersuchungen im Amateurfunkdienst. Es ist kein kalibriertes Messgerät und nicht für den gewerblichen, professionellen oder behördlichen Einsatz bestimmt.</div>
 
 <h2 id="s1-1">Was das Programm kann</h2>
 <div class="cols">
@@ -61,7 +62,7 @@
 </div>
 </div>
 
-<figure><img src="shots/overview.png"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA-Demodulator, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
+<figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA-Demodulator, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
 
 <h3>Wie das Programm arbeitet</h3>
 <p>Das SDR liefert einen breiten I/Q-Datenstrom. Daraus schneidet das Programm mehrere schmale „Abgriffe“ (VFOs) heraus: den TETRA-VFO für Demodulator und Decoder, und – nur wenn eingeschaltet – weitere, unsichtbare Abgriffe für TX-Analyse, Burst-Analyse, Mehrwegeempfang und weitere Träger. Alle Abgriffe müssen innerhalb der Bandbreite des SDR liegen.</p>
@@ -91,8 +92,8 @@
 <figcaption>Abb. 2 – Signalweg: ein SDR, mehrere unabhängige Abgriffe.</figcaption></figure>
 
 <h2 id="s1-2">Rechtliche Hinweise</h2>
-<div class="box warn"><b class="t">Nur für Amateurfunk und eigene Netze</b>
-Das Programm ist für den Amateurfunk gedacht: für Amateurfunk-TETRA-Relais, eigene Testaufbauten und Messungen an eigenen Geräten. Aussendungen anderer Funkdienste, die nicht für die Allgemeinheit oder für dich bestimmt sind, dürfen in Deutschland nicht abgehört und ihr Inhalt nicht weitergegeben werden (Abhörverbot, § 5 TDDDG, früher TTDSG). Das gilt auch für Rufnummern, Teilnehmerkennungen und Textnachrichten. Senden kann das Programm nicht. Diese Hinweise sind keine Rechtsberatung.</div>
+<div class="box warn"><b class="t">Nur für experimentellen Amateurfunk und eigene Netze</b>
+Das Programm ist ausdrücklich für experimentelle Amateurfunkzwecke gedacht: für Amateurfunk-TETRA-Relais, eigene Testaufbauten und Messungen an eigenen Geräten. Aussendungen anderer Funkdienste, die nicht für die Allgemeinheit oder für dich bestimmt sind, dürfen in Deutschland nicht abgehört und ihr Inhalt nicht weitergegeben werden (Abhörverbot, § 5 TDDDG, früher TTDSG). Das gilt auch für Rufnummern, Teilnehmerkennungen und Textnachrichten. Senden kann das Programm nicht. Diese Hinweise sind keine Rechtsberatung.</div>
 <div class="box info"><b class="t">Experimentelle Beta-Version</b>
 Messwerte sind sorgfältig umgesetzt, aber nicht mit kalibrierten Messgeräten verglichen. Grenzwerte im Programm sind Richtwerte – für verbindliche Aussagen bitte immer die Norm (ETSI EN 300 392-2, EN 300 394-1) heranziehen.</div>
 
@@ -584,6 +585,6 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </table>
 
 <h2 id="s19-4">Herkunft und Lizenzen</h2>
-<p>SDR++ TETRA-SCHWARTZ ist eine veränderte Fassung (Fork) von SDR++ (Alexandre Rouma, ON5RYZ, und Mitwirkende) auf Basis von SDR++Brown, mit dem TETRA-Demodulator-Plugin von cropinghigh und dem Decoder osmo-tetra (Osmocom). Lizenzen: GPL-3.0, für osmo-tetra AGPL-3.0; der ETSI-Sprachcodec wird beim Bauen von ETSI geladen. Änderungen dieser Ausgabe: © 2026 UnImAtrIXzEr0. Details: <code>NOTICE.md</code> und der Info-Dialog im Programm. Dies ist keine offizielle Veröffentlichung von SDR++ oder SDR++Brown.</p>
+<p>SDR++ TETRA-SCHWARTZ ist eine veränderte Fassung (Fork) von SDR++ (Alexandre Rouma, ON5RYZ, und Mitwirkende) auf Basis von SDR++Brown, mit dem TETRA-Demodulator-Plugin von cropinghigh und dem Decoder osmo-tetra (Osmocom). Lizenzen: GPL-3.0, für osmo-tetra AGPL-3.0; der ETSI-Sprachcodec wird beim Bauen von ETSI geladen. Änderungen dieser Ausgabe: © 2026 UnImAtrIXzEr0. Sie ist ausschließlich für experimentelle Amateurfunkzwecke bestimmt. Details: <code>NOTICE.md</code> und der Info-Dialog im Programm. Dies ist keine offizielle Veröffentlichung von SDR++ oder SDR++Brown.</p>
 
 </body></html>
