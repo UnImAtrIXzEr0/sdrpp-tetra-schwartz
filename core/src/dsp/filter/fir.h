@@ -35,17 +35,17 @@ namespace dsp::filter {
             std::lock_guard<std::recursive_mutex> lck(base_type::ctrlMtx);
             base_type::tempStop();
 
-            int oldTC = _taps.size;
+            int oldTC = (int)_taps.size;
             _taps = taps;
 
             // Update start of buffer
             bufStart = &buffer[_taps.size - 1];
 
             // Move existing data to make transition seemless
-            if (_taps.size < oldTC) {
+            if ((int)_taps.size < oldTC) {
                 memmove(buffer, &buffer[oldTC - _taps.size], (_taps.size - 1) * sizeof(D));
             }
-            else if (_taps.size > oldTC) {
+            else if ((int)_taps.size > oldTC) {
                 memmove(&buffer[_taps.size - oldTC], buffer, (oldTC - 1) * sizeof(D));
                 buffer::clear<D>(buffer, _taps.size - oldTC);
             }

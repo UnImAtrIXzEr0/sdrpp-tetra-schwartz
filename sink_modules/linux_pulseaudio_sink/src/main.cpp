@@ -27,6 +27,7 @@ SDRPP_MOD_INFO{
 
 ConfigManager config;
 
+#undef DEFAULT_SAMPLE_RATE
 #define DEFAULT_SAMPLE_RATE 48000
 
 class PulseAudioSink : SinkManager::Sink {

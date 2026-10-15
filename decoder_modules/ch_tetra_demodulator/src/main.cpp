@@ -66,7 +66,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 17, 0,
+    /* Version:         */ 0, 17, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -349,14 +349,15 @@ public:
                      "\"carrier_offset_hz\": %.2f, \"audio_dropped_s\": %.2f, \"vfo_offset_hz\": %.1f, "
                      "\"txa_valid\": %s, \"txa_chan_dbfs\": %.2f, \"txa_obw_hz\": %.1f, \"txa_bw26_hz\": %.1f, "
                      "\"txa_acp25\": [%.2f, %.2f], \"txa_acp_floor25\": [%.2f, %.2f], \"txa_leak_dbc\": %.2f, "
-                     "\"stations\": %d, \"traffic\": %d}",
+                     "\"stations\": %d, \"traffic\": %d, \"center_hz\": %.0f, \"in_samplerate\": %.0f}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
                      m.carrierOffsetHz, (double)audioDecoupler.getDroppedSamples() / 8000.0, vfo ? vfo->getOffset() : 0.0,
                      r.valid ? "true" : "false", r.chanPowerDbfs, r.obwHz, r.bw26Hz,
                      r.acpDbc[2], r.acpDbc[3], r.acpFloorDbc[2], r.acpFloorDbc[3], r.carrierLeakDbc,
-                     (int)subscribers.snapshot().size(), (int)subscribers.trafficSnapshot().size());
+                     (int)subscribers.snapshot().size(), (int)subscribers.trafficSnapshot().size(),
+                     gui::waterfall.getCenterFrequency(), sigpath::iqFrontEnd.getSampleRate());
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -2094,7 +2095,7 @@ private:
                     ImGui::TableSetColumnIndex(3);
                     tw::Text("%u%s%s", sub.lastTn, sub.chanAlloc ? "C" : "", sub.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(4);
-                    char ab[16];
+                    char ab[32];
                     agoText(ago, ab, sizeof(ab));
                     tw::TextU(ab);
                     ImGui::TableSetColumnIndex(6);   // Activity (shown after Groups)
@@ -2156,7 +2157,7 @@ private:
                     ImGui::TableSetColumnIndex(2);
                     tw::Text("%u%s", g.lastTn, g.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(3);
-                    char ab[16];
+                    char ab[32];
                     agoText(ago, ab, sizeof(ab));
                     tw::TextU(ab);
                     ImGui::TableSetColumnIndex(4);

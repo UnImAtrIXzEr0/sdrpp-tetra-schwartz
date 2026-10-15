@@ -12,7 +12,9 @@ E2E tests for the SDR++ TETRA-SCHWARTZ edition (headless, e.g. under xvfb).
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import time
 from e2e_common import (
     SDRPPTestContext, get_base_config, stats, STATS_MODE, http_get
@@ -63,10 +65,15 @@ def test_fresh_start():
 
 def test_tetra_chain():
     stats.test_start("test_tetra_chain")
-    rec = recording()
-    if not os.path.exists(rec):
-        stats.test_fail("test_tetra_chain", f"recording not found: {rec}")
+    src = recording()
+    if not os.path.exists(src):
+        stats.test_fail("test_tetra_chain", f"recording not found: {src}")
         return False
+    # The file source takes the centre frequency from the file name; give the
+    # recording one (the TETRA carrier is then at 468.125 MHz = centre - 3 kHz)
+    tmpdir = tempfile.mkdtemp(prefix="tetra_rec_")
+    rec = os.path.join(tmpdir, "baseband_468128000Hz_12-00-00_01-01-2026.wav")
+    shutil.copyfile(src, rec)
 
     cfg = get_base_config()
     cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
