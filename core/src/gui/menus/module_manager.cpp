@@ -40,11 +40,14 @@ namespace module_manager_menu {
         ImVec2 btnSize = ImVec2(lheight, lheight - 1);
         ImVec2 textOff = ImVec2(3.0f * style::uiScale, -5.0f * style::uiScale);
 
-        if (ImGui::BeginTable("Module Manager Table", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 200.0f * style::uiScale))) {
+        bool hidChanged = false;
+        if (ImGui::BeginTable("Module Manager Table", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 260.0f * style::uiScale))) {
             ImGui::TableSetupColumn("Name");
             ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Menu", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("On", ImGuiTableColumnFlags_WidthFixed);
             ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, cellWidth);
-            ImGui::TableSetupScrollFreeze(3, 1);
+            ImGui::TableSetupScrollFreeze(5, 1);
             ImGui::TableHeadersRow();
 
             for (auto& [name, inst] : core::moduleManager.instances) {
@@ -56,7 +59,30 @@ namespace module_manager_menu {
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextUnformatted(inst.module.info->name);
 
+                // shown in the menu bar on the left
                 ImGui::TableSetColumnIndex(2);
+                {
+                    bool shown = !gui::menu.isHidden(name);
+                    if (ImGui::Checkbox(("##module_mgr_menu_" + name).c_str(), &shown)) {
+                        if (shown) { gui::menu.hidden.erase(name); }
+                        else { gui::menu.hidden.insert(name); }
+                        hidChanged = true;
+                    }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Show this module in the menu bar"); }
+                }
+
+                // enabled (running)
+                ImGui::TableSetColumnIndex(3);
+                {
+                    bool en = inst.instance->isEnabled();
+                    if (ImGui::Checkbox(("##module_mgr_on_" + name).c_str(), &en)) {
+                        en ? inst.instance->enable() : inst.instance->disable();
+                        modified = true;
+                    }
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Module enabled"); }
+                }
+
+                ImGui::TableSetColumnIndex(4);
                 ImVec2 cpos = ImGui::GetCursorPos();
                 ImGui::SetCursorPos(ImVec2(cpos.x - hdiff, cpos.y + 1));
                 if (ImGui::Button(("##module_mgr_" + name).c_str(), btnSize)) {
@@ -112,11 +138,10 @@ namespace module_manager_menu {
             ImGui::EndTable();
         }
 
-        // Built-in menus that can be hidden (HAM-TETRA edition hides some by default)
-        ImGui::TextUnformatted("Show built-in menus:");
+        // Built-in menus that can be hidden from the menu bar
+        ImGui::TextUnformatted("Built-in menus in the menu bar:");
         {
             static const char* builtins[] = { "VFO Color", "Debug", "Band Plan", "Display", "Theme" };
-            bool hidChanged = false;
             for (int i = 0; i < (int)(sizeof(builtins) / sizeof(builtins[0])); i++) {
                 bool shown = !gui::menu.isHidden(builtins[i]);
                 if (i > 0) {
@@ -131,15 +156,15 @@ namespace module_manager_menu {
                     hidChanged = true;
                 }
             }
-            if (hidChanged) {
-                core::configManager.acquire();
-                json arr = json::array();
-                for (auto& h : gui::menu.hidden) { arr.push_back(h); }
-                core::configManager.conf["hiddenMenus"] = arr;
-                core::configManager.release(true);
-            }
         }
-        ImGui::TextDisabled("Disabled modules: tick the box at the right of their menu header.");
+        ImGui::TextDisabled("Menu: shown in the menu bar on the left. On: module running.");
+        if (hidChanged) {
+            core::configManager.acquire();
+            json arr = json::array();
+            for (auto& h : gui::menu.hidden) { arr.push_back(h); }
+            core::configManager.conf["hiddenMenus"] = arr;
+            core::configManager.release(true);
+        }
 
         if (modified) {
             // Update enabled and disabled modules

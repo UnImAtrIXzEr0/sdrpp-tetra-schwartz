@@ -567,7 +567,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["fullscreen"] = false;
     defConfig["theme"] = "RoSc 2"; // HAM-TETRA edition default
     // Built-in menus hidden by default (can be shown again in the Module Manager)
-    defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug" });
+    defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug", "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server" });
 
     // Menu
     defConfig["menuElements"] = json::array();
@@ -848,6 +848,18 @@ int sdrpp_main(int argc, char* argv[]) {
     if (!core::configManager.conf.contains("hamTetraDefaults3")) {
         core::configManager.conf["theme"] = "RoSc 2";
         core::configManager.conf["hamTetraDefaults3"] = 1;
+    }
+    // v0.16.3: modules without relevance for TETRA are hidden from the menu bar
+    // (not only disabled); they stay available in the Module Manager
+    if (!core::configManager.conf.contains("hamTetraDefaults4")) {
+        auto& c = core::configManager.conf;
+        if (!c.contains("hiddenMenus") || !c["hiddenMenus"].is_array()) { c["hiddenMenus"] = json::array(); }
+        for (const char* n : { "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server" }) {
+            bool have = false;
+            for (auto& h : c["hiddenMenus"]) { if (h.is_string() && h.get<std::string>() == n) { have = true; } }
+            if (!have) { c["hiddenMenus"].push_back(n); }
+        }
+        c["hamTetraDefaults4"] = 1;
     }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&
