@@ -28,13 +28,27 @@ jobs:
             sudo apt-get install -y build-essential cmake ninja-build git unzip file xxd autoconf libtool \
                 libfftw3-dev libglfw3-dev libvolk-dev libzstd-dev librtaudio-dev libpulse-dev portaudio19-dev \
                 libairspyhf-dev libairspy-dev libiio-dev libad9361-dev libhackrf-dev librtlsdr-dev \
+                libbladerf-dev liblimesuite-dev libuhd-dev libboost-dev libboost-thread-dev p7zip-full wget \
                 libcodec2-dev libspdlog-dev liborc-0.4-dev libfuse2t64
+
+        - name: Install SDRplay API (build only, not bundled in the AppImage)
+          run: |
+            wget -q https://www.sdrplay.com/software/SDRplay_RSP_API-Linux-3.15.2.run
+            7z x -y ./SDRplay_RSP_API-Linux-3.15.2.run > /dev/null
+            7z x -y ./SDRplay_RSP_API-Linux-3.15.2 > /dev/null
+            sudo cp amd64/libsdrplay_api.so.3.15 /usr/lib/libsdrplay_api.so.3.15
+            sudo ln -sf libsdrplay_api.so.3.15 /usr/lib/libsdrplay_api.so.3
+            sudo ln -sf libsdrplay_api.so.3.15 /usr/lib/libsdrplay_api.so
+            sudo cp inc/* /usr/include/
+            sudo ldconfig
 
         - name: Configure
           run: >
             cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
             -DOPT_BUILD_NEW_PORTAUDIO_SINK=ON -DOPT_BUILD_M17_DECODER=ON
             -DOPT_BUILD_CH_EXTRAVHF_DECODER=ON -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON
+            -DOPT_BUILD_BLADERF_SOURCE=ON -DOPT_BUILD_LIMESDR_SOURCE=ON -DOPT_BUILD_SDRPLAY_SOURCE=ON
+            -DOPT_BUILD_USRP_SOURCE=ON
 
         - name: Build
           run: |
@@ -44,7 +58,7 @@ jobs:
         - name: Report compiler warnings in edition code
           if: always()
           run: |
-            grep -E "warning:" build.log | grep -E "ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|pulseaudio|module_manager|menus/source|theme_manager|loading_screen|credits|waterfall|core\.cpp|tetra_" \
+            grep -E "warning:" build.log | grep -E "ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|hackrf_source|bladerf_source|limesdr_source|sdrplay_source|audio_sink|pulseaudio|module_manager|menus/source|theme_manager|loading_screen|credits|waterfall|core\.cpp|tetra_" \
               | grep -v "/decoder/src/crypto/\|etsi_codec" | sort -u | head -40 | sed 's/^/::warning::/' || true
             echo "warnings in edition code: $(grep -E 'warning:' build.log | grep -cE 'ch_tetra_demodulator|plutosdr_source|module_manager|menus/source|theme_manager' || true)"
 
@@ -57,6 +71,10 @@ jobs:
             chmod +x linuxdeploy-x86_64.AppImage make_appimage.sh
             ./make_appimage.sh build ./linuxdeploy-x86_64.AppImage
             test -f AppDir/usr/lib/sdrpp/plugins/ch_tetra_demodulator.so
+            for m in hackrf_source bladerf_source limesdr_source sdrplay_source usrp_source spectran_http_source; do
+              test -f AppDir/usr/lib/sdrpp/plugins/$m.so || { echo "::error::$m missing"; exit 1; }
+            done
+            if ls AppDir/usr/lib/libsdrplay_api* > /dev/null 2>&1; then echo "::error::SDRplay API must not be bundled"; exit 1; fi
 
         - name: Save AppImage
           uses: actions/upload-artifact@v4

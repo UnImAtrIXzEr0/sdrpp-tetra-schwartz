@@ -568,7 +568,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["theme"] = "RoSc 2"; // HAM-TETRA edition default
     // Built-in menus hidden by default (can be shown again in the Module Manager)
     // Sources not supported by this edition: hidden from the source list (Module Manager)
-    defConfig["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "BladeRF", "Dragon Labs", "FobosSDR", "HackRF", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "LimeSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR", "Spectran HTTP", "Spectran" });
+    defConfig["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "Dragon Labs", "FobosSDR", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR" });
     defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug", "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server" });
 
     // Menu
@@ -869,8 +869,24 @@ int sdrpp_main(int argc, char* argv[]) {
     // v0.17: sources not supported by this edition are hidden from the source
     // list (the one in use always stays visible)
     if (!core::configManager.conf.contains("hamTetraDefaults5")) {
-        core::configManager.conf["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "BladeRF", "Dragon Labs", "FobosSDR", "HackRF", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "LimeSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR", "Spectran HTTP", "Spectran" });
+        core::configManager.conf["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "Dragon Labs", "FobosSDR", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR" });
         core::configManager.conf["hamTetraDefaults5"] = 1;
+    }
+    // v0.17.2: BladeRF, LimeSDR, HackRF, Spectran and SDRplay are supported by the
+    // edition (TETRA gain / calibration) and visible again
+    if (!core::configManager.conf.contains("hamTetraDefaults6")) {
+        auto& hs = core::configManager.conf["hiddenSources"];
+        if (hs.is_array()) {
+            json keep = json::array();
+            for (auto& h : hs) {
+                if (!h.is_string()) { continue; }
+                std::string n = h.get<std::string>();
+                if (n == "BladeRF" || n == "LimeSDR" || n == "HackRF" || n == "Spectran" || n == "Spectran HTTP" || n == "SDRplay") { continue; }
+                keep.push_back(n);
+            }
+            hs = keep;
+        }
+        core::configManager.conf["hamTetraDefaults6"] = 1;
     }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&

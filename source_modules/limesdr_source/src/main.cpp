@@ -7,6 +7,11 @@
 #include <config.h>
 #include <gui/smgui.h>
 #include <lime/LimeSuite.h>
+#include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
@@ -21,8 +26,45 @@ SDRPP_MOD_INFO{
 
 ConfigManager config;
 
-class LimeSDRSourceModule : public ModuleManager::Instance {
+class LimeSDRSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
+    // ---- interfaces for the TETRA automatic gain and SDR calibration ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        return nullptr;
+    }
+    // Gain 0..73 dB in 1 dB steps (LimeSuite distributes it over LNA/TIA/PGA)
+    std::string gainSourceName() override { return "LimeSDR"; }
+    bool gainControllable() override { return running; }
+    int gainStepCount() override { return 74; }
+    int gainStep() override { return std::clamp(gain, 0, 73); }
+    float gainStepDb(int step) override { return (float)std::clamp(step, 0, 73); }
+    void setGainStep(int step) override {
+        gain = std::clamp(step, 0, 73);
+        if (running) { LMS_SetGaindB(openDev, false, chanId, gain); }
+        if (selectedDevName != "") {
+            config.acquire();
+            config.conf["devices"][selectedDevName]["gain"] = gain;
+            config.release(true);
+        }
+    }
+    // Frequency correction: applied to the tuning frequency
+    // (positive ppm = oscillator runs fast)
+    std::string corrSourceName() override { return "LimeSDR"; }
+    bool corrAvailable() override { return selectedDevName != ""; }
+    double corrPpm() override { return ppm; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp(v, -500.0, 500.0);
+        if (running) { LMS_SetLOFrequency(openDev, false, chanId, hwFreq(freq)); }
+        if (selectedDevName != "") {
+            config.acquire();
+            config.conf["devices"][selectedDevName]["ppm"] = ppm;
+            config.release(true);
+        }
+    }
+    double hwFreq(double f) { return std::round(f / (1.0 + ppm * 1e-6)); }
+
     LimeSDRSourceModule(std::string name) {
         this->name = name;
 
@@ -275,6 +317,12 @@ public:
             gain = 0;
         }
 
+        // Load frequency correction
+        ppm = 0.0;
+        if (config.conf["devices"][selectedDevName].contains("ppm") && config.conf["devices"][selectedDevName]["ppm"].is_number()) {
+            ppm = std::clamp(config.conf["devices"][selectedDevName]["ppm"].get<double>(), -500.0, 500.0);
+        }
+
         config.release(true);
 
         LMS_Close(dev);
@@ -342,7 +390,7 @@ private:
         LMS_EnableChannel(_this->openDev, false, _this->chanId, true);
         LMS_SetAntenna(_this->openDev, false, _this->chanId, _this->antennaId);
         LMS_SetSampleRate(_this->openDev, _this->sampleRate, 0);
-        LMS_SetLOFrequency(_this->openDev, false, _this->chanId, _this->freq);
+        LMS_SetLOFrequency(_this->openDev, false, _this->chanId, _this->hwFreq(_this->freq));
         LMS_SetGaindB(_this->openDev, false, _this->chanId, _this->gain);
         LMS_SetLPFBW(_this->openDev, false, _this->chanId, (_this->bwId == _this->bandwidths.size()) ? _this->getBestBandwidth(_this->sampleRate) : _this->bandwidths[_this->bwId]);
         LMS_SetLPF(_this->openDev, false, _this->chanId, true);
@@ -387,7 +435,7 @@ private:
         LimeSDRSourceModule* _this = (LimeSDRSourceModule*)ctx;
         _this->freq = freq;
         if (_this->running) {
-            LMS_SetLOFrequency(_this->openDev, false, _this->chanId, freq);
+            LMS_SetLOFrequency(_this->openDev, false, _this->chanId, _this->hwFreq(freq));
         }
         flog::info("LimeSDRSourceModule '{0}': Tune: {1}!", _this->name, freq);
     }
@@ -477,6 +525,14 @@ private:
                 config.release(true);
             }
         }
+
+        // reference correction in ppb (1 ppb = 0.001 ppm), as for the PlutoSDR
+        SmGui::LeftLabel("Freq. corr. (ppb)");
+        SmGui::FillWidth();
+        int ppb = (int)std::lround(_this->ppm * 1000.0);
+        if (SmGui::InputInt(CONCAT("##_limesdr_ppb_", _this->name), &ppb, 10, 100)) {
+            _this->setCorrPpm(ppb / 1000.0);
+        }
     }
 
     void worker() {
@@ -495,7 +551,7 @@ private:
     bool running = false;
     bool enabled = true;
     bool streamRunning = false;
-    double freq;
+    double freq = 100e6;
 
     int channelCount = 0;
 
@@ -504,6 +560,7 @@ private:
     int srId = 0;
     int bwId = 0;
     int gain = 0;
+    double ppm = 0.0;
 
     std::vector<int> sampleRates;
     std::string sampleRatesTxt;

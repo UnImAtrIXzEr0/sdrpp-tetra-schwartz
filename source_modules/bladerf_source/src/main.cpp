@@ -11,6 +11,10 @@
 #include <gui/smgui.h>
 #include <algorithm>
 #include <utils/optionlist.h>
+#include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
+#include <cmath>
+#include <cstring>
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
 
@@ -33,8 +37,49 @@ enum BladeRFType {
     BLADERF_TYPE_V2
 };
 
-class BladeRFSourceModule : public ModuleManager::Instance {
+class BladeRFSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
+    // ---- interfaces for the TETRA automatic gain and SDR calibration ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        return nullptr;
+    }
+    // Overall gain in 1 dB steps from the device's gain range (gain mode Manual)
+    std::string gainSourceName() override { return "BladeRF"; }
+    bool gainControllable() override {
+        return running && gainRange != NULL && gainModes != NULL && gainMode >= 0 && gainMode < gainModeCount &&
+               gainModes[gainMode].mode == BLADERF_GAIN_MANUAL;
+    }
+    int gainStepCount() override { return gainRange ? (int)(gainRange->max - gainRange->min) + 1 : 1; }
+    int gainStep() override { return gainRange ? overallGain - (int)gainRange->min : 0; }
+    float gainStepDb(int step) override { return gainRange ? (float)(gainRange->min + std::clamp(step, 0, gainStepCount() - 1)) : 0.0f; }
+    void setGainStep(int step) override {
+        if (!gainRange) { return; }
+        overallGain = (int)gainRange->min + std::clamp(step, 0, gainStepCount() - 1);
+        if (running) { bladerf_set_gain(openDev, BLADERF_CHANNEL_RX(chanId), overallGain); }
+        if (selectedSerial != "") {
+            config.acquire();
+            config.conf["devices"][selectedSerial]["overallGain"] = overallGain;
+            config.release(true);
+        }
+    }
+    // Frequency correction: applied to the tuning frequency
+    // (positive ppm = oscillator runs fast)
+    std::string corrSourceName() override { return "BladeRF"; }
+    bool corrAvailable() override { return selectedSerial != ""; }
+    double corrPpm() override { return ppm; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp(v, -500.0, 500.0);
+        if (running) { bladerf_set_frequency(openDev, BLADERF_CHANNEL_RX(chanId), hwFreq(freq)); }
+        if (selectedSerial != "") {
+            config.acquire();
+            config.conf["devices"][selectedSerial]["ppm"] = ppm;
+            config.release(true);
+        }
+    }
+    uint64_t hwFreq(double f) { return (uint64_t)std::llround(f / (1.0 + ppm * 1e-6)); }
+
     BladeRFSourceModule(std::string name) {
         this->name = name;
 
@@ -175,7 +220,8 @@ public:
         bladerf_get_sample_rate_range(openDev, BLADERF_CHANNEL_RX(chanId), &srRange);
         bladerf_get_bandwidth_range(openDev, BLADERF_CHANNEL_RX(chanId), &bwRange);
         bladerf_get_gain_range(openDev, BLADERF_CHANNEL_RX(chanId), &gainRange);
-        int gainModeCount = bladerf_get_gain_modes(openDev, BLADERF_CHANNEL_RX(chanId), &gainModes);
+        gainModeCount = bladerf_get_gain_modes(openDev, BLADERF_CHANNEL_RX(chanId), &gainModes);
+        if (gainModeCount < 0) { gainModeCount = 0; }
 
         // Generate sampleRate and Bandwidth lists
         sampleRates.clear();
@@ -319,6 +365,12 @@ public:
             overallGain = gainRange->min;
         }
 
+        // Load frequency correction
+        ppm = 0.0;
+        if (config.conf["devices"][selectedSerial].contains("ppm") && config.conf["devices"][selectedSerial]["ppm"].is_number()) {
+            ppm = std::clamp(config.conf["devices"][selectedSerial]["ppm"].get<double>(), -500.0, 500.0);
+        }
+
         // Load Bias-T
         if (selectedBladeType == BLADERF_TYPE_V2) {
             if (config.conf["devices"][selectedSerial].contains("biasT")) {
@@ -380,7 +432,7 @@ private:
         // Setup device parameters
         _this->setClockSource(_this->clocks[_this->clkId]);
         bladerf_set_sample_rate(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->sampleRate, NULL);
-        bladerf_set_frequency(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->freq);
+        bladerf_set_frequency(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->hwFreq(_this->freq));
         bladerf_set_bandwidth(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), (_this->bwId == _this->bandwidths.size()) ? std::clamp<uint64_t>(_this->sampleRate, _this->bwRange->min, _this->bwRange->max) : _this->bandwidths[_this->bwId], NULL);
         bladerf_set_gain_mode(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->gainModes[_this->gainMode].mode);
 
@@ -433,7 +485,7 @@ private:
         BladeRFSourceModule* _this = (BladeRFSourceModule*)ctx;
         _this->freq = freq;
         if (_this->running) {
-            bladerf_set_frequency(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->freq);
+            bladerf_set_frequency(_this->openDev, BLADERF_CHANNEL_RX(_this->chanId), _this->hwFreq(_this->freq));
         }
         flog::info("BladeRFSourceModule '{0}': Tune: {1}!", _this->name, freq);
     }
@@ -553,6 +605,14 @@ private:
             if (_this->gainModes[_this->gainMode].mode != BLADERF_GAIN_MANUAL) { SmGui::EndDisabled(); }
         }
 
+        // reference correction in ppb (1 ppb = 0.001 ppm), as for the PlutoSDR
+        SmGui::LeftLabel("Freq. corr. (ppb)");
+        SmGui::FillWidth();
+        int ppb = (int)std::lround(_this->ppm * 1000.0);
+        if (SmGui::InputInt(CONCAT("##_bladerf_ppb_", _this->name), &ppb, 10, 100)) {
+            _this->setCorrPpm(ppb / 1000.0);
+        }
+
         if (_this->selectedBladeType == BLADERF_TYPE_V2) {
             if (SmGui::Checkbox("Bias-T##_balderf_biast_", &_this->biasT)) {
                 if (_this->running) {
@@ -598,7 +658,7 @@ private:
     double sampleRate;
     SourceManager::SourceHandler handler;
     bool running = false;
-    double freq;
+    double freq = 100e6;
     int devId = 0;
     int srId = 0;
     int bwId = 0;
@@ -625,6 +685,7 @@ private:
     struct bladerf_stream* rxStream;
 
     int overallGain = 0;
+    double ppm = 0.0;
 
     std::thread workerThread;
 
@@ -636,10 +697,10 @@ private:
 
     BladeRFType selectedBladeType = BLADERF_TYPE_UNKNOWN;
 
-    const bladerf_gain_modes* gainModes;
+    const bladerf_gain_modes* gainModes = NULL;
     std::vector<std::string> gainModeNames;
     std::string gainModesTxt;
-    int gainModeCount;
+    int gainModeCount = 0;
 };
 
 MOD_EXPORT void _INIT_() {

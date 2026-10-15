@@ -53,6 +53,11 @@ public:
         config.acquire();
         if (!config.conf.contains(name)) {
             config.conf[name]["selectedDemodId"] = 1;
+            // TETRA edition: WFM with a narrow (50 kHz) VFO by default
+            config.conf[name]["WFM"]["bandwidth"] = 50000.0;
+            config.conf[name]["WFM"]["snapInterval"] = 100000.0;
+            config.conf[name]["WFM"]["squelchLevel"] = MIN_SQUELCH;
+            config.conf[name]["WFM"]["squelchEnabled"] = false;
             created = true;
         }
         selectedDemodID = config.conf[name]["selectedDemodId"];

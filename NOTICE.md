@@ -41,6 +41,13 @@ based on SDR++Brown v1.2.1. Main changes (details in the git history):
 - Core: VFO selection, click-through and audio fixes, audio sinks that no
   longer stall the receive chain, start-up defaults, hidden built-in menus,
   instrument-style themes, new start screen and recoloured icons.
+- Source modules (RTL-SDR, PlutoSDR, Airspy, USRP, HackRF, BladeRF, LimeSDR,
+  SDRplay): interfaces for the automatic RF gain and the SDR frequency
+  calibration of the TETRA demodulator; sources not supported by this edition
+  are hidden from the source list by default (Module Manager).
+
+The SDRplay source module needs the SDRplay API installed on the computer
+(Linux: the API library is not bundled in the AppImage).
 
 ## Data sources and services used at run time
 

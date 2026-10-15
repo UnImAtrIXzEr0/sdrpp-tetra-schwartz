@@ -279,11 +279,13 @@ static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
 		get(r, 8);			/* message reference */
 		if (storage) {
 			get(r, 5);		/* validity period */
-			uint32_t fat = get(r, 3);	/* forward address type */
+			/* forward address type: 0 short number address, 1 SSI, 2 TSI,
+			 * 3 external subscriber number, 7 none */
+			uint32_t fat = get(r, 3);
 			if (fat == 0) get(r, 8);
 			else if (fat == 1) get(r, 24);
-			else if (fat == 3) get(r, 48);
-			else { snprintf(ev->text, sizeof(ev->text), "SDS-TL text (external forward address)"); break; }
+			else if (fat == 2) get(r, 48);
+			else if (fat != 7) { snprintf(ev->text, sizeof(ev->text), "SDS-TL text (external forward address)"); break; }
 		}
 		uint32_t ts_used = get(r, 1);
 		int tcs = (int)get(r, 7);

@@ -62,17 +62,19 @@ namespace tw {
             if (textWidth(buf) <= avail || avail <= 0) { return; }
             if (!cellMode()) { ImGui::PushTextWrapPos(0.0f); wrap = true; return; }
             snprintf(full, sizeof(full), "%s", buf);
-            size_t len = strlen(buf);
+            size_t total = strlen(buf);
             float dots = textWidth("...");
-            while (len > 0) {
-                // step back over UTF-8 continuation bytes
-                do { len--; } while (len > 0 && (((unsigned char)buf[len]) & 0xC0) == 0x80);
-                char save = buf[len];
-                buf[len] = 0;
-                bool fits = textWidth(buf) + dots <= avail;
-                buf[len] = save;
-                if (fits) { break; }
+            // binary search for the longest prefix that fits (cells are drawn
+            // every frame, a linear search would be slow for long texts)
+            auto prefixW = [&](size_t l) { return ImGui::CalcTextSize(buf, buf + l).x; };
+            size_t lo = 0, hi = total;
+            while (lo < hi) {
+                size_t mid = (lo + hi + 1) / 2;
+                if (prefixW(mid) + dots <= avail) { lo = mid; } else { hi = mid - 1; }
             }
+            size_t len = lo;
+            // do not cut inside a UTF-8 sequence
+            while (len > 0 && (((unsigned char)buf[len]) & 0xC0) == 0x80) { len--; }
             if (len + 4 < n) { buf[len] = 0; strcat(buf, "..."); }
             cut = true;
         }

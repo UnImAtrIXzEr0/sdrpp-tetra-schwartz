@@ -92,7 +92,18 @@ def test_fresh_start():
         if crash:
             stats.test_fail("test_fresh_start", f"log shows '{crash}'")
             return False
-    stats.test_pass("test_fresh_start", "fresh config: defaults and migrations applied, running")
+        # every SDR supported by the edition must load (SDRplay only where its
+        # API library is installed, as on the build machine)
+        try:
+            with open(ctx.log_path, "r", errors="replace") as f:
+                txt = f.read()
+        except Exception:
+            txt = ""
+        bad = [l for l in txt.splitlines() if "Couldn't load" in l or "isn't a loadable module" in l or "Symbol resolution failed" in l]
+        if bad:
+            stats.test_fail("test_fresh_start", "module load error: " + bad[0][:200])
+            return False
+    stats.test_pass("test_fresh_start", "fresh config: defaults and migrations applied, all modules loaded, running")
     return True
 
 

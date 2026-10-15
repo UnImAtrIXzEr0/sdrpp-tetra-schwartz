@@ -7,6 +7,11 @@
 #include <config.h>
 #include <gui/widgets/stepped_slider.h>
 #include <gui/smgui.h>
+#include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 
 #ifndef __ANDROID__
 #include <libhackrf/hackrf.h>
@@ -78,8 +83,68 @@ const char* bandwidthsTxt = "1.75MHz\0"
                             "28MHz\0"
                             "Auto\0";
 
-class HackRFSourceModule : public ModuleManager::Instance {
+class HackRFSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
+    // ---- interfaces for the TETRA automatic gain and SDR calibration ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        return nullptr;
+    }
+    // Gain: LNA (0..40 dB, 8 dB steps) + VGA (0..62 dB, 2 dB steps) as one
+    // total in 2 dB steps; the LNA is raised first in 8 dB steps, the rest goes
+    // to the VGA. The RF amp stays as set by the user (+14 dB when on).
+    std::string gainSourceName() override { return "HackRF"; }
+    bool gainControllable() override { return running; }
+    int gainStepCount() override { return 52; } // 0..102 dB
+    int gainStep() override { return std::clamp((int)std::lround((lna + vga) / 2.0f), 0, 51); }
+    float gainStepDb(int step) override { return 2.0f * (float)std::clamp(step, 0, 51) + (amp ? 14.0f : 0.0f); }
+    std::string gainLabel(int step) override {
+        int l, v;
+        splitGain(std::clamp(step, 0, 51) * 2, l, v);
+        char b[64];
+        snprintf(b, sizeof(b), "LNA %d + VGA %d dB%s", l, v, amp ? " + amp" : "");
+        return b;
+    }
+    void setGainStep(int step) override {
+        int l, v;
+        splitGain(std::clamp(step, 0, 51) * 2, l, v);
+        lna = (float)l;
+        vga = (float)v;
+        if (running) {
+            hackrf_set_lna_gain(openDev, l);
+            hackrf_set_vga_gain(openDev, v);
+        }
+        if (selectedSerial != "") {
+            config.acquire();
+            config.conf["devices"][selectedSerial]["lnaGain"] = l;
+            config.conf["devices"][selectedSerial]["vgaGain"] = v;
+            config.release(true);
+        }
+    }
+    static void splitGain(int total, int& l, int& v) {
+        total = std::clamp(total, 0, 102);
+        l = std::clamp(8 * ((total / 2) / 8), 0, 40);
+        v = std::clamp(total - l, 0, 62);
+        v &= ~1;
+    }
+    // Frequency correction: the HackRF has no hardware trim, the tuning
+    // frequency is corrected instead (positive ppm = oscillator runs fast)
+    std::string corrSourceName() override { return "HackRF"; }
+    bool corrAvailable() override { return selectedSerial != ""; }
+    double corrPpm() override { return ppm; }
+    double corrResolutionPpm() override { return 0.001; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp(v, -500.0, 500.0);
+        if (running) { hackrf_set_freq(openDev, hwFreq(freq)); }
+        if (selectedSerial != "") {
+            config.acquire();
+            config.conf["devices"][selectedSerial]["ppm"] = ppm;
+            config.release(true);
+        }
+    }
+    uint64_t hwFreq(double f) { return (uint64_t)std::llround(f / (1.0 + ppm * 1e-6)); }
+
     HackRFSourceModule(std::string name) {
         this->name = name;
 
@@ -219,6 +284,10 @@ public:
             bwId = config.conf["devices"][serial]["bandwidth"];
             bwId = std::clamp<int>(bwId, 0, 16);
         }
+        ppm = 0.0;
+        if (config.conf["devices"][serial].contains("ppm") && config.conf["devices"][serial]["ppm"].is_number()) {
+            ppm = std::clamp(config.conf["devices"][serial]["ppm"].get<double>(), -500.0, 500.0);
+        }
 
         selectedSerial = serial;
     }
@@ -260,7 +329,7 @@ private:
 
         hackrf_set_sample_rate(_this->openDev, _this->sampleRate);
         hackrf_set_baseband_filter_bandwidth(_this->openDev, _this->bandwidthIdToBw(_this->bwId));
-        hackrf_set_freq(_this->openDev, _this->freq);
+        hackrf_set_freq(_this->openDev, _this->hwFreq(_this->freq));
 
         hackrf_set_antenna_enable(_this->openDev, _this->biasT);
         hackrf_set_amp_enable(_this->openDev, _this->amp);
@@ -289,10 +358,10 @@ private:
 
     static void tune(double freq, void* ctx) {
         HackRFSourceModule* _this = (HackRFSourceModule*)ctx;
-        if (_this->running) {
-            hackrf_set_freq(_this->openDev, freq);
-        }
         _this->freq = freq;
+        if (_this->running) {
+            hackrf_set_freq(_this->openDev, _this->hwFreq(freq));
+        }
         flog::info("HackRFSourceModule '{0}': Tune: {1}!", _this->name, freq);
     }
 
@@ -379,6 +448,14 @@ private:
             config.conf["devices"][_this->selectedSerial]["amp"] = _this->amp;
             config.release(true);
         }
+
+        // reference correction in ppb (1 ppb = 0.001 ppm), as for the PlutoSDR
+        SmGui::LeftLabel("Freq. corr. (ppb)");
+        SmGui::FillWidth();
+        int ppb = (int)std::lround(_this->ppm * 1000.0);
+        if (SmGui::InputInt(CONCAT("##_hackrf_ppb_", _this->name), &ppb, 10, 100)) {
+            _this->setCorrPpm(ppb / 1000.0);
+        }
     }
 
     static int callback(hackrf_transfer* transfer) {
@@ -395,7 +472,7 @@ private:
     int sampleRate;
     SourceManager::SourceHandler handler;
     bool running = false;
-    double freq;
+    double freq = 100e6;
     std::string selectedSerial = "";
     int devId = 0;
     int srId = 0;
@@ -404,6 +481,7 @@ private:
     bool amp = false;
     float lna = 0;
     float vga = 0;
+    double ppm = 0.0;
 
 #ifdef __ANDROID__
     int devFd = -1;

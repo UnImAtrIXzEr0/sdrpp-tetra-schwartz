@@ -64,4 +64,5 @@ export LDAI_OUTPUT="SDRPP-TETRA-SCHWARTZ${TETRA_VERSION:+-v$TETRA_VERSION}-beta-
     --desktop-file "$APPDIR/usr/share/applications/sdrpp.desktop" \
     --icon-file "$APPDIR/usr/share/icons/hicolor/256x256/apps/sdrpp.png" \
     --custom-apprun "$(pwd)/AppRun.sh" \
+    --exclude-library "libsdrplay_api.so*" \
     --output appimage

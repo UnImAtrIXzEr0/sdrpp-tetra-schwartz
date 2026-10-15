@@ -9,6 +9,11 @@
 #include <sdrplay_api.h>
 #include <gui/smgui.h>
 #include <utils/optionlist.h>
+#include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
 
@@ -80,8 +85,57 @@ const char* rspduo_antennaPortsTxt = "Tuner 1 (50Ohm)\0Tuner 1 (Hi-Z)\0Tuner 2 (
 
 #define MAX_DEV_COUNT   16
 
-class SDRPlaySourceModule : public ModuleManager::Instance {
+class SDRPlaySourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
+    // ---- interfaces for the TETRA automatic gain and SDR calibration ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        return nullptr;
+    }
+    // Gain: the IF gain reduction (gRdB 59..20 dB) in 1 dB steps with IF AGC
+    // off; the LNA state stays as set by the user
+    std::string gainSourceName() override { return "SDRplay"; }
+    bool gainControllable() override { return running && !agc && channelParams != NULL; }
+    int gainStepCount() override { return 40; }
+    int gainStep() override { return std::clamp(59 - gain, 0, 39); }
+    float gainStepDb(int step) override { return (float)std::clamp(step, 0, 39); }
+    std::string gainLabel(int step) override {
+        char b[64];
+        snprintf(b, sizeof(b), "IF gain red. %d dB (LNA state %d)", 59 - std::clamp(step, 0, 39), lnaGain);
+        return b;
+    }
+    void setGainStep(int step) override {
+        gain = 59 - std::clamp(step, 0, 39);
+        if (running && channelParams) {
+            channelParams->tunerParams.gain.gRdB = gain;
+            sdrplay_api_Update(openDev.dev, openDev.tuner, sdrplay_api_Update_Tuner_Gr, sdrplay_api_Update_Ext1_None);
+        }
+        if (selectedName != "") {
+            config.acquire();
+            config.conf["devices"][selectedName]["ifGain"] = gain;
+            config.release(true);
+        }
+    }
+    // Frequency correction: the API's ppm correction (RF and sample clock)
+    std::string corrSourceName() override { return "SDRplay"; }
+    bool corrAvailable() override { return selectedName != ""; }
+    double corrPpm() override { return ppm; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp(v, -500.0, 500.0);
+        applyPpm();
+        if (selectedName != "") {
+            config.acquire();
+            config.conf["devices"][selectedName]["ppm"] = ppm;
+            config.release(true);
+        }
+    }
+    void applyPpm() {
+        if (!running || openDevParams == NULL || openDevParams->devParams == NULL) { return; }
+        openDevParams->devParams->ppm = ppm;
+        sdrplay_api_Update(openDev.dev, openDev.tuner, sdrplay_api_Update_Dev_Ppm, sdrplay_api_Update_Ext1_None);
+    }
+
     SDRPlaySourceModule(std::string name) {
         this->name = name;
 
@@ -355,6 +409,10 @@ public:
         if (config.conf["devices"][selectedName].contains("ifGain")) {
             gain = config.conf["devices"][selectedName]["ifGain"];
         }
+        ppm = 0.0;
+        if (config.conf["devices"][selectedName].contains("ppm") && config.conf["devices"][selectedName]["ppm"].is_number()) {
+            ppm = std::clamp(config.conf["devices"][selectedName]["ppm"].get<double>(), -500.0, 500.0);
+        }
         if (config.conf["devices"][selectedName].contains("agc")) {
             agc = config.conf["devices"][selectedName]["agc"];
         }
@@ -613,6 +671,7 @@ private:
         sdrplay_api_Update(_this->openDev.dev, _this->openDev.tuner, sdrplay_api_Update_Ctrl_Agc, sdrplay_api_Update_Ext1_None);
 
         _this->running = true;
+        _this->applyPpm();
         flog::info("SDRPlaySourceModule '{0}': Start!", _this->name);
     }
 
@@ -828,6 +887,14 @@ private:
                 _this->_agcDecayDelay = _this->agcDecayDelay;
                 _this->_agcDecayThreshold = _this->agcDecayThreshold;
                 _this->_agcSetPoint = _this->agcSetPoint;
+            }
+
+            // reference correction in ppb (1 ppb = 0.001 ppm), as for the PlutoSDR
+            SmGui::LeftLabel("Freq. corr. (ppb)");
+            SmGui::FillWidth();
+            int ppb = (int)std::lround(_this->ppm * 1000.0);
+            if (SmGui::InputInt(CONCAT("##sdrplay_ppb", _this->name), &ppb, 10, 100)) {
+                _this->setCorrPpm(ppb / 1000.0);
             }
 
             switch (_this->openDev.hwVer) {
@@ -1125,8 +1192,9 @@ private:
     sdrplay_api_CallbackFnsT cbFuncs;
 
     sdrplay_api_DeviceT openDev;
-    sdrplay_api_DeviceParamsT* openDevParams;
-    sdrplay_api_RxChannelParamsT* channelParams;
+    sdrplay_api_DeviceParamsT* openDevParams = NULL;
+    sdrplay_api_RxChannelParamsT* channelParams = NULL;
+    double ppm = 0.0;
 
     sdrplay_api_Bw_MHzT bandwidth;
     int bandwidthId = 8; // Auto

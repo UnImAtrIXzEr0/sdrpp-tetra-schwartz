@@ -66,7 +66,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 17, 1,
+    /* Version:         */ 0, 17, 2,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -1115,7 +1115,9 @@ private:
             ImGui::SetTooltip("Keeps the TETRA channel between -35 and -20 dBFS (peak below -6 dBFS)\n"
                               "by stepping the SDR gain slowly (one step every 4 s).\n"
                               "Supported: RTL-SDR (tuner AGC off), PlutoSDR (gain mode Manual),\n"
-                              "Airspy (Sensitive or Linear mode), USRP.\n"
+                              "Airspy (Sensitive or Linear mode), USRP, HackRF (LNA + VGA),\n"
+                              "BladeRF (gain mode Manual), LimeSDR, SDRplay (IF gain, IF AGC off).\n"
+                              "Spectran: set the reference level in the Spectran software.\n"
                               "Note: strong signals elsewhere in the SDR bandwidth can still overload\n"
                               "the ADC; watch the waterfall.");
         }
@@ -1192,7 +1194,7 @@ private:
             gainLastStep = now;
             SourceGainInterface* g = findGainInterface();
             if (!g) {
-                gainStatus = "Source has no gain control interface (supported: RTL-SDR, PlutoSDR, Airspy, USRP)";
+                gainStatus = "Source has no gain control interface (supported: RTL-SDR, PlutoSDR, Airspy, USRP, HackRF, BladeRF, LimeSDR, SDRplay)";
             }
             else if (g->gainControllable()) {
                 gainStatus.clear();
@@ -2202,18 +2204,28 @@ private:
             if (ImGui::SmallButton(CONCAT("Clear##_tetra_tr_clr_", name))) { subscribers.clearTraffic(); traffic.clear(); }
             tw::SameCheckbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
             float minTr = colW("00:00:00") + colW("TS") + colW("D-TX-GRANTED") + 2 * colW("2620001 DB0XXX") + colW("SDS text: Hello World");
-            if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())), innerW(minTr))) {
+            if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab2_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())), innerW(minTr))) {
                 ImGui::TableSetupScrollFreeze(1, 1);
                 ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("00:00:00"));
-                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("TS"));
+                ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthStretch, 0.8f);
                 ImGui::TableSetupColumn("PDU", ImGuiTableColumnFlags_WidthFixed, colW("D-TX-GRANTED"));
                 ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthStretch, 0.8f);
-                ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("TS"));
                 ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch, 2.0f);
                 ImGui::TableHeadersRow();
+                // newest first; only the visible rows are drawn (up to 1000 entries)
+                std::vector<const TetraTrafficEntry*> rows;
+                rows.reserve(traffic.size());
                 for (auto it = traffic.rbegin(); it != traffic.rend(); ++it) {
                     bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS";
                     if (trafficHideControl && control) { continue; }
+                    rows.push_back(&*it);
+                }
+                ImGuiListClipper clipper;
+                clipper.Begin((int)rows.size());
+                while (clipper.Step()) for (int ri = clipper.DisplayStart; ri < clipper.DisplayEnd; ri++) {
+                    const TetraTrafficEntry* it = rows[ri];
+                    bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS";
                     struct tm lt;
 #ifdef _WIN32
                     localtime_s(&lt, &it->t);
@@ -2225,7 +2237,7 @@ private:
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
                     tw::TextDisabled("%s", ts);
-                    ImGui::TableSetColumnIndex(1);
+                    ImGui::TableSetColumnIndex(4);
                     tw::Text("%u", it->tn);
                     ImGui::TableSetColumnIndex(2);
                     if (control) { tw::TextU(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
@@ -2235,7 +2247,7 @@ private:
                         describeSsi(it->from, TetraSubscriber::KIND_INDIVIDUAL, c, i);
                         tw::Text("%u %s", it->from, c.c_str());
                     }
-                    ImGui::TableSetColumnIndex(4);
+                    ImGui::TableSetColumnIndex(1);
                     if (it->to) {
                         std::string c, i;
                         describeSsi(it->to, it->toGroup ? TetraSubscriber::KIND_GROUP : TetraSubscriber::KIND_UNKNOWN, c, i);
@@ -2343,12 +2355,12 @@ private:
     TetraConstellationView constView;
     bool constDetached = false;
     bool compOriginOffset = true;    // edition default: display without I/Q offset
-    bool afcEnabled = false;
+    bool afcEnabled = true;     // edition default
     bool afcAnchorValid = false;
     double afcAnchor = 0.0, afcLastSet = 0.0;
     std::string afcStatus;
     std::chrono::steady_clock::time_point afcLastStep;
-    bool autoGain = false;
+    bool autoGain = true;       // edition default
     std::string gainStatus;
     std::chrono::steady_clock::time_point gainLastStep;
     bool subsDetached = false;
