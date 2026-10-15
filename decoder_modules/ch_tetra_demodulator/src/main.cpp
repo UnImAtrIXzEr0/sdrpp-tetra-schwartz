@@ -1333,7 +1333,7 @@ private:
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Moves the VFO so the carrier stays centered (for SDRs that drift).\n"
                               "Only acts while the decoder is locked; locks the cell automatically.\n"
-                              "Pull-in limited to +-6 kHz from where AFC started.\n"
+                              "Pull-in limited to +-6 kHz around the frequency the cell announces\n(SYSINFO; otherwise from where AFC started). The value is the offset from it.\n"
                               "Leave off with a GPS/TCXO-stabilised SDR for pure measurements.");
         }
         if (afcEnabled) {
@@ -1353,6 +1353,7 @@ private:
             config.conf[name]["autoGain"] = autoGain;
             config.release(true);
             gainStatus.clear();
+            gainLastSet = -1;
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Keeps the TETRA channel between -35 and -20 dBFS (peak below -6 dBFS)\n"
@@ -1405,6 +1406,13 @@ private:
             if (locked && std::chrono::duration<double>(now - afcLastStep).count() >= 3.0 && afcStatus.empty()) {
                 if (!afcAnchorValid) {
                     afcAnchor = cur;
+                    // anchor on the frequency the cell announces (SYSINFO), so the
+                    // display shows the real carrier error and not where the VFO
+                    // happened to be placed
+                    double vf = mainVfoFreq();
+                    if (m.dlFreq > 1e6 && vf > 1e6 && std::fabs((double)m.dlFreq - vf) < 8000.0) {
+                        afcAnchor = cur + ((double)m.dlFreq - vf);
+                    }
                     afcLastSet = cur;
                     afcAnchorValid = true;
                     // AFC follows exactly this carrier: lock the cell as well
@@ -1443,6 +1451,18 @@ private:
                 gainStatus.clear();
                 int step = g->gainStep();
                 int n = g->gainStepCount();
+                if (g != gainLastIf) { gainLastIf = g; gainLastSet = -1; }   // other source
+                // gain changed by hand in the source menu: the user takes over
+                if (gainLastSet >= 0 && step != gainLastSet) {
+                    autoGain = false;
+                    gainLastSet = -1;
+                    meas.addEvent("Auto RF gain off: gain changed by hand (" + g->gainLabel(step) + ")");
+                    config.acquire();
+                    config.conf[name]["autoGain"] = autoGain;
+                    config.release(true);
+                    return;
+                }
+                gainLastSet = step;
                 // wanted gain change in dB: back to about -27 dBFS level / -10 dBFS peak,
                 // at most 10 dB per step so the decoder keeps up
                 double cur = g->gainStepDb(step);
@@ -1463,6 +1483,7 @@ private:
                     if (best == step) { best = std::clamp(step + (want > cur ? 1 : -1), 0, n - 1); }
                     if (best != step) {
                         g->setGainStep(best);
+                        gainLastSet = g->gainStep();
                         std::string b = std::string(want > cur ? "RF gain up to " : "RF gain down to ") + g->gainLabel(best);
                         meas.addEvent(b);
                     }
@@ -1497,7 +1518,7 @@ private:
         }
         if (tw::SameButton(CONCAT("Rescan##_tetra_gps_scan_", name))) { gpsPorts = NmeaGps::listPorts(); }
         static const int bauds[] = { 4800, 9600, 19200, 38400, 57600, 115200 };
-        static const char* baudTxt = "4800\09600\019200\038400\057600\0115200\0";
+        static const char* baudTxt = "4800\0" "9600\0" "19200\0" "38400\0" "57600\0" "115200\0";   // separate literals: "\019" would be an octal escape
         int bi = 1;
         for (int i = 0; i < 6; i++) { if (bauds[i] == gpsBaud) { bi = i; } }
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6);
@@ -1608,6 +1629,8 @@ private:
         // offset-free EVM as well (EVM = 10^(-MER/20))
         float evm = compOriginOffset ? 100.0f * powf(10.0f, -m.merExclDb / 20.0f) : m.evmPct;
         bool good = m.valid && m.symSync && evm <= TetraConstellationView::RMS_LIMIT * 100.0f;
+        constView.legendEvm = m.valid ? evm : NAN;
+        constView.legendWhat = compOriginOffset ? "EVM w/o I/Q offset" : "EVM";
         // Colours follow the theme if it defines "Constellation*" keys (e.g. "RoSc 2")
         {
             TetraConstellationView::Palette p;
@@ -2212,6 +2235,7 @@ private:
         else if (burstSt.source == 1) { f = burstSt.manualMHz * 1e6; }
         else { f = mainVfoFreq(); }
         double dlTap = (burstSt.timing && burstSt.source != 2) ? mainVfoFreq() : 0.0;
+        burstAn.setKnownCarrier(burstSt.source == 2 && osmotetradecoder.getRxState() == 2);
         burstAn.loop(enabled && burstRun, f, dlTap);
         chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
         alarmLoop();
@@ -3058,6 +3082,8 @@ private:
     bool autoGain = true;       // edition default
     std::string gainStatus;
     std::chrono::steady_clock::time_point gainLastStep;
+    int gainLastSet = -1;
+    SourceGainInterface* gainLastIf = nullptr;       // gain step auto RF gain last saw / set (detects manual changes)
     bool subsDetached = false;
     bool trafficHideControl = false;
     bool focusSubsWin = false;

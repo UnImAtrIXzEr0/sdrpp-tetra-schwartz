@@ -6,6 +6,7 @@
 //    the limit (with symbol sync)
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <imgui.h>
@@ -29,6 +30,8 @@ public:
         ImU32 text = IM_COL32(150, 170, 200, 255);
     };
     Palette pal;
+    float legendEvm = NAN;           // EVM the colour is judged by (%), NAN: no value in the legend
+    const char* legendWhat = "EVM";
 
     static const int N = 1024;
     static constexpr float RMS_LIMIT = 0.10f;
@@ -98,7 +101,16 @@ public:
         dl->PopClipRect();
 
         // Legend
-        const char* lg = (good && sync) ? "EVM within ETSI limit" : (sync ? "EVM above ETSI limit" : "no symbol sync");
+        // name the EVM the colour is judged by (with "Remove I/Q offset" the
+        // offset-free EVM, as in the ETSI definition) and show its value
+        char lgb[96];
+        if (sync && !std::isnan(legendEvm)) {
+            snprintf(lgb, sizeof(lgb), "%s %.1f %% %s ETSI limit", legendWhat, legendEvm, good ? "within" : "above");
+        }
+        else {
+            snprintf(lgb, sizeof(lgb), "%s", (good && sync) ? "EVM within ETSI limit" : (sync ? "EVM above ETSI limit" : "no symbol sync"));
+        }
+        const char* lg = lgb;
         dl->AddText(ImVec2(bb.Min.x + 6, bb.Max.y - ImGui::GetFontSize() - 4),
                     (good && sync) ? pal.dotGood : pal.dotBad, lg);
         dl->AddText(ImVec2(bb.Min.x + 6, bb.Min.y + 4), pal.text, "circles: ETSI 10 % rms / 30 % peak");

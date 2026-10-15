@@ -18,7 +18,7 @@ namespace ImGui {
         ImGuiStyle& style = GetStyle();
 
         ImVec2 min = window->DC.CursorPos;
-        min.x = menuWidth - (GetFontSize());
+        min.x = window->Pos.x + menuWidth - (GetFontSize());   // relative to the window (also in own windows)
         ImVec2 size = CalcItemSize(size_arg, (GetFontSize()), (GetFontSize()));
         ImRect bb(min, min+size);
 

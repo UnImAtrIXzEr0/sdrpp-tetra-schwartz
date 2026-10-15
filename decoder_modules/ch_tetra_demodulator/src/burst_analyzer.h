@@ -110,8 +110,14 @@ public:
 
     TetraBurstResult get() {
         std::lock_guard<std::mutex> lck(resMtx);
-        return res;
+        TetraBurstResult r = res;
+        // on a continuous carrier (e.g. the locked downlink on the TETRA VFO)
+        // the power "between bursts" is the carrier itself, not noise
+        if (knownCarrier.load() && r.continuous) { r.gapDbfs = NAN; }
+        return r;
     }
+    // set while the tap sits on a carrier the decoder is locked to
+    void setKnownCarrier(bool c) { knownCarrier.store(c); }
     float slotQuality() { return dlQuality.load(); }
 
     void stop() {
@@ -246,7 +252,7 @@ private:
         bool cal = levelCal != 0.0f;
         tw::Text("Noise between bursts:");
         if (!std::isnan(r.gapDbfs)) { tw::SameTextColored(tc::val(), cal ? "%.1f dBm" : "%.1f dBFS", r.gapDbfs + levelCal); }
-        else { tw::SameTextDisabled("--"); }
+        else { tw::SameTextDisabled(knownCarrier.load() && r.continuous ? "-- (continuous carrier, no gaps)" : "--"); }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Power in the 25 kHz channel while nobody transmits (1 ms away from all\n"
                               "bursts). On the uplink of a repeater this is its receive noise and\n"
@@ -613,6 +619,7 @@ private:
     std::atomic<float> dlQuality { 0.0f };
     std::atomic<bool> transReq { true };
     std::deque<std::pair<time_t, float>> floorHist;
+    std::atomic<bool> knownCarrier { false };
     time_t lastHist = 0;
 
     std::thread worker;
