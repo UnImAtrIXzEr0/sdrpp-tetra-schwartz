@@ -174,7 +174,7 @@ namespace module_manager_menu {
                     sourcemenu::setSourceHidden(names[i], !shown);
                 }
             }
-            ImGui::TextDisabled("Officially supported: RTL-SDR, PlutoSDR, Airspy, USRP (and File for recordings).");
+            ImGui::TextDisabled("Supported by this edition: RTL-SDR, PlutoSDR, Airspy, USRP, HackRF,\nBladeRF, LimeSDR, SDRplay, Spectran (and File for recordings).");
             ImGui::TreePop();
         }
         if (hidChanged) {
