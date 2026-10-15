@@ -27,6 +27,7 @@ struct TetraTrendPoint {
     float bursts = NAN;       // decoded bursts per second
     float syncLost = NAN;     // sync losses in this second
     float tsTraffic[4] = { NAN, NAN, NAN, NAN };   // % of the slot's frames carrying traffic
+    float ppb = NAN;          // received carrier vs. SYSINFO frequency, parts per billion
     bool calibrated = false;  // level in dBm
 };
 
@@ -104,6 +105,8 @@ public:
                 if (!std::isnan(b)) { fail += b; }
             }
             if (ok + fail > 0) { p.crcFail = (float)(100.0 * fail / (ok + fail)); }
+            float abs = num("carrier_vs_sysinfo_hz"), dlf = num("dl_freq_hz");
+            if (!std::isnan(abs) && dlf > 1e6) { p.ppb = (float)((double)abs / (double)dlf * 1e9); }
             const char* tsn[4] = { "ts1_traffic_pct", "ts2_traffic_pct", "ts3_traffic_pct", "ts4_traffic_pct" };
             for (int i = 0; i < 4; i++) { p.tsTraffic[i] = num(tsn[i]); }
             out.push_back(p);

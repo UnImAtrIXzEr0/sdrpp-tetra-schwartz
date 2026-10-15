@@ -24,7 +24,7 @@
 #include "gps.h"
 #include "trend.h"
 
-#define TETRA_PLUGIN_VERSION "0.18.0"
+#define TETRA_PLUGIN_VERSION "0.19.0"
 
 struct TetraMeasSnapshot {
     bool valid = false;
@@ -215,7 +215,7 @@ public:
                          "crc_bsch_ok;crc_bsch_fail;crc_sb2_ok;crc_sb2_fail;crc_ndb_ok;crc_ndb_fail;crc_schf_ok;crc_schf_fail;"
                          "mcc;mnc;cc;dl_freq_hz;ul_freq_hz;ts1;ts2;ts3;ts4;"
                          "level_dbm;cell_match;gps_fix;lat;lon;alt_m;speed_kmh;sats;hdop;"
-                         "ts1_traffic_pct;ts2_traffic_pct;ts3_traffic_pct;ts4_traffic_pct\n");
+                         "ts1_traffic_pct;ts2_traffic_pct;ts3_traffic_pct;ts4_traffic_pct;carrier_vs_sysinfo_hz\n");
         fflush(logFile);
         eventFile = fopen((logPath.substr(0, logPath.size() - 4) + "_events.csv").c_str(), "w");
         if (eventFile) { fprintf(eventFile, "time;event\n"); fflush(eventFile); }
@@ -488,9 +488,10 @@ private:
         }
         for (int t = 0; t < 4; t++) {
             float pct = trafficPct(s.dlUse[t]);
-            if (std::isnan(pct)) { fprintf(logFile, t < 3 ? ";" : "\n"); }
-            else { fprintf(logFile, t < 3 ? "%.0f;" : "%.0f\n", pct); }
+            if (std::isnan(pct)) { fprintf(logFile, ";"); }
+            else { fprintf(logFile, "%.0f;", pct); }
         }
+        if (s.absErrValid) { fprintf(logFile, "%.2f\n", s.absErrHz); } else { fprintf(logFile, "\n"); }
         if (trafficFile && _subs) {
             bool en = _stationsEnabled ? _stationsEnabled() : true;
             auto tr = _subs->takeNewTraffic();
@@ -550,6 +551,7 @@ private:
             p.mer = s.merDb;
             p.evm = s.evmPct;
             p.carrierHz = s.carrierOffsetHz;
+            if (s.absErrValid && s.dlFreq > 0) { p.ppb = (float)(s.absErrHz / (double)s.dlFreq * 1e9); }
         }
         bool decActive = _decoderActive ? _decoderActive() : true;
         if (decActive) {

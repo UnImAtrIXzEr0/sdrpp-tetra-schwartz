@@ -29,6 +29,9 @@
 #include "tetra_colors.h"
 #include "tetra_layout.h"
 #include "burst_dsp.h"
+#include "tetra_sigproc.h"
+#include <deque>
+#include <ctime>
 
 struct TetraBurstSettings {
     int source = 0;            // 0 uplink from SYSINFO, 1 manual frequency, 2 TETRA VFO frequency
@@ -37,50 +40,79 @@ struct TetraBurstSettings {
     float maskRippleDb = 1.0f; // useful part within +-ripple of the burst power
     float maskOffDbc = -40.0f; // before the ramp-up and after the ramp-down
     float maskRampSym = 5.0f;  // max. ramp time (-20 dBc ... -1 dBc) in symbols
+    bool timing = true;        // burst timing against the downlink slot grid (2nd tap on the TETRA VFO)
+    bool transients = true;    // spectrum during the ramps
+    int floorSpan = 0;         // history of the uplink noise: 0 10 min, 1 1 h, 2 6 h, 3 24 h
 };
 
 class TetraBurstAnalyzer {
 public:
     static constexpr double FS = TetraBurstDsp::FS;
     static constexpr double SYM = TetraBurstDsp::SYM;
+    static constexpr double TAP_BW = 125000.0;   // wide tap: own channel and +-50 kHz
 
     ~TetraBurstAnalyzer() { stop(); }
 
     bool isRunning() const { return running; }
+    bool hasDlTap() const { return dlvfo != nullptr; }
     std::string status;   // why it is not running (GUI)
 
-    // every GUI frame: run at absolute frequency 'freq' if it is inside the SDR span
-    void loop(bool enable, double freq) {
+    // every GUI frame: run at absolute frequency 'freq' if it is inside the SDR
+    // span; dlFreq > 0 adds a sample-aligned tap on the downlink for the timing
+    void loop(bool enable, double freq, double dlFreq) {
         bool sdr = gui::mainWindow.sdrIsRunning();
         double center = gui::waterfall.getCenterFrequency();
         double sr = sigpath::iqFrontEnd.getSampleRate();
         double off = freq - center;
+        double dlOff = dlFreq - center;
         status.clear();
         if (!enable) { stop(); return; }
         if (freq < 1e6) { status = "no frequency (uplink not known yet - needs SYSINFO)"; stop(); return; }
         if (!sdr) { status = "SDR stopped"; stop(); return; }
-        if (!(sr > 0) || std::fabs(off) > sr / 2.0 - 20000.0) {
-            char b[160];
-            snprintf(b, sizeof(b), "%.4f MHz is outside the SDR span (%.4f MHz +- %.2f MHz)", freq / 1e6, center / 1e6, sr / 2e6);
+        double lim = sr / 2.0 - TAP_BW / 2.0;
+        if (!(sr > 0) || std::fabs(off) > lim) {
+            char b[200];
+            snprintf(b, sizeof(b), "%.4f MHz is outside the usable SDR span (%.4f MHz +- %.2f MHz)", freq / 1e6, center / 1e6, (std::max)(0.0, lim) / 1e6);
             status = b;
             stop();
             return;
         }
-        if (!running) { start(off); }
-        else if (std::fabs(off - curOffset) > 0.5) {
-            curOffset = off;
-            rxvfo->setOffset(off);
-            resetReq.store(true);
+        bool wantDl = dlFreq > 1e6 && std::fabs(dlOff) <= lim && std::fabs(dlFreq - freq) > 50000.0;
+        if (dlFreq > 1e6 && !wantDl && std::fabs(dlFreq - freq) > 50000.0) { status = "downlink outside the SDR span: no timing measurement"; }
+        if (running && wantDl != (dlvfo != nullptr)) { stop(); }
+        if (!running) { start(off, wantDl ? dlOff : NAN); }
+        else {
+            if (std::fabs(off - curOffset) > 0.5) {
+                curOffset = off;
+                rxvfo->setOffset(off);
+                resetReq.store(true);
+            }
+            if (dlvfo && std::fabs(dlOff - curDlOffset) > 0.5) {
+                curDlOffset = dlOff;
+                dlvfo->setOffset(dlOff);
+            }
+        }
+        // uplink noise history (once per second)
+        time_t now = time(nullptr);
+        if (now != lastHist) {
+            lastHist = now;
+            TetraBurstResult r = get();
+            if (!std::isnan(r.gapDbfs)) {
+                floorHist.push_back({ now, r.gapDbfs });
+                while (floorHist.size() > 24 * 3600) { floorHist.pop_front(); }
+            }
         }
     }
 
     void setAverages(int n) { avgReq.store(std::clamp(n, 1, 500)); }
+    void setTransients(bool t) { transReq.store(t); }
     void reset() { resetReq.store(true); }
 
     TetraBurstResult get() {
         std::lock_guard<std::mutex> lck(resMtx);
         return res;
     }
+    float slotQuality() { return dlQuality.load(); }
 
     void stop() {
         if (!running) { return; }
@@ -92,8 +124,14 @@ public:
         if (worker.joinable()) { worker.join(); }
         sink.stop();
         sigpath::iqFrontEnd.removeVFO(name);
+        if (dlvfo) {
+            dlSink.stop();
+            sigpath::iqFrontEnd.removeVFO(name + " DL");
+            dlvfo = nullptr;
+        }
         rxvfo = nullptr;
         running = false;
+        dlQuality.store(0.0f);
         std::lock_guard<std::mutex> lck(resMtx);
         res = TetraBurstResult();
     }
@@ -133,9 +171,18 @@ public:
         tw::SameNext();
         if (tw::SameButtonOrFull(("Reset##_ba_rst_" + id).c_str())) { reset(); }
         setAverages(st.averages);
+        setTransients(st.transients);
+        {
+            std::string l0 = "Timing vs. downlink##_ba_tim_" + id, l1 = "Ramp spectrum##_ba_tr_" + id;
+            tw::CheckRow row;
+            row.add(l0.c_str(), &st.timing);
+            row.add(l1.c_str(), &st.transients);
+            if (row.draw("Also:") >= 0) { changed = true; reset(); }
+        }
 
         TetraBurstResult r = get();
         if (r.state == 0) { tw::TextDisabled("waiting for samples..."); return changed; }
+        drawFloor(id, width, pal, r, st, levelCal, changed);
         bool cal = levelCal != 0.0f;
         tw::Text("Floor:"); tw::SameTextColored(val, cal ? "%.1f dBm" : "%.1f dBFS", r.floorDbfs + levelCal);
         tw::SameText(" peak"); tw::SameTextColored(val, cal ? "%.1f dBm" : "%.1f dBFS", r.topDbfs + levelCal);
@@ -176,6 +223,8 @@ public:
             if (limited) { tw::SameTextDisabled("(at the floor)"); }
         }
         drawProfile(id, width, pal, r, st);
+        if (st.timing) { drawTiming(id, width, pal, r); }
+        if (st.transients) { drawTransients(id, width, r); }
         if (ImGui::TreeNode(("Time mask##_ba_mask_" + id).c_str())) {
             ImGui::SetNextItemWidth(90.0f * style::uiScale);
             if (ImGui::InputFloat(("Ripple +- dB##_ba_mr_" + id).c_str(), &st.maskRippleDb, 0.1f, 0.5f, "%.1f")) { st.maskRippleDb = std::clamp(st.maskRippleDb, 0.1f, 10.0f); changed = true; }
@@ -192,17 +241,219 @@ public:
 private:
     static const size_t RING = 1 << 18;   // 1.8 s
 
-    void start(double offset) {
-        rxvfo = sigpath::iqFrontEnd.addVFO(name, FS, 25000.0, offset);
-        if (!rxvfo) { return; }
+    void drawFloor(const std::string& id, float width, const TetraConstellationView::Palette& pal, const TetraBurstResult& r,
+                   TetraBurstSettings& st, float levelCal, bool& changed) {
+        bool cal = levelCal != 0.0f;
+        tw::Text("Noise between bursts:");
+        if (!std::isnan(r.gapDbfs)) { tw::SameTextColored(tc::val(), cal ? "%.1f dBm" : "%.1f dBFS", r.gapDbfs + levelCal); }
+        else { tw::SameTextDisabled("--"); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Power in the 25 kHz channel while nobody transmits (1 ms away from all\n"
+                              "bursts). On the uplink of a repeater this is its receive noise and\n"
+                              "interference - a rise means something disturbs the repeater's receiver.\n"
+                              "Limited by the noise of the SDR; set an alarm under Alarms.");
+        }
+        if (floorHist.size() < 2) { return; }
+        if (ImGui::TreeNode(("Noise history##_ba_fh_" + id).c_str())) {
+            ImGui::SetNextItemWidth(90.0f * style::uiScale);
+            if (ImGui::Combo(("Span##_ba_fhs_" + id).c_str(), &st.floorSpan, "10 min\0" "1 h\0" "6 h\0" "24 h\0")) { changed = true; }
+            static const int spans[4] = { 600, 3600, 6 * 3600, 24 * 3600 };
+            int span = spans[std::clamp(st.floorSpan, 0, 3)];
+            const float h = 110.0f * style::uiScale, lm = 40.0f * style::uiScale;
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton(("##_ba_fhp_" + id).c_str(), ImVec2(width, h));
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(p0, ImVec2(p0.x + width, p0.y + h), pal.bg);
+            dl->AddRect(p0, ImVec2(p0.x + width, p0.y + h), pal.border);
+            ImRect pr(ImVec2(p0.x + lm, p0.y + 4), ImVec2(p0.x + width - 4, p0.y + h - 16.0f * style::uiScale));
+            time_t now = time(nullptr);
+            double t0 = (double)now - span, t1 = (double)now;
+            int cols = (std::max)(1, (int)pr.GetWidth());
+            std::vector<float> mx(cols, -INFINITY), mean(cols, 0.0f);
+            std::vector<int> n(cols, 0);
+            for (auto it = floorHist.rbegin(); it != floorHist.rend() && (double)it->first >= t0; ++it) {
+                int k = (int)(((double)it->first - t0) / (t1 - t0) * cols);
+                if (k < 0 || k >= cols) { continue; }
+                mx[k] = (std::max)(mx[k], it->second);
+                mean[k] += it->second;
+                n[k]++;
+            }
+            float lo = INFINITY, hi = -INFINITY;
+            for (int k = 0; k < cols; k++) { if (n[k]) { mean[k] /= n[k]; lo = (std::min)(lo, mean[k]); hi = (std::max)(hi, mx[k]); } }
+            if (lo <= hi) {
+                lo = std::floor((lo + levelCal - 2.0f) / 5.0f) * 5.0f - levelCal;
+                hi = std::ceil((hi + levelCal + 2.0f) / 5.0f) * 5.0f - levelCal;
+                auto Y = [&](float v) { return pr.Max.y - (v - lo) / (hi - lo) * pr.GetHeight(); };
+                char buf[32];
+                float step = (hi - lo) > 20.0f ? 10.0f : 5.0f;
+                for (float v = lo; v <= hi + 0.01f; v += step) {
+                    dl->AddLine(ImVec2(pr.Min.x, Y(v)), ImVec2(pr.Max.x, Y(v)), pal.grid);
+                    snprintf(buf, sizeof(buf), "%.0f", v + levelCal);
+                    dl->AddText(ImVec2(p0.x + 3, Y(v) - ImGui::GetFontSize() * 0.5f), pal.text, buf);
+                }
+                for (int i = 0; i <= 4; i++) {
+                    time_t t = (time_t)(t0 + (t1 - t0) * i / 4);
+                    struct tm lt;
+#ifdef _WIN32
+                    localtime_s(&lt, &t);
+#else
+                    localtime_r(&t, &lt);
+#endif
+                    strftime(buf, sizeof(buf), "%H:%M", &lt);
+                    float tx = pr.Min.x + pr.GetWidth() * i / 4 - ImGui::CalcTextSize(buf).x * 0.5f;
+                    dl->AddText(ImVec2(std::clamp(tx, pr.Min.x, pr.Max.x - ImGui::CalcTextSize(buf).x), pr.Max.y + 1), pal.text, buf);
+                }
+                dl->PushClipRect(pr.Min, pr.Max, true);
+                ImU32 lc = ImGui::GetColorU32(ImGuiCol_PlotLines);
+                ImU32 mc = (pal.dotBad & 0x00FFFFFF) | 0xA0000000;
+                ImVec2 prev;
+                bool have = false;
+                for (int k = 0; k < cols; k++) {
+                    if (!n[k]) { continue; }
+                    float x = pr.Min.x + k + 0.5f;
+                    if (mx[k] > mean[k] + 0.2f) { dl->AddLine(ImVec2(x, Y(mean[k])), ImVec2(x, Y(mx[k])), mc); }
+                    ImVec2 pt(x, Y(mean[k]));
+                    if (have && pt.x - prev.x < 4.0f) { dl->AddLine(prev, pt, lc, 1.3f * style::uiScale); }
+                    prev = pt;
+                    have = true;
+                }
+                dl->PopClipRect();
+            }
+            tw::TextDisabled("Line: mean, red: maximum per pixel.");
+            ImGui::TreePop();
+        }
+    }
+
+    void drawTiming(const std::string& id, float width, const TetraConstellationView::Palette& pal, const TetraBurstResult& r) {
+        if (!ImGui::TreeNode(("Burst timing vs. downlink##_ba_tn_" + id).c_str())) { return; }
+        if (!hasDlTap()) {
+            tw::TextDisabled("Needs the TETRA VFO on the downlink of the same cell\n(inside the SDR span, more than 50 kHz from the burst frequency).");
+            ImGui::TreePop();
+            return;
+        }
+        float q = slotQuality();
+        tw::Text("Downlink slot grid:");
+        if (q > 6.0f) { tw::SameTextColored(tc::good(), "found (quality %.0f)", q); }
+        else { tw::SameTextColored(tc::warn(), "not found yet"); }
+        if (r.timingValid) {
+            tw::Text("Rising edge after slot start:");
+            tw::SameTextColored(tc::val(), "%.2f sym (%.0f us)", r.timingMeanSym, r.timingMeanSym / SYM * 1e6);
+            tw::SameTextDisabled("+- %.2f sym, %d bursts", r.timingStdSym, r.timingN);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("-3 dB point of the rising edge, measured from the start of the uplink\n"
+                                  "slot as given by the received downlink (uplink slots are two slots\n"
+                                  "after the downlink ones). Compare mobiles with each other: the value\n"
+                                  "also contains the path differences base station -> mobile -> receiver\n"
+                                  "vs. base station -> receiver (3.3 us per km), so put the receiver close\n"
+                                  "to the mobile for an absolute check.");
+            }
+            // scatter: offset over time
+            const float h = 120.0f * style::uiScale, lm = 40.0f * style::uiScale;
+            ImVec2 p0 = ImGui::GetCursorScreenPos();
+            ImGui::InvisibleButton(("##_ba_tsc_" + id).c_str(), ImVec2(width, h));
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(p0, ImVec2(p0.x + width, p0.y + h), pal.bg);
+            dl->AddRect(p0, ImVec2(p0.x + width, p0.y + h), pal.border);
+            ImRect pr(ImVec2(p0.x + lm, p0.y + 4), ImVec2(p0.x + width - 4, p0.y + h - 4));
+            float c = r.timingMeanSym, half = (std::max)(2.0f, (std::min)(64.0f, 6.0f * r.timingStdSym));
+            float lo = c - half, hi = c + half;
+            auto Y = [&](float v) { return pr.Max.y - (v - lo) / (hi - lo) * pr.GetHeight(); };
+            char buf[32];
+            for (int i = 0; i <= 4; i++) {
+                float v = lo + (hi - lo) * i / 4;
+                dl->AddLine(ImVec2(pr.Min.x, Y(v)), ImVec2(pr.Max.x, Y(v)), pal.grid);
+                snprintf(buf, sizeof(buf), "%.1f", v);
+                dl->AddText(ImVec2(p0.x + 3, Y(v) - ImGui::GetFontSize() * 0.5f), pal.text, buf);
+            }
+            if (!r.timing.empty()) {
+                double ta = r.timing.front().t, tb = r.timing.back().t;
+                if (tb - ta < 1.0) { tb = ta + 1.0; }
+                dl->PushClipRect(pr.Min, pr.Max, true);
+                for (auto& pt : r.timing) {
+                    float v = pt.offsetSym;
+                    while (v - c > 127.5f) { v -= 255.0f; }
+                    while (v - c < -127.5f) { v += 255.0f; }
+                    float x = pr.Min.x + (float)((pt.t - ta) / (tb - ta)) * pr.GetWidth();
+                    dl->AddCircleFilled(ImVec2(x, Y(v)), 2.0f * style::uiScale, pal.dotGood);
+                }
+                dl->PopClipRect();
+            }
+            dl->AddText(ImVec2(pr.Min.x + 4, pr.Min.y + 2), pal.text, "symbols, last bursts");
+        }
+        else { tw::TextDisabled("no bursts with known slot grid yet"); }
+        ImGui::TreePop();
+    }
+
+    void drawTransients(const std::string& id, float width, const TetraBurstResult& r) {
+        if (!ImGui::TreeNode(("Ramp spectrum (switching transients)##_ba_trn_" + id).c_str())) { return; }
+        if (!r.transValid) { tw::TextDisabled("needs full-slot bursts"); ImGui::TreePop(); return; }
+        tw::TextDisabled("Channel power (TETRA filter) in 1.8 ms windows, dBc\nrelative to the own channel in the middle of the burst.");
+        ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX;
+        if (ImGui::BeginTable(("##_ba_trt_" + id).c_str(), 6, tf, ImVec2(width, ImGui::GetTextLineHeightWithSpacing() * 5.6f))) {
+            tw::CellScope cells;
+            ImGui::TableSetupScrollFreeze(1, 1);
+            ImGui::TableSetupColumn("Window");
+            const char* hdr[5] = { "-50 kHz", "-25 kHz", "own", "+25 kHz", "+50 kHz" };
+            for (int o = 0; o < 5; o++) { ImGui::TableSetupColumn(hdr[o]); }
+            ImGui::TableHeadersRow();
+            const char* rows[3] = { "ramp up", "middle", "ramp down" };
+            for (int w = 0; w < 3; w++) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(rows[w]);
+                for (int o = 0; o < 5; o++) {
+                    ImGui::TableSetColumnIndex(o + 1);
+                    float v = r.transDbc[w][o];
+                    bool nearFloor = !std::isnan(r.transFloorDbc[o]) && v < r.transFloorDbc[o] + 3.0f;
+                    if (o == 2) { ImGui::TextColored(tc::lgrey(), "%.1f", v); }
+                    else if (nearFloor) { ImGui::TextDisabled("%.1f", v); }
+                    else { ImGui::TextColored(w == 1 ? tc::val() : (v > r.transDbc[1][o] + 6.0f ? tc::warn() : tc::val()), "%.1f", v); }
+                }
+            }
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextDisabled("floor");
+            for (int o = 0; o < 5; o++) {
+                ImGui::TableSetColumnIndex(o + 1);
+                if (!std::isnan(r.transFloorDbc[o])) { ImGui::TextDisabled("%.1f", r.transFloorDbc[o]); } else { ImGui::TextDisabled("--"); }
+            }
+            ImGui::EndTable();
+        }
+        tw::TextDisabled("Orange: ramp window more than 6 dB above the middle (splatter).\nGrey: at the measurement floor. %d bursts.", r.transN);
+        ImGui::TreePop();
+    }
+
+    void start(double offset, double dlOffset) {
+        bool withDl = !std::isnan(dlOffset);
+        if (withDl) {
+            auto v = sigpath::iqFrontEnd.addVFOs({ name, name + " DL" }, FS, TAP_BW, { offset, dlOffset });
+            if (v.size() != 2) { return; }
+            rxvfo = v[0];
+            dlvfo = v[1];
+            curDlOffset = dlOffset;
+        }
+        else {
+            rxvfo = sigpath::iqFrontEnd.addVFO(name, FS, TAP_BW, offset);
+            if (!rxvfo) { return; }
+        }
         curOffset = offset;
         {
             std::lock_guard<std::mutex> lck(ringMtx);
-            ring.assign(RING, std::complex<float>(0.0f, 0.0f));
+            ringRaw.assign(RING, std::complex<float>(0.0f, 0.0f));
+            ringFilt.assign(RING, std::complex<float>(0.0f, 0.0f));
+            ringDl.assign(withDl ? RING : 0, std::complex<float>(0.0f, 0.0f));
             wIdx = 0;
+            dlIdx = 0;
+            ulFilter.reset();
+            dlFilter.reset();
         }
         if (!sinkInit) { sink.init(&rxvfo->out, handler, this); sinkInit = true; }
         else { sink.setInput(&rxvfo->out); }
+        if (withDl) {
+            if (!dlSinkInit) { dlSink.init(&dlvfo->out, dlHandler, this); dlSinkInit = true; }
+            else { dlSink.setInput(&dlvfo->out); }
+            dlSink.start();
+        }
         sink.start();
         stopFlag = false;
         resetReq.store(true);
@@ -214,8 +465,21 @@ private:
         TetraBurstAnalyzer* _this = (TetraBurstAnalyzer*)ctx;
         std::lock_guard<std::mutex> lck(_this->ringMtx);
         for (int i = 0; i < count; i++) {
-            _this->ring[(size_t)(_this->wIdx & (RING - 1))] = std::complex<float>(data[i].re, data[i].im);
+            std::complex<float> v(data[i].re, data[i].im);
+            size_t k = (size_t)(_this->wIdx & (RING - 1));
+            _this->ringRaw[k] = v;
+            _this->ringFilt[k] = _this->ulFilter.step(v);
             _this->wIdx++;
+        }
+    }
+
+    static void dlHandler(dsp::complex_t* data, int count, void* ctx) {
+        TetraBurstAnalyzer* _this = (TetraBurstAnalyzer*)ctx;
+        std::lock_guard<std::mutex> lck(_this->ringMtx);
+        if (_this->ringDl.empty()) { return; }
+        for (int i = 0; i < count; i++) {
+            _this->ringDl[(size_t)(_this->dlIdx & (RING - 1))] = _this->dlFilter.step(std::complex<float>(data[i].re, data[i].im));
+            _this->dlIdx++;
         }
     }
 
@@ -223,24 +487,43 @@ private:
         const size_t WIN = (size_t)(FS * 0.6);
         TetraBurstDsp dsp;
         auto t0 = std::chrono::steady_clock::now();
+        double phase = NAN;
+        int sinceTiming = 100;
         while (true) {
             {
                 std::unique_lock<std::mutex> lck(cvMtx);
                 if (cv.wait_for(lck, std::chrono::milliseconds(150), [this] { return stopFlag; })) { return; }
             }
-            std::vector<std::complex<float>> x;
+            std::vector<std::complex<float>> x, raw, dlx;
             uint64_t end;
+            bool withDl;
             {
                 std::lock_guard<std::mutex> lck(ringMtx);
-                end = wIdx;
+                withDl = !ringDl.empty();
+                end = withDl ? (std::min)(wIdx, dlIdx) : wIdx;
                 if (end < WIN) { continue; }
                 x.resize(WIN);
+                raw.resize(WIN);
                 uint64_t s0 = end - WIN;
-                for (size_t i = 0; i < WIN; i++) { x[i] = ring[(size_t)((s0 + i) & (RING - 1))]; }
+                for (size_t i = 0; i < WIN; i++) {
+                    size_t k = (size_t)((s0 + i) & (RING - 1));
+                    x[i] = ringFilt[k];
+                    raw[i] = ringRaw[k];
+                }
+                if (withDl && ++sinceTiming >= 6) {   // slot grid about once per second
+                    dlx.resize(WIN);
+                    for (size_t i = 0; i < WIN; i++) { dlx[i] = ringDl[(size_t)((s0 + i) & (RING - 1))]; }
+                }
             }
             if (resetReq.exchange(false)) { dsp.reset(); }
+            if (!dlx.empty()) {
+                sinceTiming = 0;
+                tetra_sp::SlotEstimate e = tetra_sp::slotTiming(dlx, end - WIN);
+                dlQuality.store((float)e.quality);
+                phase = e.valid ? e.phase : NAN;
+            }
             double nowS = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            dsp.process(x, end - WIN, nowS, avgReq.load());
+            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN);
             std::lock_guard<std::mutex> lck(resMtx);
             res = dsp.result();
         }
@@ -314,14 +597,20 @@ private:
 
     std::string name = "TETRA bursts";
     dsp::channel::RxVFO* rxvfo = nullptr;
-    dsp::sink::Handler<dsp::complex_t> sink;
-    bool sinkInit = false;
+    dsp::channel::RxVFO* dlvfo = nullptr;
+    dsp::sink::Handler<dsp::complex_t> sink, dlSink;
+    bool sinkInit = false, dlSinkInit = false;
     bool running = false;
-    double curOffset = 0.0;
+    double curOffset = 0.0, curDlOffset = 0.0;
 
     std::mutex ringMtx;
-    std::vector<std::complex<float>> ring;
-    uint64_t wIdx = 0;
+    std::vector<std::complex<float>> ringRaw, ringFilt, ringDl;
+    uint64_t wIdx = 0, dlIdx = 0;
+    tetra_sp::ChanFilter ulFilter, dlFilter;
+    std::atomic<float> dlQuality { 0.0f };
+    std::atomic<bool> transReq { true };
+    std::deque<std::pair<time_t, float>> floorHist;
+    time_t lastHist = 0;
 
     std::thread worker;
     std::mutex cvMtx;

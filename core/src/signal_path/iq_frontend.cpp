@@ -178,6 +178,30 @@ dsp::channel::RxVFO* IQFrontEnd::addVFO(std::string name, double sampleRate, dou
     return vfo;
 }
 
+std::vector<dsp::channel::RxVFO*> IQFrontEnd::addVFOs(const std::vector<std::string>& names, double sampleRate, double bandwidth, const std::vector<double>& offsets) {
+    std::vector<dsp::channel::RxVFO*> out;
+    if (names.size() != offsets.size() || names.empty()) { return out; }
+    for (auto& n : names) {
+        if (vfos.find(n) != vfos.end()) {
+            flog::error("[IQFrontEnd] Tried to add VFO with existing name.");
+            return out;
+        }
+    }
+    // Pause the splitter so that all new VFO streams start with the same block
+    split.tempStop();
+    for (size_t i = 0; i < names.size(); i++) {
+        dsp::stream<dsp::complex_t>* vfoIn = new dsp::stream<dsp::complex_t>;
+        dsp::channel::RxVFO* vfo = new dsp::channel::RxVFO(vfoIn, effectiveSr, sampleRate, bandwidth, offsets[i]);
+        vfoStreams[names[i]] = vfoIn;
+        vfos[names[i]] = vfo;
+        bindIQStream(vfoIn);
+        vfo->start();
+        out.push_back(vfo);
+    }
+    split.tempStart();
+    return out;
+}
+
 void IQFrontEnd::removeVFO(std::string name) {
     // Make sure that a VFO with that name exists
     if (vfos.find(name) == vfos.end()) {

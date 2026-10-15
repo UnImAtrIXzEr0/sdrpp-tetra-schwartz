@@ -19,7 +19,8 @@
 
 class CoverageMapExporter {
 public:
-    enum Metric { METRIC_LEVEL = 0, METRIC_MER = 1, METRIC_BER = 2 };
+    enum Metric { METRIC_LEVEL = 0, METRIC_MER = 1, METRIC_BER = 2, METRIC_QUALITY = 3 };
+    float crcLimit = 1.0f;   // METRIC_QUALITY: good up to this, marginal up to 10x
 
     ~CoverageMapExporter() {
         if (worker.joinable()) { worker.join(); }
@@ -61,6 +62,8 @@ public:
         int cTime = col("time"), cLat = col("lat"), cLon = col("lon"), cFix = col("gps_fix");
         int cDbm = col("level_dbm"), cDbfs = col("level_dbfs"), cMer = col("mer_db"), cBer = col("ber");
         int cState = col("rx_state"), cMatch = col("cell_match"), cMcc = col("mcc"), cMnc = col("mnc"), cCc = col("cc");
+        int cCrcOk[4] = { col("crc_bsch_ok"), col("crc_sb2_ok"), col("crc_ndb_ok"), col("crc_schf_ok") };
+        int cCrcFail[4] = { col("crc_bsch_fail"), col("crc_sb2_fail"), col("crc_ndb_fail"), col("crc_schf_fail") };
         if (cLat < 0 || cLon < 0) { return "CSV has no position columns (log from v0.5.0 or newer needed)"; }
 
         struct Pt {
@@ -90,14 +93,18 @@ public:
             else { level = atof(get(cDbfs).c_str()); }
             double mer = atof(get(cMer).c_str());
             double ber = atof(get(cBer).c_str());
+            double ok = 0, fail = 0;
+            for (int i = 0; i < 4; i++) { ok += atof(get(cCrcOk[i]).c_str()); fail += atof(get(cCrcFail[i]).c_str()); }
+            double crcPct = ok + fail > 0 ? 100.0 * fail / (ok + fail) : 100.0;
             switch (metric) {
             case METRIC_LEVEL: p.v = level; break;
             case METRIC_MER: p.v = mer; break;
             case METRIC_BER: p.v = ber; break;
+            case METRIC_QUALITY: p.v = crcPct <= crcLimit ? 1.0 : crcPct <= 10.0 * crcLimit ? 0.5 : 0.0; break;
             }
             char lb[256];
-            snprintf(lb, sizeof(lb), "%s | Level %.1f %s | MER %.1f dB | BER %s | MCC %s MNC %s CC %s%s",
-                     get(cTime).c_str(), level, dbm.empty() ? "dBFS" : "dBm", mer, get(cBer).c_str(),
+            snprintf(lb, sizeof(lb), "%s | Level %.1f %s | MER %.1f dB | BER %s | CRC errors %.1f %% | MCC %s MNC %s CC %s%s",
+                     get(cTime).c_str(), level, dbm.empty() ? "dBFS" : "dBm", mer, get(cBer).c_str(), crcPct,
                      get(cMcc).c_str(), get(cMnc).c_str(), get(cCc).c_str(), p.service ? "" : " | NO SERVICE");
             p.label = lb;
             pts.push_back(p);
@@ -123,6 +130,7 @@ public:
             name = "Level";
         }
         else if (metric == METRIC_MER) { lo = 5; hi = 30; unit = "dB"; name = "MER"; }
+        else if (metric == METRIC_QUALITY) { lo = 0; hi = 1; unit = ""; name = "Quality (CRC: red > " + fmtNum(10.0 * crcLimit) + " %, yellow, green <= " + fmtNum(crcLimit) + " %)"; }
         else { lo = 1e-1; hi = 1e-5; unit = ""; name = "BER"; logScale = true; invert = true; }
 
         auto norm = [&](double v) {
@@ -139,7 +147,7 @@ public:
         };
 
         std::string base = csvPath.size() > 4 ? csvPath.substr(0, csvPath.size() - 4) : csvPath;
-        std::string suffix = (metric == METRIC_LEVEL ? "_level" : metric == METRIC_MER ? "_mer" : "_ber");
+        std::string suffix = (metric == METRIC_LEVEL ? "_level" : metric == METRIC_MER ? "_mer" : metric == METRIC_QUALITY ? "_quality" : "_ber");
         std::string kmlPath = base + suffix + ".kml";
         std::string htmlPath = base + suffix + "_map.html";
 
@@ -151,6 +159,12 @@ public:
     }
 
 private:
+    static std::string fmtNum(double v) {
+        char b[32];
+        snprintf(b, sizeof(b), "%g", v);
+        return b;
+    }
+
     static std::vector<std::string> split(const std::string& l) {
         std::vector<std::string> out;
         std::string cur;

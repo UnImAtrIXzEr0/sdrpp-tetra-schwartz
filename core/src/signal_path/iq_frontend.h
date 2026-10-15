@@ -45,6 +45,10 @@ public:
     void unbindIQStream(dsp::stream<dsp::complex_t>* stream);
 
     dsp::channel::RxVFO* addVFO(std::string name, double sampleRate, double bandwidth, double offset);
+    // Several VFOs with the same sample rate and bandwidth that receive exactly
+    // the same input samples from the first one on (sample-aligned outputs,
+    // e.g. for timing measurements between two frequencies). Empty on error.
+    std::vector<dsp::channel::RxVFO*> addVFOs(const std::vector<std::string>& names, double sampleRate, double bandwidth, const std::vector<double>& offsets);
     void removeVFO(std::string name);
 
     void setFFTSize(int size);

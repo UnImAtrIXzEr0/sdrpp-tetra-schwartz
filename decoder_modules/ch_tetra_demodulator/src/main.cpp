@@ -38,6 +38,11 @@
 #include "trend_view.h"
 #include "carrier_monitor.h"
 #include "burst_analyzer.h"
+#include "channel_analyzer.h"
+#include "eval_view.h"
+#include "alarms.h"
+#include "report.h"
+#include <version.h>
 #include "measurements.h"
 #include "subscribers.h"
 #include "radioid.h"
@@ -69,7 +74,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 18, 0,
+    /* Version:         */ 0, 19, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -131,6 +136,32 @@ public:
             if (b.contains("off")) { burstSt.maskOffDbc = b["off"]; }
             if (b.contains("ramp")) { burstSt.maskRampSym = b["ramp"]; }
         }
+        if (config.conf[name].contains("mp") && config.conf[name]["mp"].is_object()) {
+            json& mp = config.conf[name]["mp"];
+            if (mp.contains("run")) { mpRun = mp["run"]; }
+            if (mp.contains("mem")) { mpMem = std::clamp((int)mp["mem"], 0, 3); }
+            if (mp.contains("detached")) { mpDetached = mp["detached"]; }
+        }
+        if (config.conf[name].contains("crcLimit")) { evalView.crcLimit = config.conf[name]["crcLimit"]; }
+        if (config.conf[name].contains("burst") && config.conf[name]["burst"].is_object()) {
+            json& b = config.conf[name]["burst"];
+            if (b.contains("timing")) { burstSt.timing = b["timing"]; }
+            if (b.contains("transients")) { burstSt.transients = b["transients"]; }
+            if (b.contains("floorSpan")) { burstSt.floorSpan = b["floorSpan"]; }
+        }
+        if (config.conf[name].contains("alarms") && config.conf[name]["alarms"].is_object()) {
+            json& a = config.conf[name]["alarms"];
+            auto gb = [&](const char* k, bool& v) { if (a.contains(k) && a[k].is_boolean()) { v = a[k]; } };
+            auto gf = [&](const char* k, float& v) { if (a.contains(k) && a[k].is_number()) { v = a[k]; } };
+            gb("enabled", alarmSt.enabled); gb("levelOn", alarmSt.levelOn); gf("levelBelow", alarmSt.levelBelow);
+            gb("merOn", alarmSt.merOn); gf("merBelow", alarmSt.merBelow); gb("crcOn", alarmSt.crcOn); gf("crcAbove", alarmSt.crcAbove);
+            gb("syncOn", alarmSt.syncOn); gb("ulOn", alarmSt.ulOn); gf("ulAbove", alarmSt.ulAbove);
+            gb("beep", alarmSt.beep); gb("autoLog", alarmSt.autoLog);
+            if (a.contains("holdS") && a["holdS"].is_number()) { alarmSt.holdS = a["holdS"]; }
+        }
+        if (config.conf[name].contains("reportNotes") && config.conf[name]["reportNotes"].is_string()) {
+            snprintf(reportNotes, sizeof(reportNotes), "%s", config.conf[name]["reportNotes"].get<std::string>().c_str());
+        }
         json carrierList = json::array();
         if (config.conf[name].contains("carriers") && config.conf[name]["carriers"].is_array()) { carrierList = config.conf[name]["carriers"]; }
         if (config.conf[name].contains("gpsPort")) { gpsPort = config.conf[name]["gpsPort"]; }
@@ -178,6 +209,7 @@ public:
             }
             carrierMon.takeChanged();
             burstAn.setName(name + " bursts");
+            chanAn.setName(name + " channel");
         }
         constDiagSplitter.init(&mainDemodulator.out);
         constDiagSplitter.bindStream(&constDiagStream);
@@ -240,6 +272,7 @@ public:
         carrierMon.stopAll();
         carrierMon.stopLog();
         burstAn.stop();
+        chanAn.stop();
         if(isEnabled()) {
             disable();
         }
@@ -293,6 +326,7 @@ public:
         carrierMon.stopAll();
         carrierMon.stopLog();
         burstAn.stop();
+        chanAn.stop();
 
         // Stop upstream first to drain data flow into the chain
         mainDemodulator.stop();
@@ -375,7 +409,7 @@ public:
             // "1" = all own windows, "0" = none
             bool on = (args == "1" || args == "true");
             constDetached = subsDetached = netDetached = txaDetached = on;
-            trendDetached = carrDetached = burstDetached = on;
+            trendDetached = carrDetached = burstDetached = mpDetached = on;
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -388,6 +422,39 @@ public:
             // absolute frequency in Hz; added from the GUI thread
             pendingCarrierHz.store(atof(args.c_str()));
             return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_multipath") {
+            mpRun = (args == "1" || args == "true");
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_burst_freq") {
+            // manual burst frequency in Hz, timing against the TETRA VFO
+            burstSt.source = 1;
+            burstSt.manualMHz = atof(args.c_str()) / 1e6;
+            burstSt.timing = true;
+            burstSt.transients = true;
+            burstRun = true;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_alarm_test") {
+            // level alarm that triggers at once (automation tests)
+            alarmSt.enabled = true;
+            alarmSt.levelOn = true;
+            alarmSt.levelBelow = 100.0f;
+            alarmSt.holdS = 1;
+            alarmSt.autoLog = false;
+            alarmSt.beep = false;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "make_report") {
+            reportReq.store(true);   // made in the GUI thread
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "get_report") {
+            std::lock_guard<std::mutex> lck(reportMtx);
+            std::string r = reportResult;
+            for (auto& ch : r) { if (ch == '"' || ch == '\\') { ch = '/'; } }
+            return "{\"path\": \"" + r + "\"}";
         }
         if (cmd == "set_afc") {
             afcEnabled = (args == "1" || args == "true");
@@ -406,7 +473,15 @@ public:
             }
             uint32_t tsTraffic = 0, tsAll = 0;
             for (int t = 0; t < 4; t++) { for (int c = 0; c < 4; c++) { tsAll += m.dlUseTotal[t][c]; } tsTraffic += m.dlUseTotal[t][3]; }
-            char b[1700];
+            TetraChannelResult mpr = chanAn.get();
+            int alarmTotal;
+            bool alarmActive;
+            {
+                std::lock_guard<std::mutex> lck(dbgMtx);
+                alarmTotal = dbgAlarmTotal;
+                alarmActive = dbgAlarmActive;
+            }
+            char b[2600];
             snprintf(b, sizeof(b),
                      "{\"valid\": %s, \"sync\": %s, \"rx_state\": %d, \"mer_db\": %.2f, \"evm_pct\": %.2f, "
                      "\"iq_offset_db\": %.2f, \"irr_db\": %.2f, \"phase_err_deg\": %.3f, \"amp_err_pct\": %.3f, "
@@ -418,7 +493,11 @@ public:
                      "\"burst_state\": %d, \"burst_continuous\": %s, \"burst_status\": \"%s\", \"carriers\": %d, \"carriers_running\": %d, \"carriers_sync\": %d, "
                      "\"aach_count\": %u, \"aach_traffic\": %u, \"trend_points\": %d, "
                      "\"burst_n_full\": %llu, \"burst_n_half\": %llu, \"burst_len_sym\": %.2f, \"burst_rise_sym\": %.2f, \"burst_fall_sym\": %.2f, "
-                     "\"burst_ripple_pos_db\": %.2f, \"burst_ripple_neg_db\": %.2f, \"burst_off_dbc\": %.1f, \"burst_floor_dbc\": %.1f}",
+                     "\"burst_ripple_pos_db\": %.2f, \"burst_ripple_neg_db\": %.2f, \"burst_off_dbc\": %.1f, \"burst_floor_dbc\": %.1f, "
+                     "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
+                     "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
+                     "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
+                     "\"alarms_total\": %d, \"alarm_active\": %s}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -430,7 +509,11 @@ public:
                      br.state, br.continuous ? "true" : "false", bstat.c_str(), carrCnt, carrRun, carrSync,
                      tsAll, tsTraffic, (int)meas.trend().copy(0).size(),
                      (unsigned long long)br.nFull, (unsigned long long)br.nHalf, nz(br.lengthSym), nz(br.riseSym), nz(br.fallSym),
-                     nz(br.ripplePosDb), nz(br.rippleNegDb), nz(br.offBeforeDbc), nz(br.floorDbc));
+                     nz(br.ripplePosDb), nz(br.rippleNegDb), nz(br.offBeforeDbc), nz(br.floorDbc),
+                     nz(br.gapDbfs), nz(br.timingMeanSym), nz(br.timingStdSym), br.timingN, (double)burstAn.slotQuality(),
+                     br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
+                     mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
+                     alarmTotal, alarmActive ? "true" : "false");
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -790,6 +873,9 @@ private:
         }
 
         tw::TextDisabled("TETRA demodulator v" TETRA_PLUGIN_VERSION);
+        if (_this->alarmSt.enabled && _this->alarms.any()) {
+            tw::TextColored(tc::bad(), "ALARM: %s", _this->alarms.activeText().c_str());
+        }
         // own audio volume / mute, independent of the Radio module
         tw::Text("Audio:"); ImGui::SameLine();
         sigpath::sinkManager.showVolumeSlider(_this->name, "##_tetra_vol_", menuWidth - ImGui::GetCursorPosX(), 0, 2, false);
@@ -832,6 +918,8 @@ private:
             row.add(l4.c_str(), &_this->trendDetached);
             row.add(l5.c_str(), &_this->carrDetached);
             row.add(l6.c_str(), &_this->burstDetached);
+            std::string l7 = std::string("Multipath##_tetra_mpdet_top_") + _this->name;
+            row.add(l7.c_str(), &_this->mpDetached);
             int ch = row.draw("Own window:");
             if (ch >= 0) {
                 config.acquire();
@@ -846,6 +934,7 @@ private:
                 if (ch == 4 && _this->trendDetached) { _this->focusTrendWin = true; }
                 if (ch == 5 && _this->carrDetached) { _this->focusCarrWin = true; }
                 if (ch == 6 && _this->burstDetached) { _this->focusBurstWin = true; }
+                if (ch == 7) { _this->saveMpConfig(); if (_this->mpDetached) { _this->focusMpWin = true; } }
                 if (ch == 1 && _this->subsDetached) { _this->focusSubsWin = true; }
                 if (ch == 2 && _this->netDetached) { _this->focusNetWin = true; }
                 if (ch == 3 && _this->txaDetached) { _this->focusTxaWin = true; }
@@ -895,6 +984,20 @@ private:
             } else {
                 _this->drawBursts(menuWidth);
             }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Multipath (downlink)##_tetra_mp_", _this->name))) {
+            if (_this->mpDetached) {
+                tw::TextDisabled("Shown in its own window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mpfront_", _this->name))) { _this->focusMpWin = true; }
+            } else {
+                _this->drawMultipath(menuWidth);
+            }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Alarms##_tetra_alarm_", _this->name))) {
+            _this->drawAlarms(menuWidth);
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Report##_tetra_report_", _this->name))) {
+            _this->drawReport(menuWidth);
         }
         if (ImGui::CollapsingHeader(CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) {
             _this->drawGpsCoverage(menuWidth);
@@ -1448,7 +1551,7 @@ private:
         // Map export
         ImGui::Separator();
         ImGui::SetNextItemWidth(menuWidth / 2.0f);
-        if (ImGui::Combo(CONCAT("Map value##_tetra_map_metric_", name), &mapMetric, "Level\0MER\0BER\0")) {
+        if (ImGui::Combo(CONCAT("Map value##_tetra_map_metric_", name), &mapMetric, "Level\0MER\0BER\0Quality (CRC)\0")) {
             config.acquire();
             config.conf[name]["mapMetric"] = mapMetric;
             config.release(true);
@@ -1457,6 +1560,7 @@ private:
         bool canExport = !logPath.empty() && !mapExport.busy();
         if (!canExport) { style::beginDisabled(); }
         if (ImGui::Button(CONCAT("Export map (KML + OSM)##_tetra_map_exp_", name), ImVec2(menuWidth, 0))) {
+            mapExport.crcLimit = evalView.crcLimit;
             mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
         }
         if (!canExport) { style::endDisabled(); }
@@ -2049,6 +2153,9 @@ private:
         b["ripple"] = burstSt.maskRippleDb;
         b["off"] = burstSt.maskOffDbc;
         b["ramp"] = burstSt.maskRampSym;
+        b["timing"] = burstSt.timing;
+        b["transients"] = burstSt.transients;
+        b["floorSpan"] = burstSt.floorSpan;
         config.release(true);
     }
 
@@ -2065,6 +2172,11 @@ private:
     static double nz(float v) { return std::isnan(v) ? -999.0 : (double)v; }   // JSON has no NaN
 
     void extraLoops() {
+        if (reportReq.exchange(false)) {
+            std::string r = makeReport();
+            std::lock_guard<std::mutex> lck(reportMtx);
+            reportResult = r;
+        }
         double pc = pendingCarrierHz.exchange(0.0);
         if (pc > 1e6) { carrierMon.add("", pc); }
         carrierMon.update(enabled && vfo != nullptr);
@@ -2073,7 +2185,10 @@ private:
         if (burstSt.source == 0) { f = (double)meas.get().ulFreq; }
         else if (burstSt.source == 1) { f = burstSt.manualMHz * 1e6; }
         else { f = mainVfoFreq(); }
-        burstAn.loop(enabled && burstRun, f);
+        double dlTap = (burstSt.timing && burstSt.source != 2) ? mainVfoFreq() : 0.0;
+        burstAn.loop(enabled && burstRun, f, dlTap);
+        chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
+        alarmLoop();
         {
             // summary for the automation channel (read from another thread)
             std::string st = burstAn.status;
@@ -2086,6 +2201,8 @@ private:
             std::lock_guard<std::mutex> lck(dbgMtx);
             burstStatus = st;
             dbgCarr[0] = carrierMon.count(); dbgCarr[1] = run; dbgCarr[2] = syn;
+            dbgAlarmTotal = alarms.total();
+            dbgAlarmActive = alarms.any();
         }
     }
 
@@ -2127,10 +2244,44 @@ private:
             }
             if (row.draw("Show:") >= 0) { trendView.invalidate(); saveTrendConfig(); }
         }
-        trendView.draw("##_tetra_trplot_" + name, width, meas.trend(), constView.pal);
-        if (!trendView.fileMode) {
-            tw::TextDisabled("Last 24 h kept in memory; longer: Start CSV log (Measurements)\nand open the file here later.");
-            drawTimeslotTable(width);
+        if (ImGui::BeginTabBar(CONCAT("##_tetra_trtabs_", name))) {
+            if (ImGui::BeginTabItem(CONCAT("Over time##_tetra_trt0_", name))) {
+                trendView.draw("##_tetra_trplot_" + name, width, meas.trend(), constView.pal);
+                if (!trendView.fileMode) {
+                    tw::TextDisabled("Last 24 h kept in memory; longer: Start CSV log (Measurements)\nand open the file here later.");
+                    drawTimeslotTable(width);
+                }
+                ImGui::EndTabItem();
+            }
+            bool evalTab = false;
+            if (ImGui::BeginTabItem(CONCAT("Frequency stability##_tetra_trt1_", name))) {
+                evalTab = true;
+                updateEval();
+                evalView.drawStability(name, width, constView.pal);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem(CONCAT("Level vs. quality##_tetra_trt2_", name))) {
+                evalTab = true;
+                updateEval();
+                bool ch = false;
+                evalView.drawQuality(name, width, constView.pal, ch);
+                if (ch) {
+                    config.acquire();
+                    config.conf[name]["crcLimit"] = evalView.crcLimit;
+                    config.release(true);
+                }
+                ImGui::EndTabItem();
+            }
+            (void)evalTab;
+            ImGui::EndTabBar();
+        }
+    }
+
+    void updateEval() {
+        if (trendView.fileMode) { evalView.update(trendView.filePts, evalFile != trendView.fileName); evalFile = trendView.fileName; }
+        else {
+            if (!evalFile.empty()) { evalFile.clear(); evalView.update(meas.trend().copy(0), true); }
+            else { evalView.update(meas.trend().copy(0), false); }
         }
     }
 
@@ -2205,6 +2356,149 @@ private:
         burstRun = run;
     }
 
+    // ---- alarms (once per measurement second) ----
+    void alarmLoop() {
+        TetraMeasSnapshot m = meas.get();
+        if (!m.valid || m.timestamp == lastAlarmT) { return; }
+        lastAlarmT = m.timestamp;
+        TetraAlarms::Input in;
+        in.valid = enabled;
+        in.level = m.levelDbfs + m.levelCalDb;
+        if (m.rxState == 2 && m.symSync) { in.mer = m.merDb; }
+        double ok = 0, fail = 0;
+        for (int i = 0; i < 4; i++) { ok += m.crcOk[i]; fail += m.crcFail[i]; }
+        if (ok + fail > 0) { in.crcFail = (float)(100.0 * fail / (ok + fail)); }
+        in.lockLost = decoder_mode == 0 && (m.rxState != 2 || m.syncLost > 0);
+        if (burstRun && burstAn.isRunning()) {
+            TetraBurstResult br = burstAn.get();
+            if (!std::isnan(br.gapDbfs)) { in.ulNoise = br.gapDbfs + m.levelCalDb; }
+        }
+        bool raised = false;
+        auto ev = alarms.evaluate(alarmSt, in, raised);
+        for (auto& e : ev) { meas.addEvent(e); }
+        if (raised && alarmSt.autoLog && !meas.isLogging() && logFolder.pathIsValid()) {
+            std::string err;
+            if (meas.startLog(logFolder.expandString(logFolder.path), err)) { meas.addEvent("CSV log started by alarm"); }
+        }
+    }
+
+    void saveAlarmConfig() {
+        config.acquire();
+        json& a = config.conf[name]["alarms"];
+        a["enabled"] = alarmSt.enabled; a["levelOn"] = alarmSt.levelOn; a["levelBelow"] = alarmSt.levelBelow;
+        a["merOn"] = alarmSt.merOn; a["merBelow"] = alarmSt.merBelow; a["crcOn"] = alarmSt.crcOn; a["crcAbove"] = alarmSt.crcAbove;
+        a["syncOn"] = alarmSt.syncOn; a["ulOn"] = alarmSt.ulOn; a["ulAbove"] = alarmSt.ulAbove;
+        a["holdS"] = alarmSt.holdS; a["beep"] = alarmSt.beep; a["autoLog"] = alarmSt.autoLog;
+        config.release(true);
+    }
+
+    void saveMpConfig() {
+        config.acquire();
+        json& mp = config.conf[name]["mp"];
+        mp["run"] = mpRun;
+        mp["mem"] = mpMem;
+        mp["detached"] = mpDetached;
+        config.release(true);
+    }
+
+    void drawMultipath(float width) {
+        bool run = mpRun;
+        int mem = mpMem;
+        bool ch = chanAn.draw(name, width, constView.pal, run, mem);
+        mpRun = run;
+        mpMem = mem;
+        if (ch) { saveMpConfig(); }
+    }
+
+    void drawAlarms(float width) {
+        if (TetraAlarms::draw(name, width, alarmSt, levelCalDb != 0.0f)) { saveAlarmConfig(); }
+        if (alarmSt.enabled) {
+            if (alarms.any()) { tw::TextColored(tc::bad(), "Active: %s", alarms.activeText().c_str()); }
+            else { tw::TextColored(tc::good(), "No alarm"); }
+            tw::SameTextDisabled("(%d raised)", alarms.total());
+        }
+    }
+
+    // ---- report ----
+    std::string makeReport() {
+        TetraReportData d;
+        d.edition = EDITION_NAME;
+        d.version = EDITION_VERSION;
+        d.notes = reportNotes;
+        core::configManager.acquire();
+        std::string res = core::configManager.conf.contains("resourcesDirectory") ? core::configManager.conf["resourcesDirectory"].get<std::string>() : std::string();
+        core::configManager.release();
+        if (!res.empty()) { d.logoPath = res + "/icons/sdrpp.png"; }
+        TetraMeasSnapshot m = meas.get();
+        d.cellValid = m.mcc != 0;
+        d.mcc = m.mcc; d.mnc = m.mnc; d.cc = m.cc;
+        d.dlFreq = m.dlFreq; d.ulFreq = m.ulFreq; d.vfoFreq = mainVfoFreq();
+        d.levelCalibrated = levelCalDb != 0.0f;
+        int span = TetraTrendView::spanSeconds(trendView.spanIdx);
+        d.trend = trendView.fileMode ? trendView.filePts : meas.trend().copy(span > 0 ? time(nullptr) - span : 0);
+        memcpy(d.dlUseTotal, m.dlUseTotal, sizeof(d.dlUseTotal));
+        memcpy(d.ulUseTotal, m.ulUseTotal, sizeof(d.ulUseTotal));
+        d.syncLostTotal = m.syncLostTotal;
+        for (int i = 0; i < 4; i++) { d.crcOkTotal += m.crcOkTotal[i]; d.crcFailTotal += m.crcFailTotal[i]; }
+        d.berTotal = m.berTotal;
+        TxAnalysisResult r = txa.get();
+        if (txaRun && r.valid) {
+            d.txaValid = true;
+            d.txaChan = r.chanPowerDbfs;
+            for (int i = 0; i < 6; i++) { d.txaAcp[i] = r.acpDbc[i]; d.txaAcpFloor[i] = r.acpFloorDbc[i]; }
+            d.txaObw = r.obwHz; d.txaObwIdeal = r.obwIdealHz; d.txaBw26 = r.bw26Hz; d.txaBw26Ideal = r.bw26IdealHz;
+            d.txaLeak = r.carrierLeakDbc; d.txaLeakBelow = r.carrierLeakBelow;
+        }
+        if (burstRun && burstAn.isRunning()) {
+            d.burstValid = true;
+            d.burst = burstAn.get();
+            d.burstFreq = burstSt.source == 0 ? (double)m.ulFreq : burstSt.source == 1 ? burstSt.manualMHz * 1e6 : mainVfoFreq();
+        }
+        if (mpRun && chanAn.isRunning()) {
+            TetraChannelResult c = chanAn.get();
+            d.mpValid = c.valid;
+            d.mp = c.mp;
+            d.mpSlots = c.slots;
+        }
+        d.mainLevel = m.valid ? m.levelDbfs + levelCalDb : NAN;
+        for (int i = 0; i < carrierMon.count(); i++) {
+            const auto& c = carrierMon.at(i);
+            if (!c.valid) { continue; }
+            d.carriers.push_back({ c.label, c.freqHz / 1e6, c.level + levelCalDb, c.sync ? c.mer : NAN, c.sync });
+        }
+        auto subs = subscribers.snapshot();
+        for (auto& sub : subs) { if (sub.kind == TetraSubscriber::KIND_GROUP) { d.groups++; } else { d.stations++; } }
+        d.traffic = (int)subscribers.trafficSnapshot().size();
+        for (auto& e : meas.getEvents()) { d.events.push_back({ e.t, e.text }); }
+        d.crcLimit = evalView.crcLimit;
+        std::string dir = logFolder.expandString(logFolder.path);
+        if (!logFolder.pathIsValid() || dir.empty()) { return "!Log folder not valid (Measurements)"; }
+        return TetraReport::write(dir, d);
+    }
+
+    void drawReport(float width) {
+        tw::TextDisabled("One HTML file with the results of the session (summary,\ntrends, timeslots, TX and burst analysis, multipath,\ncarriers, events) in the log folder. Print it to PDF from\nthe browser.");
+        tw::Text("Notes:");
+        ImGui::SetNextItemWidth(width);
+        if (ImGui::InputText(CONCAT("##_tetra_rep_notes_", name), reportNotes, sizeof(reportNotes))) {
+            config.acquire();
+            config.conf[name]["reportNotes"] = std::string(reportNotes);
+            config.release(true);
+        }
+        tw::TextDisabled("Period: the time span chosen under Trends.");
+        if (ImGui::Button(CONCAT("Create report##_tetra_rep_", name), ImVec2(width, 0))) {
+            reportPath = makeReport();
+            if (!reportPath.empty() && reportPath[0] != '!') { TetraReport::openInBrowser(reportPath); }
+        }
+        if (!reportPath.empty()) {
+            if (reportPath[0] == '!') { tw::TextColored(tc::bad(), "%s", reportPath.c_str() + 1); }
+            else {
+                tw::TextDisabled("%s", reportPath.c_str());
+                if (tw::SameSmallButton(CONCAT("Open##_tetra_rep_open_", name))) { TetraReport::openInBrowser(reportPath); }
+            }
+        }
+    }
+
     void floatingWindow(bool& detached, bool& focus, const char* title, const char* key, ImVec2 size, ImVec2 pos, void (TetraDemodulatorModule::*body)(float)) {
         if (!detached) { return; }
         ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
@@ -2229,6 +2523,11 @@ private:
         floatingWindow(trendDetached, focusTrendWin, "TETRA trends & timeslots", "trend", ImVec2(620, 640), ImVec2(560, 90), &TetraDemodulatorModule::drawTrends);
         floatingWindow(carrDetached, focusCarrWin, "TETRA carriers", "carr", ImVec2(560, 420), ImVec2(600, 130), &TetraDemodulatorModule::drawCarriers);
         floatingWindow(burstDetached, focusBurstWin, "TETRA burst analysis", "burst", ImVec2(520, 620), ImVec2(640, 110), &TetraDemodulatorModule::drawBursts);
+        {
+            bool was = mpDetached;
+            floatingWindow(mpDetached, focusMpWin, "TETRA multipath", "mp", ImVec2(500, 420), ImVec2(680, 140), &TetraDemodulatorModule::drawMultipath);
+            if (was && !mpDetached) { saveMpConfig(); }
+        }
         if (txaDetached) {
             ImGui::SetNextWindowSize(ImVec2(560, 760), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(520, 100), ImGuiCond_FirstUseEver);
@@ -2723,9 +3022,24 @@ private:
     bool burstRun = false;
     bool burstDetached = false, focusBurstWin = false;
     std::atomic<double> pendingCarrierHz { 0.0 };
+    TetraChannelAnalyzer chanAn;
+    bool mpRun = false, mpDetached = false, focusMpWin = false;
+    int mpMem = 1;
+    TetraEvalView evalView;
+    std::string evalFile;
+    TetraAlarmSettings alarmSt;
+    TetraAlarms alarms;
+    time_t lastAlarmT = 0;
+    char reportNotes[256] = "";
+    std::string reportPath;
+    std::atomic<bool> reportReq { false };
+    std::mutex reportMtx;
+    std::string reportResult;
     std::string burstStatus;
     std::mutex dbgMtx;
     int dbgCarr[3] = { 0, 0, 0 };
+    int dbgAlarmTotal = 0;
+    bool dbgAlarmActive = false;
     EventHandler<ImGuiContext*> windowDrawHandler;
 
     dsp::stream<dsp::complex_t> demodStream;
