@@ -22,8 +22,9 @@
 #include "dsp/osmotetra_dec.h"
 #include "subscribers.h"
 #include "gps.h"
+#include "trend.h"
 
-#define TETRA_PLUGIN_VERSION "0.17.2"
+#define TETRA_PLUGIN_VERSION "0.18.0"
 
 struct TetraMeasSnapshot {
     bool valid = false;
@@ -73,6 +74,13 @@ struct TetraMeasSnapshot {
     int mcc = 0, mnc = 0, cc = 0;
     int dlFreq = 0, ulFreq = 0;
     int ts[4] = { 0, 0, 0, 0 };
+    // Timeslot occupancy from the AACH (frames 1..17), per timeslot:
+    // DL 0 unallocated, 1 assigned control, 2 common control, 3 traffic;
+    // UL 0 unallocated, 1 control, 2 traffic. Last second and since reset.
+    uint32_t dlUse[4][4] = {};
+    uint32_t ulUse[4][3] = {};
+    uint32_t dlUseTotal[4][4] = {};
+    uint32_t ulUseTotal[4][3] = {};
 
     // Position (GPS mouse)
     GpsFix gps;
@@ -117,6 +125,9 @@ public:
     }
 
     void resetTotals() { resetRequested = true; }
+
+    // long-term history (one point per second, 24 h)
+    TetraTrendStore& trend() { return trendStore; }
 
     // ---- event log (sync loss / re-lock / gain and AFC steps) ----
     struct Event {
@@ -203,7 +214,8 @@ public:
                          "symbol_rate_ppm;rx_state;bursts;bursts_tolerated;sync_lost;ber;"
                          "crc_bsch_ok;crc_bsch_fail;crc_sb2_ok;crc_sb2_fail;crc_ndb_ok;crc_ndb_fail;crc_schf_ok;crc_schf_fail;"
                          "mcc;mnc;cc;dl_freq_hz;ul_freq_hz;ts1;ts2;ts3;ts4;"
-                         "level_dbm;cell_match;gps_fix;lat;lon;alt_m;speed_kmh;sats;hdop\n");
+                         "level_dbm;cell_match;gps_fix;lat;lon;alt_m;speed_kmh;sats;hdop;"
+                         "ts1_traffic_pct;ts2_traffic_pct;ts3_traffic_pct;ts4_traffic_pct\n");
         fflush(logFile);
         eventFile = fopen((logPath.substr(0, logPath.size() - 4) + "_events.csv").c_str(), "w");
         if (eventFile) { fprintf(eventFile, "time;event\n"); fflush(eventFile); }
@@ -335,6 +347,7 @@ private:
 
             if (resetRequested.exchange(false) || !havePrev) {
                 resetFlagForSlip = true;
+                useReset = true;
                 // Start (or restart) totals from the current counter values
                 baseKb = kb; baseKe = ke; baseLost = lost;
                 for (int i = 0; i < 4; i++) { baseOk[i] = ok[i]; baseFail[i] = fail[i]; }
@@ -392,6 +405,24 @@ private:
             s.dlFreq = _dec->getDlFreq();
             s.ulFreq = _dec->getUlFreq();
             for (int i = 0; i < 4; i++) { s.ts[i] = _dec->getTimeslotContent(i); }
+            for (int t = 0; t < 4; t++) {
+                for (int c = 0; c < 4; c++) {
+                    uint32_t v = _dec->getDlUseCnt(t, c);
+                    if (useInit && !useReset) { s.dlUse[t][c] = v - prevDlUse[t][c]; }
+                    if (!useInit || useReset) { baseDlUse[t][c] = v; }
+                    s.dlUseTotal[t][c] = v - baseDlUse[t][c];
+                    prevDlUse[t][c] = v;
+                }
+                for (int c = 0; c < 3; c++) {
+                    uint32_t v = _dec->getUlUseCnt(t, c);
+                    if (useInit && !useReset) { s.ulUse[t][c] = v - prevUlUse[t][c]; }
+                    if (!useInit || useReset) { baseUlUse[t][c] = v; }
+                    s.ulUseTotal[t][c] = v - baseUlUse[t][c];
+                    prevUlUse[t][c] = v;
+                }
+            }
+            useInit = true;
+            useReset = false;
         }
 
         if (_vfoFreq) { s.vfoFreqHz = _vfoFreq(); }
@@ -425,6 +456,7 @@ private:
             std::lock_guard<std::mutex> lck(snapMtx);
             snap = s;
         }
+        addTrend(s);
         writeLog(s);
     }
 
@@ -449,10 +481,15 @@ private:
         else { fprintf(logFile, ";"); }
         fprintf(logFile, "%d;", s.cellMatch);
         if (s.gps.valid) {
-            fprintf(logFile, "1;%.6f;%.6f;%.1f;%.1f;%d;%.1f\n", s.gps.lat, s.gps.lon, s.gps.altM, s.gps.speedKmh, s.gps.sats, s.gps.hdop);
+            fprintf(logFile, "1;%.6f;%.6f;%.1f;%.1f;%d;%.1f;", s.gps.lat, s.gps.lon, s.gps.altM, s.gps.speedKmh, s.gps.sats, s.gps.hdop);
         }
         else {
-            fprintf(logFile, "0;;;;;%d;\n", s.gps.sats);
+            fprintf(logFile, "0;;;;;%d;;", s.gps.sats);
+        }
+        for (int t = 0; t < 4; t++) {
+            float pct = trafficPct(s.dlUse[t]);
+            if (std::isnan(pct)) { fprintf(logFile, t < 3 ? ";" : "\n"); }
+            else { fprintf(logFile, t < 3 ? "%.0f;" : "%.0f\n", pct); }
         }
         if (trafficFile && _subs) {
             bool en = _stationsEnabled ? _stationsEnabled() : true;
@@ -495,6 +532,41 @@ private:
             linesSinceFlush = 0;
         }
     }
+
+public:
+    // share of the counted frames of one timeslot that carried traffic (%), NaN without data
+    static float trafficPct(const uint32_t cnt[4]) {
+        uint32_t n = cnt[0] + cnt[1] + cnt[2] + cnt[3];
+        return n ? 100.0f * (float)cnt[3] / (float)n : NAN;
+    }
+
+private:
+    void addTrend(const TetraMeasSnapshot& s) {
+        TetraTrendPoint p;
+        p.t = s.timestamp;
+        p.calibrated = s.levelCalDb != 0.0f;
+        p.level = s.levelDbfs + s.levelCalDb;
+        if (s.rxState == 2 && s.symSync) {
+            p.mer = s.merDb;
+            p.evm = s.evmPct;
+            p.carrierHz = s.carrierOffsetHz;
+        }
+        bool decActive = _decoderActive ? _decoderActive() : true;
+        if (decActive) {
+            p.bursts = (float)s.bursts;
+            p.syncLost = (float)s.syncLost;
+            double ok = 0, fail = 0;
+            for (int i = 0; i < 4; i++) { ok += s.crcOk[i]; fail += s.crcFail[i]; }
+            if (ok + fail > 0) { p.crcFail = (float)(100.0 * fail / (ok + fail)); }
+            for (int t = 0; t < 4; t++) { p.tsTraffic[t] = trafficPct(s.dlUse[t]); }
+        }
+        trendStore.add(p);
+    }
+
+    TetraTrendStore trendStore;
+    uint32_t prevDlUse[4][4] = {}, baseDlUse[4][4] = {};
+    uint32_t prevUlUse[4][3] = {}, baseUlUse[4][3] = {};
+    bool useInit = false, useReset = false;
 
     dsp::demod::PI4DQPSK* _demod = nullptr;
     dsp::DQPSKSymbolExtractor* _extr = nullptr;

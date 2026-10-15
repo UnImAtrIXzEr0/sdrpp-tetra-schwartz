@@ -1,6 +1,7 @@
 #include <server.h>
 #include "imgui.h"
 #include <stdio.h>
+#include <cmath>
 #include <gui/main_window.h>
 #include <gui/style.h>
 #include <gui/gui.h>
@@ -559,7 +560,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["fftRate"] = 20;
     defConfig["fftSize"] = 65536;
     defConfig["fftWindow"] = 2;
-    defConfig["frequency"] = 100000000.0;
+    defConfig["frequency"] = 439000000.0; // TETRA edition: TMO cells on 70 cm (438-440 MHz)
     defConfig["fullWaterfallUpdate"] = false;
     defConfig["zoomBw"] = 1.0;
     defConfig["max"] = 0.0;
@@ -569,7 +570,7 @@ int sdrpp_main(int argc, char* argv[]) {
     // Built-in menus hidden by default (can be shown again in the Module Manager)
     // Sources not supported by this edition: hidden from the source list (Module Manager)
     defConfig["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "Dragon Labs", "FobosSDR", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR" });
-    defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug", "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server" });
+    defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug", "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server", "Radio", "Frequency Manager", "Band Plan" });
 
     // Menu
     defConfig["menuElements"] = json::array();
@@ -691,7 +692,8 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["moduleInstances"]["Brown Audio Sink"] = "brown_audio_sink";
     defConfig["moduleInstances"]["Network Sink"] = "network_sink";
 
-    defConfig["moduleInstances"]["Radio"] = "radio";
+    defConfig["moduleInstances"]["Radio"]["module"] = "radio";
+    defConfig["moduleInstances"]["Radio"]["enabled"] = false;   // HAM-TETRA: not needed for TETRA
 
     defConfig["moduleInstances"]["Frequency Manager"] = "frequency_manager";
     defConfig["moduleInstances"]["WebSDR View"]["module"] = "websdr_view";
@@ -887,6 +889,31 @@ int sdrpp_main(int argc, char* argv[]) {
             hs = keep;
         }
         core::configManager.conf["hamTetraDefaults6"] = 1;
+    }
+    // v0.18: Radio (module off), Frequency Manager and Band Plan hidden from the
+    // menu bar; start frequency 439 MHz instead of the 100 MHz default
+    if (!core::configManager.conf.contains("hamTetraDefaults7")) {
+        auto& c = core::configManager.conf;
+        if (!c.contains("hiddenMenus") || !c["hiddenMenus"].is_array()) { c["hiddenMenus"] = json::array(); }
+        for (const char* n : { "Radio", "Frequency Manager", "Band Plan" }) {
+            bool have = false;
+            for (auto& h : c["hiddenMenus"]) { if (h.is_string() && h.get<std::string>() == n) { have = true; } }
+            if (!have) { c["hiddenMenus"].push_back(n); }
+        }
+        if (c["moduleInstances"].contains("Radio")) {
+            json& inst = c["moduleInstances"]["Radio"];
+            if (inst.is_string()) {
+                std::string mod = inst;
+                inst = json::object();
+                inst["module"] = mod;
+            }
+            if (!inst.contains("module")) { inst["module"] = "radio"; }
+            inst["enabled"] = false;
+        }
+        if (c.contains("frequency") && c["frequency"].is_number() && std::fabs(c["frequency"].get<double>() - 100000000.0) < 1.0) {
+            c["frequency"] = 439000000.0;
+        }
+        c["hamTetraDefaults7"] = 1;
     }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&

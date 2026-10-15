@@ -520,6 +520,27 @@ static void rx_aach(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 		tms->t_display_st->ul_usage = aad.ul_usage;
 	}
 
+	/* timeslot occupancy statistics (frame 18 is always control) */
+	if (tup->tdma_time.fn != 18 && tup->tdma_time.tn >= 1 && tup->tdma_time.tn <= 4) {
+		int t = tup->tdma_time.tn - 1;
+		int dl = -1, ul = -1;
+		if (aad.pres & TETRA_ACC_ASS_PRES_DL_USAGE) {
+			if (aad.dl_usage == TETRA_DL_US_UNALLOC) dl = 0;
+			else if (aad.dl_usage == TETRA_DL_US_ASS_CTRL) dl = 1;
+			else if (aad.dl_usage == TETRA_DL_US_COM_CTRL) dl = 2;
+			else if (aad.dl_usage >= TETRA_DL_US_TRAFFIC) dl = 3;
+		} else if (aad.hdr == TETRA_ACC_ASS_DLCC_ULCO) {
+			dl = 2;
+		}
+		if (aad.pres & TETRA_ACC_ASS_PRES_UL_USAGE) {
+			ul = aad.ul_usage ? 2 : 0;
+		} else {
+			ul = 1;	/* UL common and/or assigned control (access fields sent) */
+		}
+		if (dl >= 0) tms->t_display_st->dl_use_cnt[t][dl]++;
+		if (ul >= 0) tms->t_display_st->ul_use_cnt[t][ul]++;
+	}
+
 	/* save the state whether the current burst is traffic or not */
 	if (aad.dl_usage > 3) {
 		tms->cur_burst.is_traffic = aad.dl_usage;

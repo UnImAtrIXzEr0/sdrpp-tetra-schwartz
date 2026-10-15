@@ -143,6 +143,11 @@ def test_tetra_chain():
         ctx.module_cmd("TETRA Demodulator", "set_afc", "1")
         ctx.module_cmd("TETRA Demodulator", "set_txa", "1")
         ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
+        # burst analysis on the (continuous) downlink and a second carrier
+        ctx.module_cmd("TETRA Demodulator", "set_bursts", "1")
+        m0 = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+        if m0.get("center_hz"):
+            ctx.module_cmd("TETRA Demodulator", "add_carrier", str(int(m0["center_hz"]) + 60000))
 
         best = None
         locked = False
@@ -159,13 +164,15 @@ def test_tetra_chain():
             best = m
             if m.get("rx_state") == 2 and m.get("sync"):
                 locked = True
-            if locked and m.get("txa_valid") and m.get("input_rate", 0) > 0:
+            if locked and m.get("txa_valid") and m.get("input_rate", 0) > 0 and m.get("trend_points", 0) >= 6 \
+                    and m.get("carriers_running", 0) >= 1 and m.get("aach_count", 0) > 0:
                 break
         stats.info(f"last measurements: {best}")
 
         # windows off again and analysis off: must not block either
         ctx.module_cmd("TETRA Demodulator", "set_windows", "0")
         ctx.module_cmd("TETRA Demodulator", "set_txa", "0")
+        ctx.module_cmd("TETRA Demodulator", "set_bursts", "0")
         ctx.sleep(1.5)
         if not alive(ctx):
             stats.test_fail("test_tetra_chain", "SDR++ stopped after closing windows / analysis")
@@ -182,13 +189,118 @@ def test_tetra_chain():
             problems.append(f"MER low ({best.get('mer_db')})")
         if best and not best.get("txa_valid"):
             problems.append("TX analysis produced no result")
+        if best and best.get("trend_points", 0) < 3:
+            problems.append(f"trend history not filled ({best.get('trend_points')})")
+        if best and best.get("carriers_running", 0) < 1:
+            problems.append(f"second carrier not running ({best.get('carriers')} carriers)")
+        if best and locked and best.get("aach_count", 0) <= 0:
+            problems.append("no timeslot occupancy counted (AACH)")
+        if best and best.get("burst_state", 0) < 1:
+            problems.append(f"burst analysis not running ({best.get('burst_status')})")
         if upsampled and best and best.get("txa_valid") and not (15000 < best.get("txa_obw_hz", 0) < 27000):
             problems.append(f"occupied bandwidth implausible ({best.get('txa_obw_hz')})")
         if problems:
             stats.test_fail("test_tetra_chain", "; ".join(problems))
             return False
 
-    stats.test_pass("test_tetra_chain", "lock, MER, TX analysis and own windows OK, no crash")
+    stats.test_pass("test_tetra_chain", "lock, MER, TX analysis, trends, carriers, bursts and own windows OK, no crash")
+    return True
+
+
+def make_burst_recording(path, fs=256000, seconds=6.0, ramp_sym=3.0, len_sym=231.0, noise_db=-55.0):
+    """Synthetic uplink: 231-symbol bursts every 4 timeslots with cosine ramps
+    of ramp_sym symbols, 8-PSK-like symbols, noise noise_db below full scale."""
+    import numpy as np
+    import wave
+    n = int(fs * seconds)
+    t_sym = np.arange(n) * 18000.0 / fs
+    ph = np.mod(t_sym, 4 * 255.0) - 20.0
+    env = np.zeros(n)
+    up = (ph >= -ramp_sym / 2) & (ph < ramp_sym / 2)
+    env[up] = 0.5 - 0.5 * np.cos(np.pi * (ph[up] + ramp_sym / 2) / ramp_sym)
+    flat = (ph >= ramp_sym / 2) & (ph <= len_sym - ramp_sym / 2)
+    env[flat] = 1.0
+    dn = (ph > len_sym - ramp_sym / 2) & (ph < len_sym + ramp_sym / 2)
+    env[dn] = 0.5 + 0.5 * np.cos(np.pi * (ph[dn] - (len_sym - ramp_sym / 2)) / ramp_sym)
+    rng = np.random.default_rng(1)
+    syms = np.exp(1j * np.pi / 4 * rng.integers(0, 8, int(t_sym[-1]) + 2))
+    k = np.floor(t_sym).astype(int)
+    f = t_sym - k
+    sig = syms[k] * (1 - f) + syms[k + 1] * f
+    namp = 10 ** (noise_db / 20) / np.sqrt(2)
+    x = 0.3 * env * sig + namp * (rng.standard_normal(n) + 1j * rng.standard_normal(n))
+    out = np.empty((n, 2), dtype="<i2")
+    out[:, 0] = np.clip(np.round(x.real * 32767), -32768, 32767)
+    out[:, 1] = np.clip(np.round(x.imag * 32767), -32768, 32767)
+    with wave.open(path, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(fs)
+        w.writeframes(out.tobytes())
+
+
+def test_bursts():
+    stats.test_start("test_bursts")
+    try:
+        import numpy  # noqa: F401
+    except ImportError:
+        stats.test_pass("test_bursts", "skipped (numpy missing)")
+        return True
+    tmpdir = tempfile.mkdtemp(prefix="tetra_burst_")
+    rec = os.path.join(tmpdir, "baseband_430000000Hz_12-00-00_01-01-2026.wav")
+    make_burst_recording(rec)
+    cfg = get_base_config()
+    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
+    cfg["source"] = "File"
+    cfg["File Source"] = {"path": rec, "filename": rec}
+    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    with SDRPPTestContext() as ctx:
+        ctx.write_configs(cfg)
+        if not ctx.start():
+            stats.test_fail("test_bursts", "SDR++ did not start")
+            return False
+        ctx.sleep(1.0)
+        ctx.module_cmd("File Source", "set_filename", rec)
+        http_get(ctx.base_url, "/sdr/start")
+        ctx.module_cmd("TETRA Demodulator", "set_offset", "0")
+        ctx.module_cmd("TETRA Demodulator", "set_bursts", "1")
+        ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
+        best = None
+        t0 = time.time()
+        while time.time() - t0 < 25.0:
+            ctx.sleep(1.0)
+            if not alive(ctx):
+                stats.test_fail("test_bursts", "SDR++ stopped during the burst analysis")
+                return False
+            m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+            if "error" in m:
+                stats.test_fail("test_bursts", f"module not responding: {m['error']}")
+                return False
+            best = m
+            if m.get("burst_n_full", 0) >= 25 and m.get("burst_len_sym", -999) > 0:
+                break
+        stats.info("burst results: " + str({k: v for k, v in (best or {}).items() if k.startswith("burst")}))
+        crash = log_has_crash(ctx)
+        if crash:
+            stats.test_fail("test_bursts", f"log shows '{crash}'")
+            return False
+        problems = []
+        if not best or best.get("burst_n_full", 0) < 10:
+            problems.append(f"too few bursts detected ({best.get('burst_n_full') if best else None}, {best.get('burst_status') if best else ''})")
+        else:
+            if not (222.0 < best.get("burst_len_sym", 0) < 240.0):
+                problems.append(f"burst length {best.get('burst_len_sym')} sym (nominal 231)")
+            if not (0.0 < best.get("burst_rise_sym", -999) < 8.0):
+                problems.append(f"ramp-up {best.get('burst_rise_sym')} sym (3 sym ramp)")
+            if not (0.0 < best.get("burst_fall_sym", -999) < 8.0):
+                problems.append(f"ramp-down {best.get('burst_fall_sym')} sym (3 sym ramp)")
+            if not (best.get("burst_ripple_pos_db", 99) < 1.5 and best.get("burst_ripple_neg_db", -99) > -1.5):
+                problems.append(f"ripple {best.get('burst_ripple_pos_db')}/{best.get('burst_ripple_neg_db')} dB")
+        if problems:
+            stats.test_fail("test_bursts", "; ".join(problems))
+            return False
+    stats.test_pass("test_bursts", "synthetic bursts: count, length, ramps and ripple as generated")
     return True
 
 
@@ -198,6 +310,8 @@ if __name__ == "__main__":
         stats.section("SDR++ TETRA-SCHWARTZ edition tests")
     r1 = test_fresh_start()
     r2 = test_tetra_chain()
-    ok = r1 and r2
-    stats.final_summary(2, int(r1) + int(r2), int(not r1) + int(not r2))
+    r3 = test_bursts()
+    res = [r1, r2, r3]
+    ok = all(res)
+    stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

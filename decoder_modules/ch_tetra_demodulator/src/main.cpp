@@ -35,6 +35,9 @@
 #include "tetra_colors.h"
 #include "tetra_layout.h"
 #include "tx_analyzer.h"
+#include "trend_view.h"
+#include "carrier_monitor.h"
+#include "burst_analyzer.h"
 #include "measurements.h"
 #include "subscribers.h"
 #include "radioid.h"
@@ -66,7 +69,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 17, 2,
+    /* Version:         */ 0, 18, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -111,6 +114,25 @@ public:
         if (config.conf[name].contains("compOriginOffset")) { compOriginOffset = config.conf[name]["compOriginOffset"]; }
         if (config.conf[name].contains("afc")) { afcEnabled = config.conf[name]["afc"]; }
         if (config.conf[name].contains("autoGain")) { autoGain = config.conf[name]["autoGain"]; }
+        if (config.conf[name].contains("trendDetached")) { trendDetached = config.conf[name]["trendDetached"]; }
+        if (config.conf[name].contains("carrDetached")) { carrDetached = config.conf[name]["carrDetached"]; }
+        if (config.conf[name].contains("burstDetached")) { burstDetached = config.conf[name]["burstDetached"]; }
+        if (config.conf[name].contains("trendSpan")) { trendView.spanIdx = std::clamp((int)config.conf[name]["trendSpan"], 0, TetraTrendView::SPAN_N - 1); }
+        if (config.conf[name].contains("trendShow") && config.conf[name]["trendShow"].is_array()) {
+            for (int i = 0; i < TetraTrendView::P_COUNT && i < (int)config.conf[name]["trendShow"].size(); i++) { trendView.show[i] = config.conf[name]["trendShow"][i]; }
+        }
+        if (config.conf[name].contains("burst") && config.conf[name]["burst"].is_object()) {
+            json& b = config.conf[name]["burst"];
+            if (b.contains("run")) { burstRun = b["run"]; }
+            if (b.contains("source")) { burstSt.source = std::clamp((int)b["source"], 0, 2); }
+            if (b.contains("mhz")) { burstSt.manualMHz = b["mhz"]; }
+            if (b.contains("avg")) { burstSt.averages = std::clamp((int)b["avg"], 1, 500); }
+            if (b.contains("ripple")) { burstSt.maskRippleDb = b["ripple"]; }
+            if (b.contains("off")) { burstSt.maskOffDbc = b["off"]; }
+            if (b.contains("ramp")) { burstSt.maskRampSym = b["ramp"]; }
+        }
+        json carrierList = json::array();
+        if (config.conf[name].contains("carriers") && config.conf[name]["carriers"].is_array()) { carrierList = config.conf[name]["carriers"]; }
         if (config.conf[name].contains("gpsPort")) { gpsPort = config.conf[name]["gpsPort"]; }
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
@@ -143,6 +165,20 @@ public:
         float recov_omega = (4.0f * recov_bandwidth * recov_bandwidth) / recov_denominator;
 
         mainDemodulator.init(vfo->output, 18000, VFO_SAMPLERATE, RRC_TAP_COUNT, RRC_ALPHA, AGC_RATE, COSTAS_LOOP_BANDWIDTH, FLL_LOOP_BANDWIDTH, recov_omega, recov_mu, CLOCK_RECOVERY_REL_LIM);
+        {
+            // further carriers use the same demodulator settings
+            TetraDemodParams dp;
+            dp.sampleRate = VFO_SAMPLERATE; dp.bandwidth = VFO_BANDWIDTH; dp.rrcTaps = RRC_TAP_COUNT; dp.rrcAlpha = RRC_ALPHA;
+            dp.agcRate = AGC_RATE; dp.costasBw = COSTAS_LOOP_BANDWIDTH; dp.fllBw = FLL_LOOP_BANDWIDTH;
+            dp.omega = recov_omega; dp.mu = recov_mu; dp.relLim = CLOCK_RECOVERY_REL_LIM;
+            carrierMon.setParams(dp);
+            carrierMon.setBaseName(name);
+            for (auto& c : carrierList) {
+                if (c.is_object() && c.contains("freq")) { carrierMon.add(c.contains("label") ? c["label"].get<std::string>() : std::string(), c["freq"].get<double>()); }
+            }
+            carrierMon.takeChanged();
+            burstAn.setName(name + " bursts");
+        }
         constDiagSplitter.init(&mainDemodulator.out);
         constDiagSplitter.bindStream(&constDiagStream);
         constDiagSplitter.bindStream(&demodStream);
@@ -187,6 +223,7 @@ public:
         windowDrawHandler.handler = [](ImGuiContext* gctx, void* ctx) {
             auto* m = (TetraDemodulatorModule*)ctx;
             m->txaLoop();
+            m->extraLoops();
             m->controlLoops();
             m->drawFloatingWindows();
         };
@@ -200,6 +237,9 @@ public:
     ~TetraDemodulatorModule() {
         meas.stop();
         txa.stop();
+        carrierMon.stopAll();
+        carrierMon.stopLog();
+        burstAn.stop();
         if(isEnabled()) {
             disable();
         }
@@ -250,6 +290,9 @@ public:
         // Stop the measurement thread first: it reads the blocks and the VFO
         meas.stop();
         txa.stop();
+        carrierMon.stopAll();
+        carrierMon.stopLog();
+        burstAn.stop();
 
         // Stop upstream first to drain data flow into the chain
         mainDemodulator.stop();
@@ -329,9 +372,21 @@ public:
             return std::string("{\"status\": \"ok\", \"txa\": ") + (txaRun ? "true" : "false") + "}";
         }
         if (cmd == "set_windows") {
-            // "1" = all four own windows, "0" = none
+            // "1" = all own windows, "0" = none
             bool on = (args == "1" || args == "true");
             constDetached = subsDetached = netDetached = txaDetached = on;
+            trendDetached = carrDetached = burstDetached = on;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_bursts") {
+            // burst analysis on the TETRA VFO frequency ("1") or off ("0")
+            burstRun = (args == "1" || args == "true");
+            burstSt.source = 2;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "add_carrier") {
+            // absolute frequency in Hz; added from the GUI thread
+            pendingCarrierHz.store(atof(args.c_str()));
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_afc") {
@@ -341,7 +396,17 @@ public:
         if (cmd == "get_measurements") {
             TetraMeasSnapshot m = meas.get();
             TxAnalysisResult r = txa.get();
-            char b[1400];
+            TetraBurstResult br = burstAn.get();
+            int carrCnt, carrRun, carrSync;
+            std::string bstat;
+            {
+                std::lock_guard<std::mutex> lck(dbgMtx);
+                carrCnt = dbgCarr[0]; carrRun = dbgCarr[1]; carrSync = dbgCarr[2];
+                bstat = burstStatus;
+            }
+            uint32_t tsTraffic = 0, tsAll = 0;
+            for (int t = 0; t < 4; t++) { for (int c = 0; c < 4; c++) { tsAll += m.dlUseTotal[t][c]; } tsTraffic += m.dlUseTotal[t][3]; }
+            char b[1700];
             snprintf(b, sizeof(b),
                      "{\"valid\": %s, \"sync\": %s, \"rx_state\": %d, \"mer_db\": %.2f, \"evm_pct\": %.2f, "
                      "\"iq_offset_db\": %.2f, \"irr_db\": %.2f, \"phase_err_deg\": %.3f, \"amp_err_pct\": %.3f, "
@@ -349,7 +414,11 @@ public:
                      "\"carrier_offset_hz\": %.2f, \"audio_dropped_s\": %.2f, \"vfo_offset_hz\": %.1f, "
                      "\"txa_valid\": %s, \"txa_chan_dbfs\": %.2f, \"txa_obw_hz\": %.1f, \"txa_bw26_hz\": %.1f, "
                      "\"txa_acp25\": [%.2f, %.2f], \"txa_acp_floor25\": [%.2f, %.2f], \"txa_leak_dbc\": %.2f, "
-                     "\"stations\": %d, \"traffic\": %d, \"center_hz\": %.0f, \"in_samplerate\": %.0f}",
+                     "\"stations\": %d, \"traffic\": %d, \"center_hz\": %.0f, \"in_samplerate\": %.0f, "
+                     "\"burst_state\": %d, \"burst_continuous\": %s, \"burst_status\": \"%s\", \"carriers\": %d, \"carriers_running\": %d, \"carriers_sync\": %d, "
+                     "\"aach_count\": %u, \"aach_traffic\": %u, \"trend_points\": %d, "
+                     "\"burst_n_full\": %llu, \"burst_n_half\": %llu, \"burst_len_sym\": %.2f, \"burst_rise_sym\": %.2f, \"burst_fall_sym\": %.2f, "
+                     "\"burst_ripple_pos_db\": %.2f, \"burst_ripple_neg_db\": %.2f, \"burst_off_dbc\": %.1f, \"burst_floor_dbc\": %.1f}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -357,7 +426,11 @@ public:
                      r.valid ? "true" : "false", r.chanPowerDbfs, r.obwHz, r.bw26Hz,
                      r.acpDbc[2], r.acpDbc[3], r.acpFloorDbc[2], r.acpFloorDbc[3], r.carrierLeakDbc,
                      (int)subscribers.snapshot().size(), (int)subscribers.trafficSnapshot().size(),
-                     gui::waterfall.getCenterFrequency(), sigpath::iqFrontEnd.getSampleRate());
+                     gui::waterfall.getCenterFrequency(), sigpath::iqFrontEnd.getSampleRate(),
+                     br.state, br.continuous ? "true" : "false", bstat.c_str(), carrCnt, carrRun, carrSync,
+                     tsAll, tsTraffic, (int)meas.trend().copy(0).size(),
+                     (unsigned long long)br.nFull, (unsigned long long)br.nHalf, nz(br.lengthSym), nz(br.riseSym), nz(br.fallSym),
+                     nz(br.ripplePosDb), nz(br.rippleNegDb), nz(br.offBeforeDbc), nz(br.floorDbc));
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -652,12 +725,17 @@ private:
                     flog::error("TETRA: {}", err);
                 } else {
                     _this->logError.clear();
+                    std::string lp = _this->meas.getLogPath();
+                    if (_this->carrierMon.count() > 0 && lp.size() > 4) {
+                        _this->carrierMon.startLog(lp.substr(0, lp.size() - 4) + "_carriers.csv", _this->levelCalDb);
+                    }
                 }
             }
             if (!canLog) { style::endDisabled(); }
         } else {
             if (ImGui::Button(CONCAT("Stop CSV log##_tetra_log_", _this->name), ImVec2(menuWidth, 0))) {
                 _this->meas.stopLog();
+                _this->carrierMon.stopLog();
             }
             tw::TextDisabled("%s", _this->meas.getLogPath().c_str());
         }
@@ -748,6 +826,12 @@ private:
             row.add(l1.c_str(), &_this->subsDetached, _this->hamMode);   // stations: amateur radio mode only
             row.add(l2.c_str(), &_this->netDetached);
             row.add(l3.c_str(), &_this->txaDetached);
+            std::string l4 = std::string("Trends##_tetra_trdet_top_") + _this->name;
+            std::string l5 = std::string("Carriers##_tetra_crdet_top_") + _this->name;
+            std::string l6 = std::string("Bursts##_tetra_bdet_top_") + _this->name;
+            row.add(l4.c_str(), &_this->trendDetached);
+            row.add(l5.c_str(), &_this->carrDetached);
+            row.add(l6.c_str(), &_this->burstDetached);
             int ch = row.draw("Own window:");
             if (ch >= 0) {
                 config.acquire();
@@ -755,7 +839,13 @@ private:
                 config.conf[_this->name]["subsDetached"] = _this->subsDetached;
                 config.conf[_this->name]["netDetached"] = _this->netDetached;
                 config.conf[_this->name]["txaDetached"] = _this->txaDetached;
+                config.conf[_this->name]["trendDetached"] = _this->trendDetached;
+                config.conf[_this->name]["carrDetached"] = _this->carrDetached;
+                config.conf[_this->name]["burstDetached"] = _this->burstDetached;
                 config.release(true);
+                if (ch == 4 && _this->trendDetached) { _this->focusTrendWin = true; }
+                if (ch == 5 && _this->carrDetached) { _this->focusCarrWin = true; }
+                if (ch == 6 && _this->burstDetached) { _this->focusBurstWin = true; }
                 if (ch == 1 && _this->subsDetached) { _this->focusSubsWin = true; }
                 if (ch == 2 && _this->netDetached) { _this->focusNetWin = true; }
                 if (ch == 3 && _this->txaDetached) { _this->focusTxaWin = true; }
@@ -780,6 +870,30 @@ private:
                 if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
             } else {
                 _this->drawTxAnalysis(menuWidth);
+            }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Trends & timeslots##_tetra_trend_", _this->name))) {
+            if (_this->trendDetached) {
+                tw::TextDisabled("Shown in its own window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_trfront_", _this->name))) { _this->focusTrendWin = true; }
+            } else {
+                _this->drawTrends(menuWidth);
+            }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Carriers (multi-carrier)##_tetra_carr_", _this->name))) {
+            if (_this->carrDetached) {
+                tw::TextDisabled("Shown in its own window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_crfront_", _this->name))) { _this->focusCarrWin = true; }
+            } else {
+                _this->drawCarriers(menuWidth);
+            }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("Burst analysis (uplink)##_tetra_burst_", _this->name))) {
+            if (_this->burstDetached) {
+                tw::TextDisabled("Shown in its own window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_bfront_", _this->name))) { _this->focusBurstWin = true; }
+            } else {
+                _this->drawBursts(menuWidth);
             }
         }
         if (ImGui::CollapsingHeader(CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) {
@@ -1892,8 +2006,229 @@ private:
         tw::Text("Noise density:"); tw::SameTextDisabled("%.1f dBFS/bin, in-band %.1f dBFS/bin", r.noiseDensityDb, r.inbandDensityDb);
     }
 
+    // ---------------- Trends, timeslots, further carriers, bursts (v0.18) ----------------
+
+    double mainVfoFreq() { return vfo ? gui::waterfall.getCenterFrequency() + vfo->getOffset() : 0.0; }
+
+    // neighbour cells announced by the network (label, DL frequency)
+    std::vector<std::pair<std::string, double>> neighbourCarriers() {
+        std::vector<std::pair<std::string, double>> out;
+        if (decoder_mode != 0) { return out; }
+        const struct tetra_display_state* d = osmotetradecoder.getDisplay();
+        if (!d) { return out; }
+        for (int i = 0; i < d->n_neigh && i < 16; i++) {
+            const auto& n = d->neigh[i];
+            int band = n.has_ext ? n.band : d->freq_band;
+            int off = n.has_ext ? n.offset : d->freq_offset;
+            double f = (double)tetra_dl_carrier_hz((uint8_t)band, (uint16_t)n.main_carrier, (uint8_t)off);
+            if (f > 1e6) { out.push_back({ "Cell " + std::to_string(n.cell_id), f }); }
+        }
+        return out;
+    }
+
+    void saveCarriers() {
+        config.acquire();
+        json arr = json::array();
+        for (int i = 0; i < carrierMon.count(); i++) {
+            json c;
+            c["label"] = carrierMon.at(i).label;
+            c["freq"] = carrierMon.at(i).freqHz;
+            arr.push_back(c);
+        }
+        config.conf[name]["carriers"] = arr;
+        config.release(true);
+    }
+
+    void saveBurstConfig() {
+        config.acquire();
+        json& b = config.conf[name]["burst"];
+        b["run"] = burstRun;
+        b["source"] = burstSt.source;
+        b["mhz"] = burstSt.manualMHz;
+        b["avg"] = burstSt.averages;
+        b["ripple"] = burstSt.maskRippleDb;
+        b["off"] = burstSt.maskOffDbc;
+        b["ramp"] = burstSt.maskRampSym;
+        config.release(true);
+    }
+
+    void saveTrendConfig() {
+        config.acquire();
+        config.conf[name]["trendSpan"] = trendView.spanIdx;
+        json arr = json::array();
+        for (int i = 0; i < TetraTrendView::P_COUNT; i++) { arr.push_back(trendView.show[i]); }
+        config.conf[name]["trendShow"] = arr;
+        config.release(true);
+    }
+
+    // every GUI frame
+    static double nz(float v) { return std::isnan(v) ? -999.0 : (double)v; }   // JSON has no NaN
+
+    void extraLoops() {
+        double pc = pendingCarrierHz.exchange(0.0);
+        if (pc > 1e6) { carrierMon.add("", pc); }
+        carrierMon.update(enabled && vfo != nullptr);
+        if (carrierMon.takeChanged()) { saveCarriers(); }
+        double f = 0.0;
+        if (burstSt.source == 0) { f = (double)meas.get().ulFreq; }
+        else if (burstSt.source == 1) { f = burstSt.manualMHz * 1e6; }
+        else { f = mainVfoFreq(); }
+        burstAn.loop(enabled && burstRun, f);
+        {
+            // summary for the automation channel (read from another thread)
+            std::string st = burstAn.status;
+            for (auto& ch : st) { if (ch == '"' || ch == '\\') { ch = '\''; } }
+            int run = 0, syn = 0;
+            for (int i = 0; i < carrierMon.count(); i++) {
+                if (carrierMon.at(i).valid) { run++; }
+                if (carrierMon.at(i).valid && carrierMon.at(i).sync) { syn++; }
+            }
+            std::lock_guard<std::mutex> lck(dbgMtx);
+            burstStatus = st;
+            dbgCarr[0] = carrierMon.count(); dbgCarr[1] = run; dbgCarr[2] = syn;
+        }
+    }
+
+    void drawTrends(float width) {
+        if (trendView.fileMode) {
+            tw::Text("Log:");
+            tw::SameTextColored(tc::val(), "%s", trendView.fileName.c_str());
+            if (tw::SameSmallButton(CONCAT("Back to live##_tetra_trlive_", name))) {
+                trendView.fileMode = false;
+                trendView.filePts.clear();
+                trendView.invalidate();
+            }
+        }
+        tw::Text("Open a CSV log:");
+        if (trendFile.render("##_tetra_trfile_" + name)) {
+            std::string path = trendFile.expandString(trendFile.path);
+            if (trendFile.pathIsValid()) {
+                std::vector<TetraTrendPoint> pts;
+                if (TetraTrendStore::loadCsv(path, pts, trendFileError)) {
+                    trendView.filePts = std::move(pts);
+                    trendView.fileMode = true;
+                    trendView.fileName = std::filesystem::path(path).filename().string();
+                    trendView.spanIdx = TetraTrendView::SPAN_N - 1;   // whole log
+                    trendView.invalidate();
+                    trendFileError.clear();
+                }
+            }
+        }
+        if (!trendFileError.empty()) { tw::TextColored(tc::bad(), "%s", trendFileError.c_str()); }
+        ImGui::SetNextItemWidth((std::min)(width, 100.0f * style::uiScale));
+        if (ImGui::Combo(CONCAT("Time span##_tetra_trspan_", name), &trendView.spanIdx, TetraTrendView::spanNames())) { saveTrendConfig(); }
+        {
+            static const char* labels[TetraTrendView::P_COUNT] = { "Level", "MER", "CRC errors", "Carrier offset", "Timeslots", "Bursts/s" };
+            std::string ids[TetraTrendView::P_COUNT];
+            tw::CheckRow row;
+            for (int i = 0; i < TetraTrendView::P_COUNT; i++) {
+                ids[i] = std::string(labels[i]) + "##_tetra_trp" + std::to_string(i) + "_" + name;
+                row.add(ids[i].c_str(), &trendView.show[i]);
+            }
+            if (row.draw("Show:") >= 0) { trendView.invalidate(); saveTrendConfig(); }
+        }
+        trendView.draw("##_tetra_trplot_" + name, width, meas.trend(), constView.pal);
+        if (!trendView.fileMode) {
+            tw::TextDisabled("Last 24 h kept in memory; longer: Start CSV log (Measurements)\nand open the file here later.");
+            drawTimeslotTable(width);
+        }
+    }
+
+    void drawTimeslotTable(float width) {
+        if (decoder_mode != 0) { return; }
+        TetraMeasSnapshot m = meas.get();
+        if (!m.valid) { return; }
+        tw::Text("Timeslot occupancy since reset");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("From the ACCESS-ASSIGN PDU (AACH) of every downlink burst, frames 1-17\n"
+                              "(frame 18 is always control). 'Reset totals' under Measurements\n"
+                              "starts the statistics again.");
+        }
+        ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX;
+        float th = ImGui::GetTextLineHeightWithSpacing() * 6.4f;
+        if (!ImGui::BeginTable(CONCAT("##_tetra_tstab_", name), 7, tf, ImVec2(width, th))) { return; }
+        tw::CellScope cells;
+        ImGui::TableSetupScrollFreeze(1, 1);
+        ImGui::TableSetupColumn("TS");
+        ImGui::TableSetupColumn("Traffic");
+        ImGui::TableSetupColumn("Assigned");
+        ImGui::TableSetupColumn("Common");
+        ImGui::TableSetupColumn("Free");
+        ImGui::TableSetupColumn("UL traffic");
+        ImGui::TableSetupColumn("Now");
+        ImGui::TableHeadersRow();
+        static const char* catName[4] = { "free", "assigned ctrl", "common ctrl", "traffic" };
+        ImVec4 val = tc::val();
+        for (int t = 0; t < 4; t++) {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("TS%d", t + 1);
+            uint32_t n = 0, nu = 0;
+            for (int c = 0; c < 4; c++) { n += m.dlUseTotal[t][c]; }
+            for (int c = 0; c < 3; c++) { nu += m.ulUseTotal[t][c]; }
+            if (n == 0) {
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextDisabled("--");
+                continue;
+            }
+            int colOf[4] = { 4, 2, 3, 1 };
+            for (int c = 0; c < 4; c++) {
+                ImGui::TableSetColumnIndex(colOf[c]);
+                ImGui::TextColored(c == 3 ? val : tc::lgrey(), "%.1f %%", 100.0 * m.dlUseTotal[t][c] / n);
+            }
+            ImGui::TableSetColumnIndex(5);
+            if (nu) { ImGui::TextColored(tc::lgrey(), "%.1f %%", 100.0 * m.ulUseTotal[t][2] / nu); } else { ImGui::TextDisabled("--"); }
+            ImGui::TableSetColumnIndex(6);
+            int best = -1;
+            uint32_t bn = 0;
+            for (int c = 0; c < 4; c++) { if (m.dlUse[t][c] > bn) { bn = m.dlUse[t][c]; best = c; } }
+            if (best >= 0) { ImGui::TextColored(best == 3 ? tc::good() : tc::lgrey(), "%s", catName[best]); } else { ImGui::TextDisabled("--"); }
+        }
+        ImGui::EndTable();
+    }
+
+    void drawCarriers(float width) {
+        TetraMeasSnapshot m = meas.get();
+        bool ok = m.valid;
+        carrierMon.draw(name, width, constView.pal, mainVfoFreq(), ok ? m.levelDbfs : NAN, ok ? m.merDb : NAN,
+                        ok && m.symSync, levelCalDb, neighbourCarriers());
+        if (carrierMon.takeChanged()) { saveCarriers(); }
+    }
+
+    void drawBursts(float width) {
+        TetraMeasSnapshot m = meas.get();
+        bool run = burstRun;
+        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalDb, run)) {
+            burstRun = run;
+            saveBurstConfig();
+        }
+        burstRun = run;
+    }
+
+    void floatingWindow(bool& detached, bool& focus, const char* title, const char* key, ImVec2 size, ImVec2 pos, void (TetraDemodulatorModule::*body)(float)) {
+        if (!detached) { return; }
+        ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(pos, ImGuiCond_FirstUseEver);
+        bool open = true;
+        std::string t = std::string(title) + " (" + name + ")##_tetra_" + key + "_" + name;
+        if (focus) { ImGui::SetNextWindowFocus(); focus = false; }
+        if (ImGui::Begin(t.c_str(), &open)) {
+            (this->*body)(ImGui::GetContentRegionAvail().x);
+        }
+        ImGui::End();
+        if (!open) {
+            detached = false;
+            config.acquire();
+            config.conf[name][std::string(key) + "Detached"] = false;
+            config.release(true);
+        }
+    }
+
     void drawFloatingWindows() {
         if (!enabled) { return; }
+        floatingWindow(trendDetached, focusTrendWin, "TETRA trends & timeslots", "trend", ImVec2(620, 640), ImVec2(560, 90), &TetraDemodulatorModule::drawTrends);
+        floatingWindow(carrDetached, focusCarrWin, "TETRA carriers", "carr", ImVec2(560, 420), ImVec2(600, 130), &TetraDemodulatorModule::drawCarriers);
+        floatingWindow(burstDetached, focusBurstWin, "TETRA burst analysis", "burst", ImVec2(520, 620), ImVec2(640, 110), &TetraDemodulatorModule::drawBursts);
         if (txaDetached) {
             ImGui::SetNextWindowSize(ImVec2(560, 760), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(520, 100), ImGuiCond_FirstUseEver);
@@ -2376,6 +2711,21 @@ private:
     int txaAvg = 20;
     float txaLimit[3] = { -60.0f, -70.0f, -70.0f };   // dBc at 25 / 50 / 75 kHz
     bool focusConstWin = false;
+    // trends, further carriers, burst analysis (v0.18)
+    TetraTrendView trendView;
+    FileSelect trendFile { "%ROOT%/tetra_logs", { "TETRA CSV logs", "*.csv" } };
+    std::string trendFileError;
+    bool trendDetached = false, focusTrendWin = false;
+    TetraCarrierMonitor carrierMon;
+    bool carrDetached = false, focusCarrWin = false;
+    TetraBurstAnalyzer burstAn;
+    TetraBurstSettings burstSt;
+    bool burstRun = false;
+    bool burstDetached = false, focusBurstWin = false;
+    std::atomic<double> pendingCarrierHz { 0.0 };
+    std::string burstStatus;
+    std::mutex dbgMtx;
+    int dbgCarr[3] = { 0, 0, 0 };
     EventHandler<ImGuiContext*> windowDrawHandler;
 
     dsp::stream<dsp::complex_t> demodStream;

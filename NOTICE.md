@@ -37,7 +37,9 @@ based on SDR++Brown v1.2.1. Main changes (details in the git history):
   positions, scan lists), network and neighbour cell information, TX analysis (spectrum,
   adjacent channel power, occupied bandwidth, shoulders, carrier leakage,
   I/Q imbalance), GPS
-  coverage logging with KML/HTML map export, CSV logs.
+  coverage logging with KML/HTML map export, CSV logs, trends over 24 h and
+  from CSV logs, timeslot occupancy, monitoring of further carriers, burst
+  power analysis (ramps, length, ripple, time mask).
 - Core: VFO selection, click-through and audio fixes, audio sinks that no
   longer stall the receive chain, start-up defaults, hidden built-in menus,
   instrument-style themes, new start screen and recoloured icons.

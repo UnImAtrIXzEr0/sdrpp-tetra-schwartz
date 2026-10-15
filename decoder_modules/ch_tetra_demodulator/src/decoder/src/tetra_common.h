@@ -336,6 +336,12 @@ struct tetra_display_state {
 	uint32_t nettime_utc;	/* 2 s units since start of year */
 	int nettime_sign, nettime_offset, nettime_year;
 	int64_t nettime_rx_time;
+	/* timeslot occupancy from the ACCESS-ASSIGN PDU (AACH), frames 1..17,
+	 * per timeslot 1..4 (index 0..3), counters since start:
+	 * DL: 0 unallocated, 1 assigned control, 2 common control, 3 traffic
+	 * UL: 0 unallocated, 1 control (random access / assigned), 2 traffic */
+	uint32_t dl_use_cnt[4][4];
+	uint32_t ul_use_cnt[4][3];
 	int n_neigh;
 	struct tetra_neigh_cell {
 		int cell_id, resel_types, synced, load, main_carrier;

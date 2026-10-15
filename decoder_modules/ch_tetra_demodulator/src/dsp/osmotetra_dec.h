@@ -121,6 +121,9 @@ namespace dsp {
         int getCurrFrame() { return tms->t_display_st->curr_frame; }
         int getTimeslotContent(int ts) { return tms->t_display_st->timeslot_content[ts]; }
         int getDlUsage() { return tms->t_display_st->dl_usage; }
+        // timeslot occupancy counters (ts 0..3), see tetra_display_state
+        uint32_t getDlUseCnt(int ts, int cat) { return tms->t_display_st->dl_use_cnt[ts & 3][cat & 3]; }
+        uint32_t getUlUseCnt(int ts, int cat) { return tms->t_display_st->ul_use_cnt[ts & 3][(cat < 0 || cat > 2) ? 0 : cat]; }
         int getUlUsage() { return tms->t_display_st->ul_usage; }
         char getAccess1Code() { return tms->t_display_st->access1_code; }
         char getAccess2Code() { return tms->t_display_st->access2_code; }
