@@ -86,7 +86,7 @@ public:
             config.conf[name]["sending"] = false;
         }
         decoder_mode = config.conf[name]["mode"];
-        strcpy(hostname, std::string(config.conf[name]["hostname"]).c_str());
+        snprintf(hostname, sizeof(hostname), "%s", std::string(config.conf[name]["hostname"]).c_str());
         port = config.conf[name]["port"];
         bool startNow = config.conf[name]["sending"];
         if (config.conf[name].contains("levelCalDb")) {

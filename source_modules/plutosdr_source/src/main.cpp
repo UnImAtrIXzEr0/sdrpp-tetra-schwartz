@@ -216,7 +216,7 @@ private:
             std::smatch modelMatch;
             if (std::regex_search(desc, modelMatch, modelRgx)) {
                 model = modelMatch[0];
-                int parenthPos = model.find('(');
+                size_t parenthPos = model.find('(');
                 if (parenthPos != std::string::npos) {
                     model = model.substr(parenthPos+1);
                 }
