@@ -15,6 +15,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <cmath>
 
 #include "dsp/pi4dqpsk.h"
 #include "dsp/dqpsk_sym_extr.h"
@@ -22,7 +23,7 @@
 #include "subscribers.h"
 #include "gps.h"
 
-#define TETRA_PLUGIN_VERSION "0.16.0"
+#define TETRA_PLUGIN_VERSION "0.16.1"
 
 struct TetraMeasSnapshot {
     bool valid = false;
@@ -31,8 +32,10 @@ struct TetraMeasSnapshot {
     // RF / demodulator
     float levelDbfs = -200.0f;
     float peakDbfs = -200.0f;
-    double inputRate = 0.0;      // samples/s actually arriving at the demodulator (10 s average)
+    double inputRate = 0.0;      // samples/s actually arriving at the demodulator (60 s regression)
     double inputRatePpm = 0.0;   // deviation from the nominal 72 kS/s
+    double inputRateUncPpm = 0.0; // 1-sigma uncertainty of inputRatePpm
+    double inputRateWindowS = 0.0;
     float merDb = 0.0f;
     float merExclDb = 0.0f;      // MER with I/Q origin offset removed
     float iqOffsetDb = -100.0f;  // I/Q origin offset (carrier leakage / RX DC) in dB rel. signal
@@ -275,13 +278,31 @@ private:
             auto tnow = std::chrono::steady_clock::now();
             uint64_t cnt = _demod->getSampleCount();
             rateHist.push_back({ tnow, cnt });
-            while (rateHist.size() > 11) { rateHist.erase(rateHist.begin()); }
-            if (rateHist.size() >= 3) {
-                double dt = std::chrono::duration<double>(rateHist.back().first - rateHist.front().first).count();
-                double dn = (double)(rateHist.back().second - rateHist.front().second);
-                if (dt > 1.0) {
-                    s.inputRate = dn / dt;
-                    s.inputRatePpm = (s.inputRate / 72000.0 - 1.0) * 1e6;
+            // 60 s window, least-squares slope: SDRs deliver samples in large
+            // blocks (Pluto: 20 ms), so a plain two-point rate jitters by
+            // one block (+-2000 ppm over 10 s) without any real loss
+            while (rateHist.size() > 61) { rateHist.erase(rateHist.begin()); }
+            if (rateHist.size() >= 5) {
+                const size_t n = rateHist.size();
+                double mt = 0, mc = 0;
+                std::vector<double> t(n), c(n);
+                for (size_t i = 0; i < n; i++) {
+                    t[i] = std::chrono::duration<double>(rateHist[i].first - rateHist[0].first).count();
+                    c[i] = (double)(rateHist[i].second - rateHist[0].second);
+                    mt += t[i]; mc += c[i];
+                }
+                mt /= n; mc /= n;
+                double sxx = 0, sxy = 0;
+                for (size_t i = 0; i < n; i++) { sxx += (t[i] - mt) * (t[i] - mt); sxy += (t[i] - mt) * (c[i] - mc); }
+                if (sxx > 1.0) {
+                    double slope = sxy / sxx;
+                    double res = 0;
+                    for (size_t i = 0; i < n; i++) { double e = c[i] - (mc + slope * (t[i] - mt)); res += e * e; }
+                    double sigma = (n > 2) ? std::sqrt(res / (n - 2) / sxx) : 0.0;
+                    s.inputRate = slope;
+                    s.inputRatePpm = (slope / 72000.0 - 1.0) * 1e6;
+                    s.inputRateUncPpm = sigma / 72000.0 * 1e6;
+                    s.inputRateWindowS = t[n - 1];
                 }
             }
         }

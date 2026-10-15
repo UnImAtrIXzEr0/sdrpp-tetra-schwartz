@@ -65,7 +65,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 16, 0,
+    /* Version:         */ 0, 16, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -450,15 +450,19 @@ private:
         ImGui::Text("Input rate:"); ImGui::SameLine();
         if (m.inputRate <= 0.0) { ImGui::TextDisabled("--"); }
         else {
-            // the PC clock is the reference: up to ~+-50 ppm are clock differences,
-            // larger deficits mean samples get lost before the demodulator
-            ImGui::TextColored(std::fabs(m.inputRatePpm) <= 50.0 ? good : (std::fabs(m.inputRatePpm) <= 300.0 ? warn : bad),
-                               "%.0f S/s (%+.0f ppm)", m.inputRate, m.inputRatePpm);
+            // the PC clock is the reference: some 10 ppm are clock differences;
+            // a deficit clearly beyond the uncertainty means lost samples
+            double tol = 3.0 * m.inputRateUncPpm + 50.0;
+            bool loss = m.inputRatePpm < -tol;
+            bool warnSt = !loss && std::fabs(m.inputRatePpm) > tol;
+            ImGui::TextColored(loss ? bad : (warnSt ? warn : good), "%.0f S/s (%+.0f +-%.0f ppm)", m.inputRate, m.inputRatePpm, m.inputRateUncPpm);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Samples per second arriving at the TETRA demodulator (nominal 72000),\n"
-                                  "measured against the PC clock over 10 s.\n"
-                                  "Clearly below nominal = samples are lost (USB drops, CPU overload,\n"
-                                  "audio device blocking the signal chain).");
+                                  "least-squares rate over the last %.0f s against the PC clock.\n"
+                                  "+-: statistical uncertainty (SDRs deliver samples in blocks).\n"
+                                  "Red = clearly fewer samples than nominal: samples are lost (USB, CPU,\n"
+                                  "audio device). Cross-check: 'Re-locks with timing slip' must not grow.",
+                                  m.inputRateWindowS);
             }
         }
         ImGui::Text("Audio drops:"); ImGui::SameLine();
