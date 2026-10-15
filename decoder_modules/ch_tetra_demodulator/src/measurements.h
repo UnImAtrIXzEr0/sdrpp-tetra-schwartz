@@ -289,6 +289,15 @@ private:
             // (USB drops, CPU overload) show up as a negative deviation.
             auto tnow = std::chrono::steady_clock::now();
             uint64_t cnt = _demod->getSampleCount();
+            // a stopped / restarted source (e.g. sample rate change) is not a
+            // sample loss: start the regression over instead of mixing the gap in
+            if (!rateHist.empty()) {
+                double dt = std::chrono::duration<double>(tnow - rateHist.back().first).count();
+                double inc = (double)(cnt - rateHist.back().second);
+                if (cnt < rateHist.back().second || (dt > 0.2 && (inc < 0.2 * 72000.0 * dt || inc > 3.0 * 72000.0 * dt))) {
+                    rateHist.clear();
+                }
+            }
             rateHist.push_back({ tnow, cnt });
             // 60 s window, least-squares slope: SDRs deliver samples in large
             // blocks (Pluto: 20 ms), so a plain two-point rate jitters by

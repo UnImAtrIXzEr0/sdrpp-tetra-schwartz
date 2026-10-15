@@ -12,6 +12,7 @@
 #include <regex>
 #include <cmath>
 #include <cstring>
+#include <atomic>
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
 
@@ -516,6 +517,14 @@ private:
         if (!_this->xoSet) {
             SmGui::Text("(not set: Pluto config.txt applies)");
         }
+        if (_this->running) {
+            // lost-sample counter from the ADC core: should stay at 0
+            unsigned ov = _this->overflows.load();
+            char ob[64];
+            snprintf(ob, sizeof(ob), "Overflows: %u%s", ov, ov ? " (samples lost)" : "");
+            if (ov) { SmGui::TextColored(ImVec4(0.9f, 0.25f, 0.2f, 1.0f), ob); }
+            else { SmGui::Text(ob); }
+        }
     }
 
     void setBandwidth(int bw) {
@@ -555,9 +564,21 @@ private:
 
         // Receive loop
         int errCount = 0;
+        _this->overflows.store(0);
+        // clear a stale overflow flag of the ADC core
+        { uint32_t v = 0; if (iio_device_reg_read(_this->dev, 0x80000088, &v) == 0) { iio_device_reg_write(_this->dev, 0x80000088, v); } }
         while (true) {
             // Read samples
             ssize_t got = iio_buffer_refill(rxbuf);
+            // ADC core status: bit 2 = overflow, samples were lost between two
+            // buffers (USB or the host did not keep up); write 1 to clear
+            {
+                uint32_t v = 0;
+                if (iio_device_reg_read(_this->dev, 0x80000088, &v) == 0 && (v & 4)) {
+                    _this->overflows.fetch_add(1);
+                    iio_device_reg_write(_this->dev, 0x80000088, v);
+                }
+            }
             if (got < 0) {
                 if (!_this->running) { break; }
                 if (++errCount > 5) {
@@ -607,6 +628,7 @@ private:
     int samplerate = 4000000;
     double xoPpm = 0.0;
     bool xoSet = false;
+    std::atomic<unsigned> overflows { 0 };   // ADC overflow events since start
     double xoNominal = 40000000.0;
     int bandwidth = 0;
     float gain = -1;
