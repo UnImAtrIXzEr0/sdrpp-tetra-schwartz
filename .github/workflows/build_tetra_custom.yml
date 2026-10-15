@@ -66,7 +66,7 @@ jobs:
 
         - name: Headless tests (fresh start, TETRA chain with recording)
           run: |
-            sudo apt-get install -y xvfb libgl1-mesa-dri mesa-utils > /dev/null
+            sudo apt-get install -y xvfb libgl1-mesa-dri mesa-utils python3-numpy > /dev/null
             mkdir -p e2eroot && ln -sfn "$PWD/AppDir/usr" e2eroot/inst
             export E2E_ROOT_DEV="$PWD/e2eroot" E2E_BUILD_DIR="$PWD/build" E2E_BINARY="$PWD/AppDir/usr/bin/sdrpp"
             export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib" SDRPP_APPDIR="$PWD/AppDir" LIBGL_ALWAYS_SOFTWARE=1

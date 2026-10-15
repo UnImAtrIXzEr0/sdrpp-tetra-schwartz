@@ -26,6 +26,39 @@ def recording():
     return os.environ.get("E2E_TEST_FILE", os.path.join(here, "recordings", "tetra_sample.wav"))
 
 
+def upsample_recording(src, dst, factor=8):
+    """Write the 32 kS/s recording at factor x the rate (band-limited FFT
+    interpolation). A real receiver delivers far more than 32 kS/s; at 32 kS/s
+    neither the 25 kHz decoder VFO nor the 250 kHz TX analysis tap fit, so the
+    VFO would be pushed to the band edge. Returns False if numpy is missing."""
+    try:
+        import numpy as np
+        import wave
+    except ImportError:
+        return False
+    with wave.open(src, "rb") as w:
+        ch, sw, fs, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+        raw = w.readframes(n)
+    if ch != 2 or sw != 2:
+        return False
+    a = np.frombuffer(raw, dtype="<i2").astype(np.float64).reshape(-1, 2)
+    x = a[:, 0] + 1j * a[:, 1]
+    X = np.fft.fftshift(np.fft.fft(x))
+    m = len(x) * factor
+    pad = (m - len(x)) // 2
+    Y = np.concatenate([np.zeros(pad, complex), X, np.zeros(m - len(x) - pad, complex)])
+    y = np.fft.ifft(np.fft.ifftshift(Y)) * factor
+    out = np.empty((m, 2), dtype="<i2")
+    out[:, 0] = np.clip(np.round(y.real), -32768, 32767)
+    out[:, 1] = np.clip(np.round(y.imag), -32768, 32767)
+    with wave.open(dst, "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(fs * factor)
+        w.writeframes(out.tobytes())
+    return True
+
+
 def log_has_crash(ctx):
     try:
         with open(ctx.log_path, "r", errors="replace") as f:
@@ -73,7 +106,10 @@ def test_tetra_chain():
     # recording one (the TETRA carrier is then at 468.125 MHz = centre - 3 kHz)
     tmpdir = tempfile.mkdtemp(prefix="tetra_rec_")
     rec = os.path.join(tmpdir, "baseband_468128000Hz_12-00-00_01-01-2026.wav")
-    shutil.copyfile(src, rec)
+    upsampled = upsample_recording(src, rec)
+    if not upsampled:
+        shutil.copyfile(src, rec)
+    stats.info(f"recording: {'upsampled to 256 kS/s' if upsampled else 'original 32 kS/s (numpy missing)'}")
 
     cfg = get_base_config()
     cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
@@ -135,7 +171,7 @@ def test_tetra_chain():
             problems.append(f"MER low ({best.get('mer_db')})")
         if best and not best.get("txa_valid"):
             problems.append("TX analysis produced no result")
-        if best and best.get("txa_valid") and not (15000 < best.get("txa_obw_hz", 0) < 27000):
+        if upsampled and best and best.get("txa_valid") and not (15000 < best.get("txa_obw_hz", 0) < 27000):
             problems.append(f"occupied bandwidth implausible ({best.get('txa_obw_hz')})")
         if problems:
             stats.test_fail("test_tetra_chain", "; ".join(problems))
