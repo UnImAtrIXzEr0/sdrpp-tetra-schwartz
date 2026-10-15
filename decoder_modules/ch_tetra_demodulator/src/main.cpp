@@ -461,6 +461,17 @@ public:
             alarmSt.beep = false;
             return "{\"status\": \"ok\"}";
         }
+        if (cmd == "load_trend_csv") {
+            // open a CSV log in the trends view (documentation, tests)
+            std::lock_guard<std::mutex> lck(trendReqMtx);
+            trendLoadReq = args;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_trend_tab") {
+            std::lock_guard<std::mutex> lck(trendReqMtx);
+            trendTabReq = std::clamp(atoi(args.c_str()), 0, 2);
+            return "{\"status\": \"ok\"}";
+        }
         if (cmd == "make_report") {
             reportReq.store(true);   // made in the GUI thread
             return "{\"status\": \"ok\"}";
@@ -2232,9 +2243,17 @@ private:
             }
         }
         tw::Text("Open a CSV log:");
-        if (trendFile.render("##_tetra_trfile_" + name)) {
-            std::string path = trendFile.expandString(trendFile.path);
-            if (trendFile.pathIsValid()) {
+        std::string reqPath;
+        int tabReq = -1;
+        {
+            std::lock_guard<std::mutex> lck(trendReqMtx);
+            reqPath.swap(trendLoadReq);
+            tabReq = trendTabReq;
+            trendTabReq = -1;
+        }
+        if (trendFile.render("##_tetra_trfile_" + name) || !reqPath.empty()) {
+            std::string path = reqPath.empty() ? trendFile.expandString(trendFile.path) : reqPath;
+            if (!reqPath.empty() || trendFile.pathIsValid()) {
                 std::vector<TetraTrendPoint> pts;
                 if (TetraTrendStore::loadCsv(path, pts, trendFileError)) {
                     trendView.filePts = std::move(pts);
@@ -2260,7 +2279,7 @@ private:
             if (row.draw("Show:") >= 0) { trendView.invalidate(); saveTrendConfig(); }
         }
         if (ImGui::BeginTabBar(CONCAT("##_tetra_trtabs_", name))) {
-            if (ImGui::BeginTabItem(CONCAT("Over time##_tetra_trt0_", name))) {
+            if (ImGui::BeginTabItem(CONCAT("Over time##_tetra_trt0_", name), nullptr, tabReq == 0 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 trendView.draw("##_tetra_trplot_" + name, width, meas.trend(), constView.pal);
                 if (!trendView.fileMode) {
                     tw::TextDisabled("Last 24 h kept in memory; longer: Start CSV log (Measurements)\nand open the file here later.");
@@ -2269,13 +2288,13 @@ private:
                 ImGui::EndTabItem();
             }
             bool evalTab = false;
-            if (ImGui::BeginTabItem(CONCAT("Frequency stability##_tetra_trt1_", name))) {
+            if (ImGui::BeginTabItem(CONCAT("Frequency stability##_tetra_trt1_", name), nullptr, tabReq == 1 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 evalTab = true;
                 updateEval();
                 evalView.drawStability(name, width, constView.pal);
                 ImGui::EndTabItem();
             }
-            if (ImGui::BeginTabItem(CONCAT("Level vs. quality##_tetra_trt2_", name))) {
+            if (ImGui::BeginTabItem(CONCAT("Level vs. quality##_tetra_trt2_", name), nullptr, tabReq == 2 ? ImGuiTabItemFlags_SetSelected : 0)) {
                 evalTab = true;
                 updateEval();
                 bool ch = false;
@@ -3055,6 +3074,9 @@ private:
     TetraTrendView trendView;
     FileSelect trendFile { "%ROOT%/tetra_logs", { "TETRA CSV logs", "*.csv" } };
     std::string trendFileError;
+    std::mutex trendReqMtx;
+    std::string trendLoadReq;   // debug: open this CSV log in the GUI thread
+    int trendTabReq = -1;       // debug: select this trends tab
     bool trendDetached = false, focusTrendWin = false;
     TetraCarrierMonitor carrierMon;
     bool carrDetached = false, focusCarrWin = false;

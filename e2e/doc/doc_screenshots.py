@@ -47,6 +47,44 @@ def base_cfg(rec):
     return cfg
 
 
+def make_demo_log(path, hours=6.0):
+    """Synthetic 6-hour measurement log (fictional values): slow level changes,
+    a period with a weak signal (antenna test), frequency drift with temperature,
+    traffic in the evening hours."""
+    import math
+    import random
+    rnd = random.Random(3)
+    t0 = time.mktime((2026, 10, 14, 14, 0, 0, 0, 0, -1))
+    cols = ["time", "level_dbfs", "level_dbm", "mer_db", "evm_rms_pct", "carrier_offset_hz", "rx_state", "bursts", "sync_lost",
+            "crc_ndb_ok", "crc_ndb_fail", "crc_schf_ok", "crc_schf_fail", "dl_freq_hz", "carrier_vs_sysinfo_hz",
+            "ts1_traffic_pct", "ts2_traffic_pct", "ts3_traffic_pct", "ts4_traffic_pct"]
+    n = int(hours * 3600)
+    fade = 0.0
+    with open(path, "w") as f:
+        f.write(";".join(cols) + "\n")
+        for i in range(n):
+            h = i / 3600.0
+            fade = 0.97 * fade + 0.03 * rnd.gauss(0, 6)
+            lvl = -74 + 3 * math.sin(h / 1.7) + fade
+            if 2.0 < h < 3.2:   # antenna test with attenuator steps
+                lvl -= 8 + 32 * min(1.0, (h - 2.0) / 0.9)
+            mer = max(3.0, min(27.0, (lvl + 118) * 1.2)) + rnd.gauss(0, 0.6)
+            p_err = 1.0 / (1.0 + math.exp((lvl + 109.5) / 1.4))
+            ok_n = 36
+            fail = sum(1 for _ in range(ok_n) if rnd.random() < p_err)
+            lost = 1 if (p_err > 0.3 and rnd.random() < 0.08) else 0
+            rx = 2 if p_err < 0.6 else 0
+            temp = 3 * math.sin((h - 1.0) / 6.0 * math.pi)
+            ppb = 38 + 6 * temp + rnd.gauss(0, 1.5)
+            busy = 1.0 if 3.5 < h < 5.5 else 0.25
+            ts = [0.0] + [max(0.0, min(100.0, busy * (35 + 25 * math.sin(i / 200.0 + k)) + rnd.gauss(0, 5))) for k in range(3)]
+            v = [time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t0 + i)), f"{lvl + 55:.1f}", f"{lvl:.1f}",
+                 f"{mer:.2f}" if rx == 2 else "", f"{100 * 10 ** (-mer / 20):.2f}" if rx == 2 else "", f"{rnd.gauss(4, 2):.1f}",
+                 str(rx), str(int(72 * (1 - p_err))), str(lost), str(ok_n - fail), str(fail), "4", "0",
+                 "439100000", f"{ppb * 0.4391:.2f}"] + [f"{x:.1f}" for x in ts]
+            f.write(";".join(v) + "\n")
+
+
 def solo(ctx, win, rect):
     x, y, w, h = rect
     ctx.module_cmd("TETRA Demodulator", "only_window", f"{win} {x} {y} {w} {h}")
@@ -79,6 +117,21 @@ def session_a():
         rect = (380, 30, 860, 950)
         for win in ["const", "network", "stations", "txa", "trends", "carriers"]:
             solo(ctx, win, rect)
+        # trends, stability and quality from a synthetic 6-hour log
+        demo = os.path.join(tmp, "tetra_demo_log.csv")
+        make_demo_log(demo)
+        ctx.module_cmd("TETRA Demodulator", "only_window", "trends 380 30 860 950")
+        time.sleep(1.0)
+        ctx.module_cmd("TETRA Demodulator", "load_trend_csv", demo)
+        time.sleep(2.5)
+        grab("win_trends_log", rect)
+        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "1")
+        time.sleep(2.5)
+        grab("win_stability", rect)
+        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "2")
+        time.sleep(2.5)
+        grab("win_quality", rect)
+        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "0")
         ctx.module_cmd("TETRA Demodulator", "set_windows", "0")
         time.sleep(1.5)
         grab("menu", (0, 0, 380, H))

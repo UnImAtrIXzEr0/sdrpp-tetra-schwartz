@@ -407,13 +407,17 @@ private:
         }
         // min..max band and mean line
         std::ostringstream band, line;
-        bool pen = false;
+        // a gap only where seconds are missing (short periods have fewer
+        // points than pixels)
+        const double secPerCol = (t1 - t0) / cols;
+        int lastK = -1000000;
         for (int k = 0; k < cols; k++) {
-            if (!n[k]) { pen = false; continue; }
+            if (!n[k]) { continue; }
+            bool pen = (k - lastK) * secPerCol <= 2.5;
+            lastK = k;
             double x = L + k + 0.5;
             if (cmax[k] > cmin[k]) { band << "M" << x << " " << Y(cmax[k]) << "V" << Y(cmin[k]); }
             line << (pen ? "L" : "M") << x << " " << Y(sum[k] / n[k]);
-            pen = true;
         }
         s << "<path d=\"" << band.str() << "\" stroke=\"" << col << "\" stroke-opacity=\"0.25\" fill=\"none\"/>";
         s << "<path d=\"" << line.str() << "\" stroke=\"" << col << "\" stroke-width=\"1.5\" fill=\"none\"/></svg>\n";
@@ -449,13 +453,16 @@ private:
             }
             // smooth over 5 pixels so the four lines stay readable
             std::ostringstream line;
-            bool pen = false;
+            const double secPerCol = (t1 - t0) / nc;
+            const int half = (std::max)(2, (int)std::ceil(2.0 / secPerCol));   // at least 5 pixels or about 5 s
+            int lastK = -1000000;
             for (int k = 0; k < nc; k++) {
                 double a = 0; int c = 0;
-                for (int j = (std::max)(0, k - 2); j <= (std::min)(nc - 1, k + 2); j++) { a += sum[j]; c += n[j]; }
-                if (!c) { pen = false; continue; }
+                for (int j = (std::max)(0, k - half); j <= (std::min)(nc - 1, k + half); j++) { a += sum[j]; c += n[j]; }
+                if (!c) { continue; }
+                bool pen = (k - lastK) * secPerCol <= 2.5;
+                lastK = k;
                 line << (pen ? "L" : "M") << L + k + 0.5 << " " << Y(a / c);
-                pen = true;
             }
             s << "<path d=\"" << line.str() << "\" stroke=\"" << cols[t] << "\" stroke-width=\"1.4\" fill=\"none\"/>";
         }
