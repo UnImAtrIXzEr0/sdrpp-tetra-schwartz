@@ -565,6 +565,7 @@ private:
         // Receive loop
         int errCount = 0;
         _this->overflows.store(0);
+        bool firstBuf = true;
         // clear a stale overflow flag of the ADC core
         { uint32_t v = 0; if (iio_device_reg_read(_this->dev, 0x80000088, &v) == 0) { iio_device_reg_write(_this->dev, 0x80000088, v); } }
         while (true) {
@@ -572,12 +573,14 @@ private:
             ssize_t got = iio_buffer_refill(rxbuf);
             // ADC core status: bit 2 = overflow, samples were lost between two
             // buffers (USB or the host did not keep up); write 1 to clear
+            // (the first buffer always overflows: DMA runs before the first read)
             {
                 uint32_t v = 0;
                 if (iio_device_reg_read(_this->dev, 0x80000088, &v) == 0 && (v & 4)) {
-                    _this->overflows.fetch_add(1);
+                    if (!firstBuf) { _this->overflows.fetch_add(1); }
                     iio_device_reg_write(_this->dev, 0x80000088, v);
                 }
+                firstBuf = false;
             }
             if (got < 0) {
                 if (!_this->running) { break; }
