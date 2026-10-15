@@ -294,7 +294,7 @@ private:
             if (!rateHist.empty()) {
                 double dt = std::chrono::duration<double>(tnow - rateHist.back().first).count();
                 double inc = (double)(cnt - rateHist.back().second);
-                if (cnt < rateHist.back().second || (dt > 0.2 && (inc < 0.2 * 72000.0 * dt || inc > 3.0 * 72000.0 * dt))) {
+                if (cnt < rateHist.back().second || (dt > 0.2 && inc < 0.2 * 72000.0 * dt)) {
                     rateHist.clear();
                 }
             }
