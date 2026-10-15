@@ -164,7 +164,7 @@ namespace dsp::multirate {
             double tapTransWidth = tapBandwidth * 0.1;
             taps::free(rtaps);
             rtaps = taps::lowPass(tapBandwidth, tapTransWidth, tapSamplerate);
-            for (int i = 0; i < rtaps.size; i++) { rtaps.taps[i] *= (float)interp; }
+            for (int i = 0; i < (int)rtaps.size; i++) { rtaps.taps[i] *= (float)interp; }
             resamp.setRatio(interp, decim, rtaps);
 
 //            printf("[Resamp] predec: %d, interp: %d, decim: %d, inacc: %lf%%, taps: %d\n", predecRatio, interp, decim, error, rtaps.size);

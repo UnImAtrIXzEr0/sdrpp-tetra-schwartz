@@ -29,7 +29,7 @@ namespace dsp::multirate {
         // Fill phases
         int totTapCount = phaseCount * pb.tapsPerPhase;
         for (int i = 0; i < totTapCount; i++) {
-            pb.phases[(phaseCount - 1) - (i % phaseCount)][i / phaseCount] = (i < taps.size) ? taps.taps[i] : 0;
+            pb.phases[(phaseCount - 1) - (i % phaseCount)][i / phaseCount] = (i < (int)taps.size) ? taps.taps[i] : 0;
         }
 
         // int currentTap = 0;

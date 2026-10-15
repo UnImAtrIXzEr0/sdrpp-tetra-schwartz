@@ -331,13 +331,17 @@ jobs:
           shell: pwsh
           run: |
             if (Test-Path build.log) {
+              # unique source locations (the same header warning repeats per project)
               $w = Select-String -Path build.log -Pattern 'warning C[0-9]+' |
-                Where-Object { $_.Line -match 'ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|module_manager|menus\\source|theme_manager|loading_screen|credits|core\.cpp' } |
-                ForEach-Object { ($_.Line -replace '[\r\n]', ' ') } | Sort-Object -Unique
-              Write-Host "warnings in edition code: $($w.Count)"
-              $w | Select-Object -First 40 | ForEach-Object {
-                $m = $_; if ($m.Length -gt 400) { $m = $m.Substring(0, 400) }
-                Write-Output "::warning::$m"
+                ForEach-Object { $_.Line -replace '[\r\n]', ' ' } |
+                Where-Object { $_ -match 'ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|module_manager|menus\\source|theme_manager|loading_screen|credits|core\.cpp' } |
+                ForEach-Object { if ($_ -match '([A-Za-z0-9_\\.\-]+\(\d+,\d+\)): warning (C\d+)') { ($matches[1] -replace '^.*sdrpp-tetra-schwartz\\', '') + ' ' + $matches[2] } } |
+                Sort-Object -Unique
+              Write-Host "warning locations: $($w.Count)"
+              $w | ForEach-Object { Write-Host $_ }
+              if ($w.Count -gt 0) {
+                $all = ($w | Select-Object -First 60) -join ' ; '
+                Write-Output "::warning::$($w.Count) warning locations: $all"
               }
             }
 
