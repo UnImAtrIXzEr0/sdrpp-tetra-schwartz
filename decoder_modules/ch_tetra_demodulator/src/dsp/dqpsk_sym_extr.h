@@ -11,6 +11,7 @@
 #include <dsp/math/step.h>
 #include <math.h>
 #include <atomic>
+#include <complex>
 
 #define SYNC_DETECT_BUF 4096
 #define SYNC_DETECT_DISPLAY 256
@@ -54,6 +55,14 @@ namespace dsp {
         // decoding of transmitters with strong carrier leakage)
         void setIqOffsetCompensation(bool en) { iqComp.store(en); }
         bool getIqOffsetCompensation() { return iqComp.load(); }
+        // I/Q imbalance of the transmitter: image rejection ratio (dB) from the
+        // model r = mu*d + nu*conj(d) + c; independent of the carrier phase
+        float getImageRejectionDb() { return irrDb.load(); }
+        float getImbalanceRatio() { return imbRatio.load(); }
+        // RMS amplitude error (%) and RMS phase error (deg) of the symbols
+        // around the fitted model: phase >> amplitude points to phase noise
+        float getAmpErrPct() { return ampErrPct.load(); }
+        float getPhaseErrDeg() { return phaseErrDeg.load(); }
 
     private:
         std::atomic<float> merDb { 0.0f };
@@ -62,6 +71,17 @@ namespace dsp {
         std::atomic<float> iqOffsetDb { -100.0f };
         std::atomic<float> merExclDb { 0.0f };
         std::atomic<bool> iqComp { false };
+        std::atomic<float> irrDb { 0.0f };
+        std::atomic<float> imbRatio { 0.0f };
+        std::atomic<float> ampErrPct { 0.0f };
+        std::atomic<float> phaseErrDeg { 0.0f };
+        void solveIqModel();
+        std::complex<double> lsG[3][3] = {};
+        std::complex<double> lsH[3] = {};
+        std::complex<double> lsMu { 1.0, 0.0 }, lsNu { 0.0, 0.0 }, lsC { 0.0, 0.0 };
+        bool lsValid = false;
+        double sumAmpErr2 = 0.0, sumPhErr2 = 0.0;
+        long splitCount = 0;
         double sumRawRe = 0.0, sumRawIm = 0.0;
         double prevOffRe = 0.0, prevOffIm = 0.0; // offset estimate of the previous window (raw frame)
         double sumErrEx = 0.0;

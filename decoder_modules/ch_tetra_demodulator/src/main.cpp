@@ -33,6 +33,7 @@
 #include <gui/tuner.h>
 #include "gui_widgets.h"
 #include "tetra_colors.h"
+#include "tx_analyzer.h"
 #include "measurements.h"
 #include "subscribers.h"
 #include "radioid.h"
@@ -63,7 +64,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 14, 5,
+    /* Version:         */ 0, 15, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -98,6 +99,13 @@ public:
         if (config.conf[name].contains("constDetached")) { constDetached = config.conf[name]["constDetached"]; }
         if (config.conf[name].contains("subsDetached")) { subsDetached = config.conf[name]["subsDetached"]; }
         if (config.conf[name].contains("netDetached")) { netDetached = config.conf[name]["netDetached"]; }
+        if (config.conf[name].contains("txaDetached")) { txaDetached = config.conf[name]["txaDetached"]; }
+        if (config.conf[name].contains("txaRun")) { txaRun = config.conf[name]["txaRun"]; }
+        if (config.conf[name].contains("txaFft")) { txaFftIdx = std::clamp((int)config.conf[name]["txaFft"], 0, 2); }
+        if (config.conf[name].contains("txaAvg")) { txaAvg = std::clamp((int)config.conf[name]["txaAvg"], 1, 100); }
+        if (config.conf[name].contains("txaLimits") && config.conf[name]["txaLimits"].is_array() && config.conf[name]["txaLimits"].size() == 3) {
+            for (int i = 0; i < 3; i++) { txaLimit[i] = config.conf[name]["txaLimits"][i]; }
+        }
         if (config.conf[name].contains("compOriginOffset")) { compOriginOffset = config.conf[name]["compOriginOffset"]; }
         if (config.conf[name].contains("afc")) { afcEnabled = config.conf[name]["afc"]; }
         if (config.conf[name].contains("autoGain")) { autoGain = config.conf[name]["autoGain"]; }
@@ -176,6 +184,7 @@ public:
         windowDrawHandler.ctx = this;
         windowDrawHandler.handler = [](ImGuiContext* gctx, void* ctx) {
             auto* m = (TetraDemodulatorModule*)ctx;
+            m->txaLoop();
             m->controlLoops();
             m->drawFloatingWindows();
         };
@@ -188,6 +197,7 @@ public:
 
     ~TetraDemodulatorModule() {
         meas.stop();
+        txa.stop();
         if(isEnabled()) {
             disable();
         }
@@ -237,6 +247,7 @@ public:
 
         // Stop the measurement thread first: it reads the blocks and the VFO
         meas.stop();
+        txa.stop();
 
         // Stop upstream first to drain data flow into the chain
         mainDemodulator.stop();
@@ -259,6 +270,7 @@ public:
         // upstream restarts and they resume naturally.
 
         sigpath::vfoManager.deleteVFO(vfo);
+        vfo = nullptr;
         enabled = false;
     }
 
@@ -378,6 +390,42 @@ private:
                                   "Cause: transmitter LO leakage, or the SDR's DC offset if the SDR\n"
                                   "is tuned exactly to the carrier. Test: move the SDR center away\n"
                                   "(VFO offset / Offset Tuning). If the offset stays, it is the transmitter.");
+            }
+        }
+
+        ImGui::Text("I/Q imbalance:"); ImGui::SameLine();
+        if (!(m.valid && m.symSync)) { ImGui::TextDisabled("--"); }
+        else {
+            float irr = _this->symbolExtractor.getImageRejectionDb();
+            double k = _this->symbolExtractor.getImbalanceRatio();
+            ImGui::TextColored(irr >= 30.0f ? good : (irr >= 20.0f ? warn : bad), "IRR %4.1f dB", irr);
+            ImGui::SameLine();
+            double gdb = (k < 0.99) ? 20.0 * std::log10((1.0 + k) / (1.0 - k)) : 99.0;
+            double pdeg = 2.0 * std::asin((std::min)(k, 1.0)) * 180.0 / 3.14159265;
+            ImGui::TextDisabled("(= %.2f dB or %.1f deg)", gdb, pdeg);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Image rejection of the transmitter's I/Q modulator, from a fit of\n"
+                                  "r = mu*d + nu*conj(d) + c to the symbols. Shown as an equivalent pure\n"
+                                  "gain imbalance or pure quadrature error. Typical SDR transmitters\n"
+                                  "without calibration: 25-35 dB. Shows as two different point cloud sizes\n"
+                                  "and contributes to EVM and to unequal lower/upper shoulders.");
+            }
+        }
+        ImGui::Text("Error split:"); ImGui::SameLine();
+        if (!(m.valid && m.symSync)) { ImGui::TextDisabled("--"); }
+        else {
+            float ph = _this->symbolExtractor.getPhaseErrDeg();
+            float am = _this->symbolExtractor.getAmpErrPct();
+            ImGui::TextColored(val, "phase %.2f deg", ph); ImGui::SameLine();
+            ImGui::TextColored(val, "amplitude %.2f %%", am); ImGui::SameLine();
+            double rel = (am > 1e-3f) ? (ph * 3.14159265 / 180.0) / (am / 100.0) : 0.0;
+            const char* why = rel > 2.0 ? "phase noise" : (rel < 0.5 ? "amplitude (AM)" : "noise-like");
+            ImGui::TextDisabled("-> %s", why);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("RMS phase and amplitude error of the symbols around the fitted model.\n"
+                                  "Both similar: additive noise (low level, interference).\n"
+                                  "Phase clearly larger: phase noise / jitter of an oscillator.\n"
+                                  "Amplitude clearly larger: compression, AM, level ripple.");
             }
         }
 
@@ -660,6 +708,13 @@ private:
             config.release(true);
             if (_this->netDetached) { _this->focusNetWin = true; }
         }
+        ImGui::SameLine();
+        if (ImGui::Checkbox(CONCAT("TX analysis##_tetra_tdet_top_", _this->name), &_this->txaDetached)) {
+            config.acquire();
+            config.conf[_this->name]["txaDetached"] = _this->txaDetached;
+            config.release(true);
+            if (_this->txaDetached) { _this->focusTxaWin = true; }
+        }
         if (!_this->constDetached) {
             _this->drawConstellation(menuWidth);
         }
@@ -672,6 +727,15 @@ private:
                 if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
             } else {
                 drawMeasurements(_this, menuWidth);
+            }
+        }
+        if (ImGui::CollapsingHeader(CONCAT("TX analysis (spectrum)##_tetra_txa_", _this->name))) {
+            if (_this->txaDetached) {
+                ImGui::TextDisabled("Shown in its own window.");
+                ImGui::SameLine();
+                if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
+            } else {
+                _this->drawTxAnalysis(menuWidth);
             }
         }
         if (ImGui::CollapsingHeader(CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) {
@@ -1550,8 +1614,291 @@ private:
         drawCellDetails(menuWidth);
     }
 
+    // ---------------- TX analysis (spectrum, adjacent channel power) ----------------
+
+    void txaLoop() {
+        if (!enabled || !vfo || !txaRun) {
+            if (txa.isRunning()) { txa.stop(); }
+            return;
+        }
+        double off = vfo->wtfVFO->centerOffset;
+        if (!txa.isRunning()) {
+            txa.setFftSize(4096 << txaFftIdx);
+            txa.setAverages(txaAvg);
+            txa.start(name + " TX analysis", off);
+        } else {
+            txa.setOffset(off);
+        }
+        TetraMeasSnapshot m = meas.get();
+        txa.setCarrierOffsetHz((m.valid && m.symSync) ? m.carrierOffsetHz : 0.0);
+    }
+
+    void saveTxaConfig() {
+        config.acquire();
+        config.conf[name]["txaRun"] = txaRun;
+        config.conf[name]["txaFft"] = txaFftIdx;
+        config.conf[name]["txaAvg"] = txaAvg;
+        config.conf[name]["txaLimits"] = json::array({ txaLimit[0], txaLimit[1], txaLimit[2] });
+        config.release(true);
+    }
+
+    void drawTxaSpectrum(const TxAnalysisResult& r, float width, double rxDcHz) {
+        const float h = 230.0f * style::uiScale;
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        if (window->SkipItems) { return; }
+        ImVec2 p0 = window->DC.CursorPos;
+        ImRect bb(p0, ImVec2(p0.x + width, p0.y + h));
+        ImGui::ItemSize(ImVec2(width, h));
+        if (!ImGui::ItemAdd(bb, ImGui::GetID(CONCAT("##_tetra_txaplot_", name)))) { return; }
+        // colours follow the constellation palette of the theme
+        TetraConstellationView::Palette pal = constView.pal;
+        ImDrawList* dl = window->DrawList;
+        dl->AddRectFilled(bb.Min, bb.Max, pal.bg);
+        dl->AddRect(bb.Min, bb.Max, pal.border);
+        const float lm = 34.0f * style::uiScale, bm = 16.0f * style::uiScale;
+        ImRect pr(ImVec2(bb.Min.x + lm, bb.Min.y + 4), ImVec2(bb.Max.x - 6, bb.Max.y - bm));
+        const double span = 100000.0;
+        double top = std::ceil((r.inbandDensityDb + 10.0) / 10.0) * 10.0;
+        double bot = top - 100.0;
+        auto X = [&](double f) { return (float)(pr.Min.x + (f + span) / (2.0 * span) * pr.GetWidth()); };
+        auto Y = [&](double db) {
+            double t = (top - db) / (top - bot);
+            t = std::clamp(t, 0.0, 1.0);
+            return (float)(pr.Min.y + t * pr.GetHeight());
+        };
+        char buf[32];
+        for (double db = top; db >= bot - 0.1; db -= 10.0) {
+            dl->AddLine(ImVec2(pr.Min.x, Y(db)), ImVec2(pr.Max.x, Y(db)), pal.grid);
+            snprintf(buf, sizeof(buf), "%.0f", db);
+            dl->AddText(ImVec2(bb.Min.x + 3, Y(db) - ImGui::GetFontSize() * 0.5f), pal.text, buf);
+        }
+        for (double f = -span; f <= span + 1; f += 25000.0) {
+            dl->AddLine(ImVec2(X(f), pr.Min.y), ImVec2(X(f), pr.Max.y), pal.grid);
+            snprintf(buf, sizeof(buf), "%+.0f", f / 1000.0);
+            dl->AddText(ImVec2(X(f) - 10, pr.Max.y + 1), pal.text, f == 0 ? "0" : buf);
+        }
+        // adjacent channel windows
+        for (int i = 0; i < 6; i++) {
+            double c = TxMath::ACP_OFF[i];
+            double hw = (1.0 + TxMath::ALPHA) * TxMath::RS / 2.0;
+            dl->AddRectFilled(ImVec2(X(c - hw), pr.Min.y), ImVec2(X(c + hw), pr.Max.y), (pal.rmsZone & 0x00FFFFFF) | 0x18000000);
+        }
+        dl->PushClipRect(pr.Min, pr.Max, true);
+        const int n = (int)r.psdDb.size();
+        auto curve = [&](const std::vector<float>& v, ImU32 col, float th) {
+            if ((int)v.size() != n || n < 2) { return; }
+            // one point per pixel column: max of the bins (keeps narrow lines visible)
+            int cols = (int)pr.GetWidth();
+            ImVec2 prev;
+            bool have = false;
+            for (int c = 0; c < cols; c++) {
+                double fa = -span + 2.0 * span * c / cols, fb = -span + 2.0 * span * (c + 1) / cols;
+                int ka = (int)std::floor(fa / r.binHz) + n / 2, kb = (int)std::ceil(fb / r.binHz) + n / 2;
+                ka = std::clamp(ka, 0, n - 1); kb = std::clamp(kb, ka, n - 1);
+                float mx = -400.0f;
+                for (int k = ka; k <= kb; k++) { mx = (std::max)(mx, v[k]); }
+                ImVec2 pt(pr.Min.x + c, Y(mx));
+                if (have) { dl->AddLine(prev, pt, col, th); }
+                prev = pt;
+                have = true;
+            }
+        };
+        curve(r.floorDb, IM_COL32(140, 140, 140, 200), 1.0f);
+        // ideal TETRA spectrum, scaled to the measured in-band density
+        {
+            ImVec2 prev;
+            bool have = false;
+            for (double f = -13000; f <= 13000; f += 250) {
+                double w = TxMath::rcWeight(f);
+                double db = w > 1e-12 ? r.inbandDensityDb + 10.0 * std::log10(w) : bot;
+                ImVec2 pt(X(f), Y(db));
+                if (have) { dl->AddLine(prev, pt, pal.dotGood, 1.0f); }
+                prev = pt;
+                have = true;
+            }
+        }
+        curve(r.psdDb, ImGui::GetColorU32(ImGuiCol_PlotLines), 1.2f * style::uiScale);
+        if (std::fabs(rxDcHz) < span) {
+            dl->AddLine(ImVec2(X(rxDcHz), pr.Min.y), ImVec2(X(rxDcHz), pr.Max.y), pal.dotBad, 1.0f);
+            dl->AddText(ImVec2(X(rxDcHz) + 3, pr.Min.y + 2), pal.dotBad, "RX DC");
+        }
+        dl->PopClipRect();
+        snprintf(buf, sizeof(buf), "RBW %.0f Hz", r.rbwHz);
+        dl->AddText(ImVec2(pr.Max.x - ImGui::CalcTextSize(buf).x - 4, pr.Min.y + 2), pal.text, buf);
+    }
+
+    void drawTxAnalysis(float menuWidth) {
+        if (ImGui::Checkbox(CONCAT("Run analysis (250 kHz tap)##_tetra_txarun_", name), &txaRun)) { saveTxaConfig(); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Separate 250 kHz wide tap around the TETRA channel (not shown on the waterfall).\n"
+                              "Costs some CPU; switch off when not needed.");
+        }
+        if (!txaRun) {
+            ImGui::TextDisabled("Spectrum, adjacent channel power, occupied bandwidth,\nshoulders and carrier leakage of the received carrier.");
+            return;
+        }
+        ImGui::SetNextItemWidth(menuWidth * 0.45f);
+        const char* rbws = "122 Hz (4k FFT)\0" "61 Hz (8k FFT)\0" "31 Hz (16k FFT)\0";
+        if (ImGui::Combo(CONCAT("RBW##_tetra_txarbw_", name), &txaFftIdx, rbws)) {
+            txa.setFftSize(4096 << txaFftIdx);
+            saveTxaConfig();
+        }
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(menuWidth * 0.3f);
+        if (ImGui::SliderInt(CONCAT("Avg##_tetra_txaavg_", name), &txaAvg, 1, 100)) {
+            txa.setAverages(txaAvg);
+            saveTxaConfig();
+        }
+        if (ImGui::SmallButton(CONCAT("Reset average##_tetra_txarst_", name))) { txa.resetAverage(); }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(CONCAT("Store floor##_tetra_txaflr_", name))) { txa.storeFloor(); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Stores the current averaged spectrum as the receiver's measurement floor.\n"
+                              "Do this with the transmitter off or the SDR input terminated (50 ohm),\n"
+                              "same gain and sample rate. Results close to the floor are marked.\n"
+                              "Without a stored floor, the noise far from the carrier is used.");
+        }
+        if (txa.hasFloor()) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(CONCAT("Clear floor##_tetra_txaflc_", name))) { txa.clearFloor(); }
+        }
+
+        TxAnalysisResult r = txa.get();
+        TetraMeasSnapshot m = meas.get();
+        ImVec4 good = tc::good(), warn = tc::warn(), bad = tc::bad(), val = tc::val();
+
+        // receiver DC position relative to the channel
+        double centerOff = vfo ? vfo->wtfVFO->centerOffset : 0.0;
+        double rxDcHz = -centerOff;   // the SDR's own DC, seen from the channel centre
+        if (std::fabs(centerOff) < 15000.0) {
+            ImGui::TextColored(bad, "Channel is on the receiver's centre frequency.");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("The SDR's own DC offset lands on the carrier: I/Q offset and carrier\n"
+                                  "leakage then include the receiver. Tune the SDR so that the channel\n"
+                                  "is at least ~100 kHz away from the centre.");
+            }
+        } else if (std::fabs(rxDcHz) < 90000.0) {
+            ImGui::TextColored(warn, "Receiver DC at %+.0f kHz falls into the analysis span.", rxDcHz / 1000.0);
+        }
+        if (!r.valid) {
+            ImGui::TextDisabled("collecting samples ...");
+            return;
+        }
+        if (r.peakDbfs > -3.0) {
+            ImGui::TextColored(bad, "Tap peak %.1f dBFS: overload risk, reduce RF gain.", r.peakDbfs);
+        }
+
+        drawTxaSpectrum(r, menuWidth, rxDcHz);
+        ImGui::TextDisabled("measured spectrum, ideal TETRA spectrum (thin), stored floor (grey), ACP windows (shaded)");
+
+        // Adjacent channel power table
+        auto acpCell = [&](double v, double floorDb, float limit) {
+            bool limited = v - floorDb < 3.0;
+            ImVec4 c = limited ? tc::grey() : (v <= limit ? good : bad);
+            ImGui::TextColored(c, "%6.1f%s", v, limited ? " *" : "");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(limited ? "Within 3 dB of the measurement floor (%.1f dBc):\nthe true value may be lower (receiver limited)."
+                                          : "Measurement floor %.1f dBc", floorDb);
+            }
+        };
+        ImGui::Text("Channel power:"); ImGui::SameLine();
+        ImGui::TextColored(val, "%.1f dBFS", r.chanPowerDbfs);
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%d avg)", r.averages);
+        if (ImGui::BeginTable(CONCAT("##_tetra_acp_", name), 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("ACP");
+            ImGui::TableSetupColumn("lower dBc");
+            ImGui::TableSetupColumn("upper dBc");
+            ImGui::TableSetupColumn("limit");
+            ImGui::TableSetupColumn("floor");
+            ImGui::TableHeadersRow();
+            const char* lbl[3] = { "+-25 kHz", "+-50 kHz", "+-75 kHz" };
+            for (int i = 0; i < 3; i++) {
+                int lo = 2 - i, hi = 3 + i;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(lbl[i]);
+                ImGui::TableSetColumnIndex(1); acpCell(r.acpDbc[lo], r.acpFloorDbc[lo], txaLimit[i]);
+                ImGui::TableSetColumnIndex(2); acpCell(r.acpDbc[hi], r.acpFloorDbc[hi], txaLimit[i]);
+                ImGui::TableSetColumnIndex(3); ImGui::Text("%.0f", txaLimit[i]);
+                ImGui::TableSetColumnIndex(4); ImGui::TextDisabled("%.0f", (std::max)(r.acpFloorDbc[lo], r.acpFloorDbc[hi]));
+            }
+            ImGui::EndTable();
+        }
+        if (ImGui::TreeNode(CONCAT("ACP limits##_tetra_acplim_", name))) {
+            bool ch = false;
+            ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("25 kHz##_tetra_l25_", name), &txaLimit[0], 0, 0, "%.0f dBc");
+            ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("50 kHz##_tetra_l50_", name), &txaLimit[1], 0, 0, "%.0f dBc");
+            ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("75 kHz##_tetra_l75_", name), &txaLimit[2], 0, 0, "%.0f dBc");
+            if (ch) { saveTxaConfig(); }
+            ImGui::TextDisabled("Measured through the TETRA filter (RRC, 18 ksym/s, a=0.35)\nin the adjacent channel and in the own channel.\nDefaults: typical ETSI TETRA values, please check against the standard.");
+            ImGui::TreePop();
+        }
+
+        // Bandwidth and spectral shape
+        ImGui::Text("Occupied BW (99%%):"); ImGui::SameLine();
+        ImGui::TextColored(std::fabs(r.obwHz - r.obwIdealHz) < 1500.0 ? good : warn, "%.2f kHz", r.obwHz / 1000.0);
+        ImGui::SameLine(); ImGui::TextDisabled("(ideal %.2f)", r.obwIdealHz / 1000.0);
+        ImGui::Text("-26 dB bandwidth:"); ImGui::SameLine();
+        ImGui::TextColored(std::fabs(r.bw26Hz - r.bw26IdealHz) < 2000.0 ? good : warn, "%.2f kHz", r.bw26Hz / 1000.0);
+        ImGui::SameLine(); ImGui::TextDisabled("(ideal %.2f)", r.bw26IdealHz / 1000.0);
+        ImGui::Text("Shoulders (13.5-20 kHz):"); ImGui::SameLine();
+        {
+            auto shCol = [&](double v) { return (v - r.shoulderFloorDb < 3.0) ? tc::grey() : (v <= -45.0 ? good : (v <= -35.0 ? warn : bad)); };
+            ImGui::TextColored(shCol(r.shoulderLoDb), "%.1f", r.shoulderLoDb); ImGui::SameLine();
+            ImGui::Text("/"); ImGui::SameLine();
+            ImGui::TextColored(shCol(r.shoulderHiDb), "%.1f dB", r.shoulderHiDb);
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Spectral density just outside the TETRA spectrum, relative to the in-band density.\n"
+                                  "An ideal transmitter has nothing there. Raised shoulders = spectral regrowth from\n"
+                                  "non-linearity (PA compression, DAC clipping, too high digital level).\n"
+                                  "Floor here: %.1f dB. Different lower/upper values point to I/Q imbalance or IMD asymmetry.",
+                                  r.shoulderFloorDb);
+            }
+        }
+        ImGui::Text("Edge slope (-6..-30 dB):"); ImGui::SameLine();
+        if (r.slopeLoDbPerKHz > 0 && r.slopeHiDbPerKHz > 0) {
+            ImGui::TextColored(val, "%.1f / %.1f dB/kHz", r.slopeLoDbPerKHz, r.slopeHiDbPerKHz);
+            ImGui::SameLine(); ImGui::TextDisabled("(ideal %.1f)", r.slopeIdealDbPerKHz);
+        } else {
+            ImGui::TextDisabled("-- (not enough dynamic range)");
+        }
+
+        // Carrier leakage / DC: spectral line and constellation
+        ImGui::Text("Carrier line (spectrum):"); ImGui::SameLine();
+        if (r.carrierLeakBelow) { ImGui::TextColored(good, "< %.1f dBc", r.carrierLeakDbc); }
+        else { ImGui::TextColored(r.carrierLeakDbc <= -30.0 ? good : (r.carrierLeakDbc <= -20.0 ? warn : bad), "%.1f dBc", r.carrierLeakDbc); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Unmodulated line at the carrier (transmitter LO leakage), found with a 3.8 Hz\n"
+                              "resolution FFT. Detection limit about -35 dBc; the constellation value below\n"
+                              "is far more sensitive.");
+        }
+        ImGui::Text("I/Q offset (constellation):"); ImGui::SameLine();
+        if (m.valid && m.symSync) {
+            ImGui::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%.1f dB", m.iqOffsetDb);
+        } else { ImGui::TextDisabled("--"); }
+        ImGui::Text("Noise density:"); ImGui::SameLine();
+        ImGui::TextDisabled("%.1f dBFS/bin, in-band %.1f dBFS/bin", r.noiseDensityDb, r.inbandDensityDb);
+    }
+
     void drawFloatingWindows() {
         if (!enabled) { return; }
+        if (txaDetached) {
+            ImGui::SetNextWindowSize(ImVec2(560, 760), ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowPos(ImVec2(520, 100), ImGuiCond_FirstUseEver);
+            bool open = true;
+            std::string title = "TETRA TX analysis (" + name + ")##_tetra_twin_" + name;
+            if (focusTxaWin) { ImGui::SetNextWindowFocus(); focusTxaWin = false; }
+            if (ImGui::Begin(title.c_str(), &open)) {
+                drawTxAnalysis(ImGui::GetContentRegionAvail().x);
+            }
+            ImGui::End();
+            if (!open) {
+                txaDetached = false;
+                config.acquire();
+                config.conf[name]["txaDetached"] = false;
+                config.release(true);
+            }
+        }
         if (constDetached) {
             ImGui::SetNextWindowSize(ImVec2(420, 720), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(470, 80), ImGuiCond_FirstUseEver);
@@ -1991,6 +2338,13 @@ private:
     bool focusSubsWin = false;
     bool netDetached = false;
     bool focusNetWin = false;
+    TetraTxAnalyzer txa;
+    bool txaRun = false;
+    bool txaDetached = false;
+    bool focusTxaWin = false;
+    int txaFftIdx = 1;        // 0: 4096, 1: 8192, 2: 16384
+    int txaAvg = 20;
+    float txaLimit[3] = { -60.0f, -70.0f, -70.0f };   // dBc at 25 / 50 / 75 kHz
     bool focusConstWin = false;
     EventHandler<ImGuiContext*> windowDrawHandler;
 

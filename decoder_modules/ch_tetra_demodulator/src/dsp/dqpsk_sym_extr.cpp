@@ -1,6 +1,54 @@
 #include "dqpsk_sym_extr.h"
 
 namespace dsp {
+    // Solve the 3x3 normal equations of the I/Q model (Gauss-Jordan, pivoting),
+    // publish image rejection and the phase / amplitude error split.
+    void DQPSKSymbolExtractor::solveIqModel() {
+        std::complex<double> m[3][4];
+        for (int u = 0; u < 3; u++) {
+            for (int v = 0; v < 3; v++) { m[u][v] = lsG[u][v]; }
+            m[u][3] = lsH[u];
+        }
+        bool ok = true;
+        for (int col = 0; col < 3 && ok; col++) {
+            int piv = col;
+            for (int r = col + 1; r < 3; r++) { if (std::abs(m[r][col]) > std::abs(m[piv][col])) { piv = r; } }
+            if (std::abs(m[piv][col]) < 1e-12) { ok = false; break; }
+            if (piv != col) { for (int k = 0; k < 4; k++) { std::swap(m[piv][k], m[col][k]); } }
+            std::complex<double> inv = 1.0 / m[col][col];
+            for (int k = col; k < 4; k++) { m[col][k] *= inv; }
+            for (int r = 0; r < 3; r++) {
+                if (r == col) { continue; }
+                std::complex<double> f = m[r][col];
+                for (int k = col; k < 4; k++) { m[r][k] -= f * m[col][k]; }
+            }
+        }
+        if (ok && std::abs(m[0][3]) > 1e-9) {
+            lsMu = m[0][3]; lsNu = m[1][3]; lsC = m[2][3];
+            lsValid = true;
+            double ratio = std::abs(lsNu) / std::abs(lsMu);
+            irrDb.store(ratio > 1e-6 ? (float)(-20.0 * log10(ratio)) : 120.0f);
+            // origin offset from the model: the modulation is removed by the
+            // fit, so this is far more sensitive than the plain mean
+            double co = std::abs(lsC) / std::abs(lsMu);
+            iqOffsetDb.store(co > 1e-5 ? (float)(20.0 * log10(co)) : -100.0f);
+            // and use it for the display / decision compensation as well
+            prevOffRe = lsC.real();
+            prevOffIm = lsC.imag();
+            imbRatio.store((float)ratio);
+        }
+        if (splitCount > 100) {
+            ampErrPct.store((float)(100.0 * sqrt(sumAmpErr2 / splitCount)));
+            phaseErrDeg.store((float)(sqrt(sumPhErr2 / splitCount) * 180.0 / 3.14159265358979));
+        }
+        for (int u = 0; u < 3; u++) { for (int v = 0; v < 3; v++) { lsG[u][v] = 0.0; } lsH[u] = 0.0; }
+        sumAmpErr2 = sumPhErr2 = 0.0;
+        splitCount = 0;
+    }
+}
+
+
+namespace dsp {
     int DQPSKSymbolExtractor::process(int count, const complex_t* in, uint8_t* out) {
         for(int i = 0; i < count; i++) {
             static const float rc[8] = { 1.0f, 0.70710678f, 0.0f, -0.70710678f, -1.0f, -0.70710678f, 0.0f, 0.70710678f };
@@ -34,6 +82,30 @@ namespace dsp {
                     float xr = sym_corr.re - (cb ? -0.7071f : 0.7071f) * lastScale;
                     float xi = sym_corr.im - (ca ? -0.7071f : 0.7071f) * lastScale;
                     sumErrEx += xr * xr + xi * xi;
+                    // I/Q imbalance model in the raw (transmitter) frame:
+                    //   r = mu*d + nu*conj(d) + c   (least squares over the block)
+                    std::complex<double> d(cb ? -0.70710678 : 0.70710678, ca ? -0.70710678 : 0.70710678);
+                    d *= std::complex<double>(rc[rawRot], rs[rawRot]);
+                    std::complex<double> r(sym_in.re * rc[rawRot] - sym_in.im * rs[rawRot],
+                                           sym_in.re * rs[rawRot] + sym_in.im * rc[rawRot]);
+                    const std::complex<double> a[3] = { d, std::conj(d), 1.0 };
+                    for (int u = 0; u < 3; u++) {
+                        for (int v = 0; v < 3; v++) { lsG[u][v] += std::conj(a[u]) * a[v]; }
+                        lsH[u] += std::conj(a[u]) * r;
+                    }
+                    // error split with the previous block's model
+                    if (lsValid) {
+                        std::complex<double> ideal = lsMu * d + lsNu * std::conj(d);
+                        std::complex<double> q = r - lsC;
+                        double mi = std::abs(ideal);
+                        if (mi > 1e-9 && std::abs(q) > 1e-9) {
+                            double ae = (std::abs(q) - mi) / mi;
+                            double pe = std::arg(q * std::conj(ideal));
+                            sumAmpErr2 += ae * ae;
+                            sumPhErr2 += pe * pe;
+                            splitCount++;
+                        }
+                    }
                 }
                 rawRot = (rawRot + 1) & 7;
                 // MER/EVM as transmitted: uncorrected symbols, own decisions
@@ -60,6 +132,7 @@ namespace dsp {
                         prevOffRe = mr;
                         prevOffIm = mi;
                     }
+                    solveIqModel();
                     sumRawRe = sumRawIm = 0.0;
                     sumErrEx = 0.0;
                     sumErr = sumSig = sumMag = 0.0;
