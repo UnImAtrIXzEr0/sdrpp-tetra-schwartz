@@ -567,6 +567,8 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["fullscreen"] = false;
     defConfig["theme"] = "RoSc 2"; // HAM-TETRA edition default
     // Built-in menus hidden by default (can be shown again in the Module Manager)
+    // Sources not supported by this edition: hidden from the source list (Module Manager)
+    defConfig["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "BladeRF", "Dragon Labs", "FobosSDR", "HackRF", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "LimeSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR", "Spectran HTTP", "Spectran" });
     defConfig["hiddenMenus"] = json::array({ "VFO Color", "Debug", "FT8/FT4 Decoder", "Noise Reduction logmmse", "WebSDR View", "Rigctl Server" });
 
     // Menu
@@ -742,7 +744,10 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["operatorLocation"] = "KO80";
 
     defConfig["streams"]["Radio"]["muted"] = false;
-    defConfig["streams"]["Radio"]["sink"] = "Audio";
+    defConfig["streams"]["Radio"]["sink"] = "None";   // TETRA edition: radio audio off by default
+    defConfig["streams"]["TETRA Demodulator"]["muted"] = false;
+    defConfig["streams"]["TETRA Demodulator"]["sink"] = "Audio";
+    defConfig["streams"]["TETRA Demodulator"]["volume"] = 1.0f;
     defConfig["streams"]["Radio"]["volume"] = 1.0f;
 
     defConfig["windowSize"]["h"] = 720;
@@ -861,6 +866,12 @@ int sdrpp_main(int argc, char* argv[]) {
         }
         c["hamTetraDefaults4"] = 1;
     }
+    // v0.17: sources not supported by this edition are hidden from the source
+    // list (the one in use always stays visible)
+    if (!core::configManager.conf.contains("hamTetraDefaults5")) {
+        core::configManager.conf["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "BladeRF", "Dragon Labs", "FobosSDR", "HackRF", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "LimeSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR", "Spectran HTTP", "Spectran" });
+        core::configManager.conf["hamTetraDefaults5"] = 1;
+    }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&
         core::configManager.conf["theme"] == "Professional 2") {
@@ -965,6 +976,13 @@ int sdrpp_main(int argc, char* argv[]) {
     // Initialize backend
     int biRes = backend::init(resDir);
     if (biRes < 0) { return biRes; }
+
+    // Keep ImGui window and table layout (floating windows, column order and
+    // widths of the TETRA tables) in the config directory
+    {
+        static std::string imguiIni = std::string(core::getRoot()) + "/imgui_layout.ini";
+        ImGui::GetIO().IniFilename = imguiIni.c_str();
+    }
 
     // Initialize SmGui in normal mode
     SmGui::init(false);

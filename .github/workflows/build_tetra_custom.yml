@@ -37,7 +37,16 @@ jobs:
             -DOPT_BUILD_CH_EXTRAVHF_DECODER=ON -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON
 
         - name: Build
-          run: cmake --build build -j4
+          run: |
+            set -o pipefail
+            cmake --build build -j4 2>&1 | tee build.log
+
+        - name: Report compiler warnings in edition code
+          if: always()
+          run: |
+            grep -E "warning:" build.log | grep -E "ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|pulseaudio|module_manager|menus/source|theme_manager|loading_screen|credits|waterfall|core\.cpp|tetra_" \
+              | grep -v "/decoder/src/crypto/\|etsi_codec" | sort -u | head -40 | sed 's/^/::warning::/' || true
+            echo "warnings in edition code: $(grep -E 'warning:' build.log | grep -cE 'ch_tetra_demodulator|plutosdr_source|module_manager|menus/source|theme_manager' || true)"
 
         - name: Read plugin version
           run: echo "TETRA_VERSION=$(sed -n 's/^#define TETRA_PLUGIN_VERSION "\([^"]*\)".*/\1/p' decoder_modules/ch_tetra_demodulator/src/measurements.h)" >> $GITHUB_ENV
@@ -54,6 +63,23 @@ jobs:
           with:
               name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_linux_appimage_x86_64
               path: SDRPP-TETRA-SCHWARTZ-v${{ env.TETRA_VERSION }}-beta-x86_64.AppImage
+
+        - name: Headless tests (fresh start, TETRA chain with recording)
+          run: |
+            sudo apt-get install -y xvfb libgl1-mesa-dri mesa-utils > /dev/null
+            mkdir -p e2eroot && ln -sfn "$PWD/AppDir/usr" e2eroot/inst
+            export E2E_ROOT_DEV="$PWD/e2eroot" E2E_BUILD_DIR="$PWD/build" E2E_BINARY="$PWD/AppDir/usr/bin/sdrpp"
+            export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib" SDRPP_APPDIR="$PWD/AppDir" LIBGL_ALWAYS_SOFTWARE=1
+            set +e
+            xvfb-run -a -s "-screen 0 1600x1000x24" python3 e2e/test_tetra_schwartz.py 2>&1 | tee e2e.log
+            rc=${PIPESTATUS[0]}
+            set -e
+            grep -E "FAIL|PASS|last measurements" e2e.log | sed 's/^/::notice::/' | head -20 || true
+            if [ "$rc" != "0" ]; then
+              echo "::error::headless tests failed"
+              tail -60 e2e.log | cut -c1-300 | sed 's/^/::notice::/'
+              exit 1
+            fi
 
     build_windows:
         if: ${{ !contains(github.ref_name, 'macos') }}
@@ -297,6 +323,22 @@ jobs:
                   Write-Output "::error::$m"
                 }
               exit 1
+            }
+
+        - name: Report compiler warnings in edition code
+          if: always()
+          working-directory: ${{runner.workspace}}/build
+          shell: pwsh
+          run: |
+            if (Test-Path build.log) {
+              $w = Select-String -Path build.log -Pattern 'warning C[0-9]+' |
+                Where-Object { $_.Line -match 'ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|module_manager|menus\\source|theme_manager|loading_screen|credits|core\.cpp' } |
+                ForEach-Object { ($_.Line -replace '[\r\n]', ' ') } | Sort-Object -Unique
+              Write-Host "warnings in edition code: $($w.Count)"
+              $w | Select-Object -First 40 | ForEach-Object {
+                $m = $_; if ($m.Length -gt 400) { $m = $m.Substring(0, 400) }
+                Write-Output "::warning::$m"
+              }
             }
 
         - name: Create Archive

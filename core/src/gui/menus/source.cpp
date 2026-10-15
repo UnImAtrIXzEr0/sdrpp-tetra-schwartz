@@ -85,15 +85,35 @@ namespace sourcemenu {
         selectOffsetById(offsets.nameId(name));
     }
 
+    std::set<std::string> hiddenSources;
+    std::string configuredSource;
+
     void refreshSources() {
         // Get sources
         auto sourceNames = sigpath::sourceManager.getSourceNames();
 
-        // Define source options
+        // Define source options (hidden ones only if in use)
         sources.clear();
         for (auto name : sourceNames) {
+            if (hiddenSources.count(name) && name != selectedSource && name != configuredSource) { continue; }
             sources.define(name, name, name);
         }
+    }
+
+    bool isSourceHidden(const std::string& name) { return hiddenSources.count(name) != 0; }
+
+    std::vector<std::string> allSourceNames() { return sigpath::sourceManager.getSourceNames(); }
+
+    void setSourceHidden(const std::string& name, bool hidden) {
+        if (hidden) { hiddenSources.insert(name); }
+        else { hiddenSources.erase(name); }
+        core::configManager.acquire();
+        json arr = json::array();
+        for (auto& h : hiddenSources) { arr.push_back(h); }
+        core::configManager.conf["hiddenSources"] = arr;
+        core::configManager.release(true);
+        refreshSources();
+        if (!sources.empty() && sources.valueExists(selectedSource)) { sourceId = sources.valueId(selectedSource); }
     }
 
     void selectSource(std::string name) {
@@ -188,6 +208,13 @@ namespace sourcemenu {
 
         // Load other settings
         std::string selectedSource = core::configManager.conf["source"];
+        configuredSource = selectedSource;
+        hiddenSources.clear();
+        if (core::configManager.conf.contains("hiddenSources") && core::configManager.conf["hiddenSources"].is_array()) {
+            for (auto& h : core::configManager.conf["hiddenSources"]) {
+                if (h.is_string()) { hiddenSources.insert(h.get<std::string>()); }
+            }
+        }
         manualOffset = core::configManager.conf["manualOffset"];
         std::string selectedOffset = core::configManager.conf["selectedOffset"];
         iqCorrection = core::configManager.conf["iqCorrection"];
@@ -330,6 +357,7 @@ namespace sourcemenu {
         ImGui::SetNextItemWidth(itemWidth);
         if (ImGui::Combo("##source", &sourceId, sources.txt)) {
             std::string newSource = sources.value(sourceId);
+            configuredSource = newSource;
             selectSource(newSource);
             core::configManager.acquire();
             core::configManager.conf["source"] = newSource;

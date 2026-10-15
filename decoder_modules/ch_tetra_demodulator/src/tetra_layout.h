@@ -5,6 +5,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <algorithm>
+#include <cstring>
 
 namespace tw {
     // right edge of the usable content area of the current window
@@ -42,40 +43,74 @@ namespace tw {
 
     inline void vfmt(char* buf, size_t n, const char* fmt, va_list ap) { vsnprintf(buf, n, fmt, ap); }
 
-    // a text wider than the remaining space is wrapped at the window edge
-    struct WrapIfNeeded {
-        bool on = false;
-        explicit WrapIfNeeded(const char* s) {
-            if (textWidth(s) > ImGui::GetContentRegionAvail().x) { ImGui::PushTextWrapPos(0.0f); on = true; }
+    // Table cells: single line, clipped with "..." (full text as tooltip)
+    // instead of wrapping. Active inside a CellScope.
+    inline bool& cellMode() { static bool c = false; return c; }
+    struct CellScope {
+        bool prev;
+        CellScope() : prev(cellMode()) { cellMode() = true; }
+        ~CellScope() { cellMode() = prev; }
+    };
+
+    // Fit 'buf' into the remaining width: in cell mode truncate (returns true
+    // and keeps the full text in 'full'), otherwise wrap if needed.
+    struct FitText {
+        bool wrap = false, cut = false;
+        char full[512];
+        FitText(char* buf, size_t n) {
+            float avail = ImGui::GetContentRegionAvail().x;
+            if (textWidth(buf) <= avail || avail <= 0) { return; }
+            if (!cellMode()) { ImGui::PushTextWrapPos(0.0f); wrap = true; return; }
+            snprintf(full, sizeof(full), "%s", buf);
+            size_t len = strlen(buf);
+            float dots = textWidth("...");
+            while (len > 0) {
+                // step back over UTF-8 continuation bytes
+                do { len--; } while (len > 0 && (((unsigned char)buf[len]) & 0xC0) == 0x80);
+                char save = buf[len];
+                buf[len] = 0;
+                bool fits = textWidth(buf) + dots <= avail;
+                buf[len] = save;
+                if (fits) { break; }
+            }
+            if (len + 4 < n) { buf[len] = 0; strcat(buf, "..."); }
+            cut = true;
         }
-        ~WrapIfNeeded() { if (on) { ImGui::PopTextWrapPos(); } }
+        void done() {
+            if (wrap) { ImGui::PopTextWrapPos(); wrap = false; }
+            if (cut && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", full); }
+        }
     };
 
     inline void flushPending(float w) {
         if (pendingSame()) { pendingSame() = false; SameLineFor(w); }
     }
     // drop-in replacements for ImGui::Text*: behave identically unless a
-    // SameNext() is pending
+    // SameNext() is pending; too long texts wrap (cells: clip with "...")
     inline void TextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         flushPending(textWidth(buf));
-        WrapIfNeeded wr(buf);
+        FitText f(buf, sizeof(buf));
         ImGui::TextColored(col, "%s", buf);
+        f.done();
     }
     inline void Text(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         flushPending(textWidth(buf));
-        WrapIfNeeded wr(buf);
+        FitText f(buf, sizeof(buf));
         ImGui::TextUnformatted(buf);
+        f.done();
     }
+    inline void TextU(const char* text) { Text("%s", text); }
     inline void TextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         flushPending(textWidth(buf));
-        WrapIfNeeded wr(buf);
+        FitText f(buf, sizeof(buf));
         ImGui::TextDisabled("%s", buf);
+        f.done();
     }
 
     inline void SameTextColored(const ImVec4& col, const char* fmt, ...) {

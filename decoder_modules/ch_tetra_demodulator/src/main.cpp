@@ -66,7 +66,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 16, 3,
+    /* Version:         */ 0, 17, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -314,6 +314,50 @@ public:
                 }
             } catch (...) {}
             return "{\"error\": \"invalid mode: " + args + "\"}";
+        }
+        // ---- additional automation for the edition's tests ----
+        if (cmd == "set_offset") {
+            try {
+                double off = std::stod(args);
+                if (vfo) { sigpath::vfoManager.setOffset(name, off); }
+                return "{\"status\": \"ok\"}";
+            } catch (...) {}
+            return "{\"error\": \"invalid offset\"}";
+        }
+        if (cmd == "set_txa") {
+            txaRun = (args == "1" || args == "true");
+            return std::string("{\"status\": \"ok\", \"txa\": ") + (txaRun ? "true" : "false") + "}";
+        }
+        if (cmd == "set_windows") {
+            // "1" = all four own windows, "0" = none
+            bool on = (args == "1" || args == "true");
+            constDetached = subsDetached = netDetached = txaDetached = on;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_afc") {
+            afcEnabled = (args == "1" || args == "true");
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "get_measurements") {
+            TetraMeasSnapshot m = meas.get();
+            TxAnalysisResult r = txa.get();
+            char b[1400];
+            snprintf(b, sizeof(b),
+                     "{\"valid\": %s, \"sync\": %s, \"rx_state\": %d, \"mer_db\": %.2f, \"evm_pct\": %.2f, "
+                     "\"iq_offset_db\": %.2f, \"irr_db\": %.2f, \"phase_err_deg\": %.3f, \"amp_err_pct\": %.3f, "
+                     "\"input_rate\": %.1f, \"input_rate_ppm\": %.1f, \"bursts\": %u, \"resync_slip\": %u, "
+                     "\"carrier_offset_hz\": %.2f, \"audio_dropped_s\": %.2f, \"vfo_offset_hz\": %.1f, "
+                     "\"txa_valid\": %s, \"txa_chan_dbfs\": %.2f, \"txa_obw_hz\": %.1f, \"txa_bw26_hz\": %.1f, "
+                     "\"txa_acp25\": [%.2f, %.2f], \"txa_acp_floor25\": [%.2f, %.2f], \"txa_leak_dbc\": %.2f, "
+                     "\"stations\": %d, \"traffic\": %d}",
+                     m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
+                     m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
+                     m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
+                     m.carrierOffsetHz, (double)audioDecoupler.getDroppedSamples() / 8000.0, vfo ? vfo->getOffset() : 0.0,
+                     r.valid ? "true" : "false", r.chanPowerDbfs, r.obwHz, r.bw26Hz,
+                     r.acpDbc[2], r.acpDbc[3], r.acpFloorDbc[2], r.acpFloorDbc[3], r.carrierLeakDbc,
+                     (int)subscribers.snapshot().size(), (int)subscribers.trafficSnapshot().size());
+            return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
     }
@@ -1103,7 +1147,9 @@ private:
 
         // ---- AFC ----
         if (afcEnabled && vfo && decoder_mode == 0) {
-            bool locked = (m.rxState == 2) && m.symSync;
+            // only act on a trustworthy estimate: decoder locked, symbol sync and
+            // a steady burst flow (an unstable lock can report wrong offsets)
+            bool locked = (m.rxState == 2) && m.symSync && m.bursts >= 30;
             double cur = vfo->getOffset();
             if (afcAnchorValid && std::fabs(cur - afcLastSet) > 1.0) {
                 // user retuned: start over from the new position
@@ -2001,7 +2047,15 @@ private:
             return visibleRows > 0 ? ImGui::GetTextLineHeightWithSpacing() * ((std::min<int>)(rows, visibleRows) + 1.5f)
                                    : (std::max)(ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() * 1.5f, 60.0f);
         };
-        ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable;
+        // Tables: one line per row (cells clip with "..."), columns sized to
+        // their content, resizable, movable (drag the header) and hideable
+        // (right-click the header). If the window is narrower than the minimum
+        // widths, the table scrolls sideways; the first column stays in place.
+        ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
+                                ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
+        auto colW = [](const char* sample) { return ImGui::CalcTextSize(sample).x + ImGui::GetStyle().CellPadding.x * 2.0f; };
+        auto innerW = [&](float minTotal) { return (std::max)(menuWidth, minTotal); };
+        tw::CellScope cells;
         ImVec4 green = tc::good(), yellow = tc::val(), grey = tc::grey();
 
         if (!ImGui::BeginTabBar(CONCAT("##_tetra_st_tabs_", name))) { return; }
@@ -2010,16 +2064,17 @@ private:
         std::string stTitle = "Stations (" + std::to_string(stations.size()) + ")##_tetra_tab_st_" + name;
         if (ImGui::BeginTabItem(stTitle.c_str())) {
             if (ImGui::SmallButton(CONCAT("Clear all##_tetra_subs_clr_", name))) { subscribers.clear(); stations.clear(); }
-            if (ImGui::BeginTable(CONCAT("##_tetra_subs_tab_", name), 8, flags, ImVec2(menuWidth, tableHeight((int)stations.size())))) {
-                ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("ISSI");
-                ImGui::TableSetupColumn("Type");
-                ImGui::TableSetupColumn("Call");
-                ImGui::TableSetupColumn("TS");
-                ImGui::TableSetupColumn("Seen");
-                ImGui::TableSetupColumn("Activity", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Groups (scan list)", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthStretch);
+            float minSt = colW("16777215") + colW("ISSI") + colW("DB0XXX-12") + colW("4CE") + colW("59m") + 3 * colW("talking in 2620001");
+            if (ImGui::BeginTable(CONCAT("##_tetra_subs_tab_", name), 8, flags, ImVec2(menuWidth, tableHeight((int)stations.size())), innerW(minSt))) {
+                ImGui::TableSetupScrollFreeze(1, 1);
+                ImGui::TableSetupColumn("ISSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"), 0);
+                ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, colW("ISSI"), 1);
+                ImGui::TableSetupColumn("Call", ImGuiTableColumnFlags_WidthFixed, colW("DB0XXX-12"), 2);
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("4CE"), 3);
+                ImGui::TableSetupColumn("Seen", ImGuiTableColumnFlags_WidthFixed, colW("59m"), 4);
+                ImGui::TableSetupColumn("Groups (scan list)", ImGuiTableColumnFlags_WidthStretch, 1.0f, 6);
+                ImGui::TableSetupColumn("Activity", ImGuiTableColumnFlags_WidthStretch, 1.2f, 5);
+                ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthStretch, 1.0f, 7);
                 ImGui::TableHeadersRow();
                 for (auto& sub : stations) {
                     std::string call, info;
@@ -2035,28 +2090,28 @@ private:
                                           "? = only seen as MAC address so far (individual or group)");
                     }
                     ImGui::TableSetColumnIndex(2);
-                    if (!call.empty()) { ImGui::TextUnformatted(call.c_str()); } else { tw::TextDisabled("-"); }
+                    if (!call.empty()) { tw::TextU(call.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(3);
                     tw::Text("%u%s%s", sub.lastTn, sub.chanAlloc ? "C" : "", sub.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(4);
                     char ab[16];
                     agoText(ago, ab, sizeof(ab));
-                    ImGui::TextUnformatted(ab);
-                    ImGui::TableSetColumnIndex(5);
+                    tw::TextU(ab);
+                    ImGui::TableSetColumnIndex(6);   // Activity (shown after Groups)
                     if (sub.talkingIn) {
                         std::string gc, gi;
                         describeSsi(sub.talkingIn, TetraSubscriber::KIND_GROUP, gc, gi);
                         tw::TextColored(green, "TALKING in %u%s", sub.talkingIn, gi.empty() ? "" : (" " + gi).c_str());
                     }
-                    else if (!sub.lastActivity.empty()) { ImGui::TextUnformatted(sub.lastActivity.c_str()); }
+                    else if (!sub.lastActivity.empty()) { tw::TextU(sub.lastActivity.c_str()); }
                     if (sub.hasPos && ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("Last position %.5f, %.5f", sub.lat, sub.lon);
                     }
-                    ImGui::TableSetColumnIndex(6);
+                    ImGui::TableSetColumnIndex(5);   // Groups (scan list)
                     if (!sub.groups.empty()) {
                         std::string gl;
                         for (size_t gi = 0; gi < sub.groups.size(); gi++) { gl += (gi ? ", " : "") + std::to_string(sub.groups[gi]); }
-                        ImGui::TextUnformatted(gl.c_str());
+                        tw::TextU(gl.c_str());
                         if (ImGui::IsItemHovered()) {
                             std::string tip = "Attached talkgroups (from group attach/detach / registration):";
                             for (auto g : sub.groups) {
@@ -2068,7 +2123,7 @@ private:
                         }
                     }
                     ImGui::TableSetColumnIndex(7);
-                    ImGui::TextUnformatted(info.c_str());
+                    tw::TextU(info.c_str());
                 }
                 ImGui::EndTable();
             }
@@ -2078,15 +2133,16 @@ private:
         // ---- Groups ----
         std::string grTitle = "Groups (" + std::to_string(groups.size()) + ")##_tetra_tab_gr_" + name;
         if (ImGui::BeginTabItem(grTitle.c_str())) {
-            if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 7, flags, ImVec2(menuWidth, tableHeight((int)groups.size())))) {
-                ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("GSSI");
-                ImGui::TableSetupColumn("Talkgroup");
-                ImGui::TableSetupColumn("TS");
-                ImGui::TableSetupColumn("Seen");
-                ImGui::TableSetupColumn("Talker", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Last talker", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableSetupColumn("Attached");
+            float minGr = colW("16777215") + colW("TETRA Oberbayern") + colW("4E") + colW("59m") + 2 * colW("2620001 DB0XXX") + colW("Attached");
+            if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 7, flags, ImVec2(menuWidth, tableHeight((int)groups.size())), innerW(minGr))) {
+                ImGui::TableSetupScrollFreeze(1, 1);
+                ImGui::TableSetupColumn("GSSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"));
+                ImGui::TableSetupColumn("Talkgroup", ImGuiTableColumnFlags_WidthStretch, 1.2f);
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("4E"));
+                ImGui::TableSetupColumn("Seen", ImGuiTableColumnFlags_WidthFixed, colW("59m"));
+                ImGui::TableSetupColumn("Talker", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableSetupColumn("Last talker", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+                ImGui::TableSetupColumn("Attached", ImGuiTableColumnFlags_WidthFixed, colW("Attached"));
                 ImGui::TableHeadersRow();
                 for (auto& g : groups) {
                     std::string call, info;
@@ -2096,13 +2152,13 @@ private:
                     ImGui::TableSetColumnIndex(0);
                     tw::TextColored(g.talker ? green : (ago < 120 ? yellow : grey), "%u", g.ssi);
                     ImGui::TableSetColumnIndex(1);
-                    if (!info.empty()) { ImGui::TextUnformatted(info.c_str()); } else { tw::TextDisabled("-"); }
+                    if (!info.empty()) { tw::TextU(info.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(2);
                     tw::Text("%u%s", g.lastTn, g.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(3);
                     char ab[16];
                     agoText(ago, ab, sizeof(ab));
-                    ImGui::TextUnformatted(ab);
+                    tw::TextU(ab);
                     ImGui::TableSetColumnIndex(4);
                     if (g.talker) {
                         std::string tc, ti;
@@ -2144,14 +2200,15 @@ private:
         if (ImGui::BeginTabItem(trTitle.c_str())) {
             if (ImGui::SmallButton(CONCAT("Clear##_tetra_tr_clr_", name))) { subscribers.clearTraffic(); traffic.clear(); }
             tw::SameCheckbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
-            if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())))) {
-                ImGui::TableSetupScrollFreeze(0, 1);
-                ImGui::TableSetupColumn("Time");
-                ImGui::TableSetupColumn("TS");
-                ImGui::TableSetupColumn("PDU");
-                ImGui::TableSetupColumn("From");
-                ImGui::TableSetupColumn("To");
-                ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch);
+            float minTr = colW("00:00:00") + colW("TS") + colW("D-TX-GRANTED") + 2 * colW("2620001 DB0XXX") + colW("SDS text: Hello World");
+            if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())), innerW(minTr))) {
+                ImGui::TableSetupScrollFreeze(1, 1);
+                ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("00:00:00"));
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("TS"));
+                ImGui::TableSetupColumn("PDU", ImGuiTableColumnFlags_WidthFixed, colW("D-TX-GRANTED"));
+                ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+                ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+                ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch, 2.0f);
                 ImGui::TableHeadersRow();
                 for (auto it = traffic.rbegin(); it != traffic.rend(); ++it) {
                     bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS";
@@ -2170,7 +2227,7 @@ private:
                     ImGui::TableSetColumnIndex(1);
                     tw::Text("%u", it->tn);
                     ImGui::TableSetColumnIndex(2);
-                    if (control) { ImGui::TextUnformatted(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
+                    if (control) { tw::TextU(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
                     ImGui::TableSetColumnIndex(3);
                     if (it->from) {
                         std::string c, i;
@@ -2184,7 +2241,7 @@ private:
                         tw::Text("%s%u %s", it->toGroup ? "G " : "", it->to, it->toGroup ? i.c_str() : c.c_str());
                     }
                     ImGui::TableSetColumnIndex(5);
-                    ImGui::TextUnformatted(it->text.c_str());
+                    tw::TextU(it->text.c_str());
                     if (it->hasPos && ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("Position %.5f, %.5f", it->lat, it->lon);
                     }
@@ -2284,7 +2341,7 @@ private:
     dsp::sink::Handler<dsp::complex_t> constDiagSink;
     TetraConstellationView constView;
     bool constDetached = false;
-    bool compOriginOffset = false;
+    bool compOriginOffset = true;    // edition default: display without I/Q offset
     bool afcEnabled = false;
     bool afcAnchorValid = false;
     double afcAnchor = 0.0, afcLastSet = 0.0;

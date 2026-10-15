@@ -23,7 +23,7 @@
 #include "subscribers.h"
 #include "gps.h"
 
-#define TETRA_PLUGIN_VERSION "0.16.3"
+#define TETRA_PLUGIN_VERSION "0.17.0"
 
 struct TetraMeasSnapshot {
     bool valid = false;

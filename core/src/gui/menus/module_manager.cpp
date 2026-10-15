@@ -4,6 +4,7 @@
 #include <string.h>
 #include <gui/style.h>
 #include <gui/gui.h>
+#include <gui/menus/source.h>
 #include <gui/dialogs/dialog_box.h>
 
 namespace module_manager_menu {
@@ -158,6 +159,24 @@ namespace module_manager_menu {
             }
         }
         ImGui::TextDisabled("Menu: shown in the menu bar on the left. On: module running.");
+
+        // Sources offered in the 'Source' list
+        if (ImGui::TreeNode("Sources in the source list##module_mgr_src")) {
+            auto names = sourcemenu::allSourceNames();
+            for (size_t i = 0; i < names.size(); i++) {
+                bool shown = !sourcemenu::isSourceHidden(names[i]);
+                if (i > 0) {
+                    float w = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(names[i].c_str()).x;
+                    float x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+                    if (x + w <= ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x) { ImGui::SameLine(); }
+                }
+                if (ImGui::Checkbox((names[i] + "##module_mgr_src_" + names[i]).c_str(), &shown)) {
+                    sourcemenu::setSourceHidden(names[i], !shown);
+                }
+            }
+            ImGui::TextDisabled("Officially supported: RTL-SDR, PlutoSDR, Airspy, USRP (and File for recordings).");
+            ImGui::TreePop();
+        }
         if (hidChanged) {
             core::configManager.acquire();
             json arr = json::array();

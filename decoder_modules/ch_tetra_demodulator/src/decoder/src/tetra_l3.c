@@ -164,6 +164,83 @@ static int decode_lip(struct br *r, struct tetra_l3_event *ev)
 	return 0;
 }
 
+/* ---------- SDS helpers ---------- */
+
+/* protocol identifier names (EN 300 392-2, table 29.21) */
+static const char *sds_pid_name(int pid)
+{
+	switch (pid) {
+	case 0x01: return "OTAK";
+	case 0x02: return "simple text";
+	case 0x03: return "simple location";
+	case 0x04: return "WAP";
+	case 0x05: return "WCMP";
+	case 0x06: return "M-DMO";
+	case 0x07: return "PIN authentication";
+	case 0x08: return "end-to-end encrypted";
+	case 0x09: return "immediate text";
+	case 0x0A: return "LIP";
+	case 0x0B: return "net assist";
+	case 0x0C: return "concatenated SDS";
+	case 0x0D: return "DOTAM";
+	case 0x82: return "text (SDS-TL)";
+	case 0x83: return "location system (SDS-TL)";
+	case 0x84: return "WAP (SDS-TL)";
+	case 0x85: return "WCMP (SDS-TL)";
+	case 0x86: return "M-DMO (SDS-TL)";
+	case 0x88: return "end-to-end encrypted (SDS-TL)";
+	case 0x89: return "immediate text (SDS-TL)";
+	case 0x8A: return "message with user data header";
+	case 0x8C: return "concatenated SDS (SDS-TL)";
+	case 0x8D: return "DOTAM (SDS-TL)";
+	default:
+		if (pid >= 0xC0) return "user/vendor specific";
+		if (pid >= 0x80) return "reserved (SDS-TL)";
+		return "reserved";
+	}
+}
+
+/* remaining bytes: printable text if it mostly is, otherwise hex */
+static void bytes_text(struct br *r, char *out, int max)
+{
+	uint8_t b[96];
+	int n = 0;
+	while (n < (int)sizeof(b) && left(r) >= 8) b[n++] = (uint8_t)get(r, 8);
+	int printable = 0;
+	for (int i = 0; i < n; i++)
+		if ((b[i] >= 0x20 && b[i] < 0x7F) || b[i] == '\r' || b[i] == '\n' || b[i] >= 0xA0) printable++;
+	int o = 0;
+	out[0] = 0;
+	if (n > 0 && printable * 10 >= n * 8) {
+		o = snprintf(out, max, "\"");
+		for (int i = 0; i < n && o < max - 2; i++) put_utf8(out, &o, max - 1, b[i]);
+		if (o < max - 1) { out[o++] = '"'; out[o] = 0; }
+	} else {
+		for (int i = 0; i < n && o < max - 4; i++)
+			o += snprintf(out + o, max - o, "%s%02X", i ? " " : "", b[i]);
+		if (left(r) >= 8 && o < max - 4) snprintf(out + o, max - o, " ...");
+	}
+}
+
+/* user defined data of SDS types 1-3: hex, plus text if printable */
+static void udata_text(uint32_t hi, uint32_t lo, int bits, char *out, int max)
+{
+	uint8_t b[8];
+	int n = bits / 8;
+	uint64_t v = ((uint64_t)hi << 32) | lo;
+	for (int i = 0; i < n; i++) b[i] = (uint8_t)(v >> (8 * (n - 1 - i)));
+	int o = snprintf(out, max, "0x");
+	for (int i = 0; i < n; i++) o += snprintf(out + o, max - o, "%02X", b[i]);
+	int pr = 1;
+	for (int i = 0; i < n; i++) if (b[i] < 0x20 || b[i] >= 0x7F) pr = 0;
+	if (pr && o < max - n - 4) {
+		o += snprintf(out + o, max - o, " \"");
+		for (int i = 0; i < n; i++) out[o++] = (char)b[i];
+		out[o++] = '"';
+		out[o] = 0;
+	}
+}
+
 /* ---------- SDS type 4 user data ---------- */
 
 static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
@@ -185,8 +262,15 @@ static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
 	case 0x89: {	/* immediate text messaging (SDS-TL) */
 		uint32_t mtype = get(r, 4);
 		if (mtype != 0) {	/* SDS-REPORT / ACK / SHORT-REPORT */
-			snprintf(ev->text, sizeof(ev->text), "SDS-TL %s", mtype == 1 ? "delivery report" :
-				 mtype == 2 ? "acknowledge" : "control");
+			if (mtype == 1 || mtype == 2) {
+				if (mtype == 1) { get(r, 1); get(r, 2); get(r, 1); }	/* ack req, reserved, storage */
+				uint32_t st = get(r, 8), ref = get(r, 8);
+				snprintf(ev->text, sizeof(ev->text), "SDS-TL %s for message %u: %s (0x%02X)", mtype == 1 ? "report" : "acknowledge", ref,
+					 st == 0x00 ? "received" : st == 0x02 ? "consumed" : st < 0x20 ? "delivered" :
+					 st < 0x40 ? "temporary error" : "failed", st);
+			} else {
+				snprintf(ev->text, sizeof(ev->text), "SDS-TL control (type %u)", mtype);
+			}
 			break;
 		}
 		get(r, 2);			/* delivery report request */
@@ -212,10 +296,21 @@ static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
 	case 0x0A:	/* location information protocol */
 		decode_lip(r, ev);
 		break;
+	case 0x03: {	/* simple location system: coding + data (0 = NMEA 0183) */
+		uint32_t coding = get(r, 8);
+		char t[240];
+		bytes_text(r, t, sizeof(t));
+		snprintf(ev->text, sizeof(ev->text), "Location (%s): %s", coding == 0 ? "NMEA" : "other coding", t);
+		break;
+	}
+	case 0x08:
+	case 0x88:
+		snprintf(ev->text, sizeof(ev->text), "SDS end-to-end encrypted (%d bytes, not readable)", left(r) / 8);
+		break;
 	default: {
-		int o = snprintf(ev->text, sizeof(ev->text), "SDS PID 0x%02X:", pid);
-		for (int i = 0; i < 12 && left(r) >= 8 && o < (int)sizeof(ev->text) - 4; i++)
-			o += snprintf(ev->text + o, sizeof(ev->text) - o, " %02X", get(r, 8));
+		char t[240];
+		bytes_text(r, t, sizeof(t));
+		snprintf(ev->text, sizeof(ev->text), "SDS %s (PID 0x%02X): %s", sds_pid_name(pid), pid, t);
 		break;
 	}
 	}
@@ -303,17 +398,22 @@ static void parse_cmce(struct tetra_mac_state *tms, struct br *r, struct tetra_l
 		ev->type = TETRA_L3_STATUS;
 		ev->party_ssi = read_party(r);
 		ev->status = (int)get(r, 16);
-		if (!r->err)
-			snprintf(ev->text, sizeof(ev->text), "Status 0x%04X (%d)", ev->status, ev->status);
+		if (!r->err) {
+			const char *sn = ev->status == 0 ? "EMERGENCY" :
+					 ev->status < 0x8000 ? "reserved" :
+					 ev->status < 0xFF00 ? "network/user defined" : "reserved";
+			snprintf(ev->text, sizeof(ev->text), "Status %d (0x%04X, %s)", ev->status, ev->status, sn);
+		}
 		break;
 	}
 	case 15: {	/* D-SDS-DATA */
 		ev->type = TETRA_L3_SDS;
 		ev->party_ssi = read_party(r);
 		uint32_t sdti = get(r, 2);
-		if (sdti == 0) { uint32_t v = get(r, 16); snprintf(ev->text, sizeof(ev->text), "SDS-1: 0x%04X", v); }
-		else if (sdti == 1) { uint32_t v = get(r, 32); snprintf(ev->text, sizeof(ev->text), "SDS-2: 0x%08X", v); }
-		else if (sdti == 2) { uint32_t a = get(r, 32), b = get(r, 32); snprintf(ev->text, sizeof(ev->text), "SDS-3: 0x%08X%08X", a, b); }
+		char u[96];
+		if (sdti == 0) { uint32_t v = get(r, 16); udata_text(0, v, 16, u, sizeof(u)); snprintf(ev->text, sizeof(ev->text), "SDS-1 (16 bit user data): %s", u); }
+		else if (sdti == 1) { uint32_t v = get(r, 32); udata_text(0, v, 32, u, sizeof(u)); snprintf(ev->text, sizeof(ev->text), "SDS-2 (32 bit user data): %s", u); }
+		else if (sdti == 2) { uint32_t a = get(r, 32), b = get(r, 32); udata_text(a, b, 64, u, sizeof(u)); snprintf(ev->text, sizeof(ev->text), "SDS-3 (64 bit user data): %s", u); }
 		else {
 			int l = (int)get(r, 11);
 			if (r->err) break;
