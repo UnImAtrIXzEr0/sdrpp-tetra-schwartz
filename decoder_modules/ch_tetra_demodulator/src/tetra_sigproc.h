@@ -127,6 +127,17 @@ namespace tetra_sp {
                 float sc = sum > 0 ? (float)(SLOT / sum) : 1.0f;
                 std::vector<float>& acc = st->fold[v];
                 if ((int)acc.size() != SLOT) { acc.assign(SLOT, 0.0f); }
+                // sample slip (lost samples, looping file): a clear peak of this
+                // window away from the accumulated one restarts the average
+                int pw = (int)(std::max_element(fold.begin(), fold.end()) - fold.begin());
+                int pa = (int)(std::max_element(acc.begin(), acc.end()) - acc.begin());
+                int dd = std::abs(pw - pa);
+                dd = (std::min)(dd, SLOT - dd);
+                if (dd > SPS && acc[pa] > 0.0f) {
+                    std::vector<float> srt(fold);
+                    std::nth_element(srt.begin(), srt.begin() + SLOT / 2, srt.end());
+                    if (srt[SLOT / 2] > 0.0f && fold[pw] / srt[SLOT / 2] > 5.0f) { std::fill(acc.begin(), acc.end(), 0.0f); }
+                }
                 for (int i = 0; i < SLOT; i++) { acc[i] = 0.7f * acc[i] + fold[i] * sc; }
                 fold = acc;
             }

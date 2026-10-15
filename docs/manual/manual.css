@@ -1,0 +1,67 @@
+@page { size: A4; margin: 18mm 17mm 20mm 17mm; }
+:root {
+  --ink: #15202b; --mut: #5a6774; --line: #d6dde5; --acc: #003a6c; --acc2: #1d6fb8;
+  --soft: #f1f5f9; --tip: #e8f4ec; --tipb: #2e8b57; --warn: #fff4e0; --warnb: #c77700;
+  --code: #eef2f6;
+}
+* { box-sizing: border-box; }
+html { font-family: "Inter", "Liberation Sans", sans-serif; font-size: 9.6pt; line-height: 1.5; color: var(--ink); }
+body { margin: 0; }
+h1, h2, h3, h4 { font-family: "Inter Display", "Inter", sans-serif; color: var(--acc); line-height: 1.2; }
+h1 { font-size: 21pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 2.5px solid var(--acc); break-before: page; }
+h1 .num { color: var(--acc2); margin-right: 3mm; font-weight: 600; }
+h2 { font-size: 13pt; margin: 6mm 0 2mm; break-after: avoid; }
+h3 { font-size: 10.8pt; margin: 4.5mm 0 1.5mm; break-after: avoid; color: #0b3f72; }
+p { margin: 0 0 2.4mm; text-align: left; hyphens: auto; }
+ul, ol { margin: 0 0 2.5mm; padding-left: 5.5mm; }
+li { margin: 0.6mm 0; }
+a { color: var(--acc2); text-decoration: none; }
+code, .ui { font-family: "DejaVu Sans Mono", monospace; font-size: 8.4pt; background: var(--code); padding: 0.2mm 1.2mm; border-radius: 1mm; white-space: nowrap; }
+.ui { font-family: "Inter", sans-serif; font-size: 8.9pt; font-weight: 600; color: #0b3f72; background: #e3edf7; }
+pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; background: var(--code); padding: 2.5mm 3mm; border-radius: 1.5mm; white-space: pre-wrap; break-inside: avoid; }
+table { border-collapse: collapse; width: 100%; margin: 1.5mm 0 3.5mm; font-size: 8.8pt; break-inside: auto; }
+th, td { border-bottom: 0.6px solid var(--line); padding: 1.3mm 2mm; text-align: left; vertical-align: top; }
+th { background: var(--soft); color: #0b3f72; font-weight: 600; }
+tr { break-inside: avoid; }
+td:first-child { font-weight: 600; }
+table.plain td:first-child { font-weight: 400; }
+.box { border-left: 3px solid var(--tipb); background: var(--tip); padding: 2mm 3mm; margin: 2mm 0 3.5mm; border-radius: 0 1.5mm 1.5mm 0; break-inside: avoid; }
+.box.warn { border-color: var(--warnb); background: var(--warn); }
+.box.info { border-color: var(--acc2); background: #eaf2fb; }
+.box b.t { display: block; margin-bottom: 0.6mm; }
+figure { margin: 3mm 0 4mm; break-inside: avoid; text-align: center; }
+figure img { max-width: 100%; border: 0.6px solid var(--line); border-radius: 1.5mm; }
+figure img.small { max-width: 62%; }
+figure img.half { max-width: 48%; }
+figcaption { font-size: 8.2pt; color: var(--mut); margin-top: 1.2mm; }
+figure svg { max-width: 100%; height: auto; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.cols > * { min-width: 0; }
+.steps { counter-reset: st; list-style: none; padding-left: 0; }
+.steps > li { counter-increment: st; position: relative; padding-left: 8mm; margin: 1.6mm 0; }
+.steps > li::before { content: counter(st); position: absolute; left: 0; top: 0.2mm; width: 5mm; height: 5mm; border-radius: 50%;
+  background: var(--acc); color: #fff; font-size: 7.6pt; font-weight: 700; text-align: center; line-height: 5mm; }
+.scen { border: 0.8px solid var(--line); border-radius: 2mm; padding: 3mm 4mm; margin: 3mm 0 4mm; break-inside: avoid-page; }
+.scen h3 { margin-top: 0; }
+.scen .meta { font-size: 8.3pt; color: var(--mut); margin-bottom: 1.5mm; }
+.toc { columns: 2; column-gap: 8mm; font-size: 9.4pt; }
+.toc a { color: var(--ink); }
+.toc .l1 { font-weight: 700; margin-top: 2mm; color: var(--acc); break-after: avoid; }
+.toc .l2 { padding-left: 5mm; color: var(--mut); }
+.kbd { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; border: 0.6px solid #aab4c0; border-bottom-width: 1.5px; border-radius: 1mm; padding: 0 1.2mm; }
+.pill { display: inline-block; font-size: 7.6pt; font-weight: 700; padding: 0.2mm 1.6mm; border-radius: 3mm; background: #e3edf7; color: var(--acc); }
+.lead { font-size: 10.6pt; color: #26384a; }
+.glossary td:first-child { width: 28%; }
+.nobreak { break-inside: avoid; }
+
+/* cover */
+.cover { height: 257mm; display: flex; flex-direction: column; justify-content: space-between; color: #fff;
+  background: linear-gradient(160deg, #002a50 0%, #003a6c 55%, #0a4f8f 100%); margin: 0; padding: 22mm 18mm 16mm; border-radius: 0; }
+.cover .top { display: flex; align-items: center; gap: 7mm; }
+.cover img { width: 34mm; height: 34mm; border-radius: 6mm; box-shadow: 0 2mm 6mm rgba(0,0,0,0.35); }
+.cover .brand { font-family: "Inter Display", sans-serif; font-size: 30pt; font-weight: 800; letter-spacing: 0.3pt; line-height: 1.05; }
+.cover .brand small { display: block; font-size: 12pt; font-weight: 500; opacity: 0.85; letter-spacing: 1.5pt; margin-top: 2mm; text-transform: uppercase; }
+.cover .title { font-family: "Inter Display", sans-serif; font-size: 40pt; font-weight: 700; line-height: 1.05; margin-top: 30mm; }
+.cover .sub { font-size: 13pt; opacity: 0.9; margin-top: 5mm; max-width: 140mm; }
+.cover .wave { opacity: 0.35; }
+.cover .foot { display: flex; justify-content: space-between; font-size: 10pt; opacity: 0.92; border-top: 1px solid rgba(255,255,255,0.35); padding-top: 4mm; }

@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><title>SDR++ TETRA-SCHWARTZ – Bedienungsanleitung</title>
+<link rel="stylesheet" href="manual.css"></head><body>
+
+<h1 id="toc" style="break-before:auto">Inhalt</h1>
+<div class="toc">
+  <div class="l1"><a href="#s1">1 Überblick</a></div>
+  <div class="l2"><a href="#s1-1">Was das Programm kann</a></div>
+  <div class="l2"><a href="#s1-2">Rechtliche Hinweise</a></div>
+  <div class="l1"><a href="#s2">2 Installation und erster Start</a></div>
+  <div class="l2"><a href="#s2-1">Windows</a> · <a href="#s2-2">Linux (AppImage)</a></div>
+  <div class="l2"><a href="#s2-3">Treiber und Zusatzsoftware</a></div>
+  <div class="l2"><a href="#s2-4">Was beim ersten Start eingestellt ist</a></div>
+  <div class="l1"><a href="#s3">3 Die Oberfläche</a></div>
+  <div class="l2"><a href="#s3-2">Module Manager</a> · <a href="#s3-3">Eigene Fenster</a></div>
+  <div class="l1"><a href="#s4">4 SDR einrichten</a></div>
+  <div class="l2"><a href="#s4-2">Empfehlungen je SDR-Typ</a></div>
+  <div class="l2"><a href="#s4-3">Kalibrieren</a> · <a href="#s4-4">Pegel</a></div>
+  <div class="l1"><a href="#s5">5 TETRA-Demodulator: Grundbedienung</a></div>
+  <div class="l1"><a href="#s6">6 Messwerte (Measurements)</a></div>
+  <div class="l1"><a href="#s7">7 Netz, Zelle und Duplex-Tabellen</a></div>
+  <div class="l1"><a href="#s8">8 Stationen und Verkehr</a></div>
+  <div class="l1"><a href="#s9">9 TX-Analyse (Spektrum)</a></div>
+  <div class="l1"><a href="#s10">10 Trends, Zeitschlitze, Stabilität, Empfangsgrenze</a></div>
+  <div class="l1"><a href="#s11">11 Weitere Träger</a></div>
+  <div class="l1"><a href="#s12">12 Burst-Analyse (Uplink)</a></div>
+  <div class="l1"><a href="#s13">13 Mehrwegeempfang</a></div>
+  <div class="l1"><a href="#s14">14 Alarme</a></div>
+  <div class="l1"><a href="#s15">15 Messbericht</a></div>
+  <div class="l1"><a href="#s16">16 GPS, Versorgungsmessung und Karten</a></div>
+  <div class="l1"><a href="#s17">17 Messszenarien</a></div>
+  <div class="l1"><a href="#s18">18 Fehlersuche</a></div>
+  <div class="l1"><a href="#s19">19 Anhang</a></div>
+  <div class="l2"><a href="#s19-1">Dateien und Ordner</a> · <a href="#s19-2">CSV-Spalten</a></div>
+  <div class="l2"><a href="#s19-3">Glossar</a> · <a href="#s19-4">Herkunft und Lizenzen</a></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s1"><span class="num">1</span>Überblick</h1>
+<p class="lead">SDR++ TETRA-SCHWARTZ ist eine experimentelle Amateurfunk-Ausgabe von SDR++ für die Analyse von TETRA-Netzen. Sie empfängt mit einem SDR, dekodiert TETRA-Aussendungen und misst die Signalqualität so, wie man es von einem Messplatz kennt – vom Konstellationsdiagramm bis zur Versorgungskarte.</p>
+
+<h2 id="s1-1">Was das Programm kann</h2>
+<div class="cols">
+<div>
+<ul>
+  <li><b>Demodulation und Dekodierung</b> von TETRA (π/4-DQPSK, 18 ksym/s) mit 8-Punkte-Konstellation und ETSI-Toleranzen.</li>
+  <li><b>Modulationsqualität:</b> MER, EVM, I/Q-Offset, I/Q-Unsymmetrie, Phasen-/Amplitudenfehler, Träger- und Symboltaktablage, BER, CRC-Statistik.</li>
+  <li><b>Netzinformation:</b> Zelle, Nachbarzellen, Netzzeit, Zeitschlitzbelegung.</li>
+  <li><b>Stationen und Verkehr</b> im Amateurfunkmodus mit Rufzeichen (radioid.net) und Sprechgruppen.</li>
+  <li><b>TX-Analyse:</b> Spektrum, Nachbarkanalleistung, belegte Bandbreite, Schultern, Trägerrest.</li>
+</ul>
+</div>
+<div>
+<ul>
+  <li><b>Burst-Analyse</b> von Handfunkgeräten: Rampen, Länge, Welligkeit, Zeitmaske, Zeitlage, Rampen-Spektrum, Störpegel auf dem Uplink.</li>
+  <li><b>Mehrwegeempfang</b>, <b>Frequenzstabilität</b> (Allan-Abweichung) und <b>Empfangsgrenze</b>.</li>
+  <li><b>Langzeitbeobachtung:</b> Trends bis 24 h, CSV-Logs, Alarme, Messbericht.</li>
+  <li><b>Versorgungsmessung</b> mit GPS-Maus und Karten für Google Earth und OpenStreetMap.</li>
+  <li><b>Mehrere Träger</b> gleichzeitig vergleichen.</li>
+</ul>
+</div>
+</div>
+
+<figure><img src="shots/overview.png"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA-Demodulator, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
+
+<h3>Wie das Programm arbeitet</h3>
+<p>Das SDR liefert einen breiten I/Q-Datenstrom. Daraus schneidet das Programm mehrere schmale „Abgriffe“ (VFOs) heraus: den TETRA-VFO für Demodulator und Decoder, und – nur wenn eingeschaltet – weitere, unsichtbare Abgriffe für TX-Analyse, Burst-Analyse, Mehrwegeempfang und weitere Träger. Alle Abgriffe müssen innerhalb der Bandbreite des SDR liegen.</p>
+<figure>
+<svg viewBox="0 0 860 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5a6774"/></marker></defs>
+  <rect x="10" y="95" width="110" height="60" rx="8" fill="#003a6c"/><text x="65" y="122" fill="#fff" text-anchor="middle" font-weight="700">SDR</text><text x="65" y="140" fill="#cfe0f3" text-anchor="middle" font-size="10.5">I/Q, z. B. 2–10 MS/s</text>
+  <line x1="120" y1="125" x2="170" y2="125" stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"/>
+  <rect x="172" y="95" width="110" height="60" rx="8" fill="#1d6fb8"/><text x="227" y="122" fill="#fff" text-anchor="middle" font-weight="700">Spektrum</text><text x="227" y="140" fill="#e3edf7" text-anchor="middle" font-size="10.5">Wasserfall</text>
+  <g font-size="11.5">
+  <line x1="282" y1="125" x2="330" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="95" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="150" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="282" y1="125" x2="330" y2="205" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="332" y="20" width="200" height="40" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="432" y="38" text-anchor="middle" font-weight="700" fill="#003a6c">TETRA-VFO (72 kS/s)</text><text x="432" y="53" text-anchor="middle" fill="#5a6774" font-size="10.5">Demodulator → Decoder</text>
+  <rect x="332" y="75" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="93" text-anchor="middle" font-weight="700" fill="#003a6c">TX-Analyse (250 kHz)</text><text x="432" y="108" text-anchor="middle" fill="#5a6774" font-size="10.5">Spektrum, ACP, OBW</text>
+  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Burst / Mehrwege (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">Uplink, Downlink-Zeitraster</text>
+  <rect x="332" y="185" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="203" text-anchor="middle" font-weight="700" fill="#003a6c">Weitere Träger (je 72 kS/s)</text><text x="432" y="218" text-anchor="middle" fill="#5a6774" font-size="10.5">Pegel, MER, Ablage</text>
+  <line x1="532" y1="40" x2="590" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="592" y="15" width="255" height="50" rx="7" fill="#003a6c"/><text x="720" y="36" fill="#fff" text-anchor="middle" font-weight="700">Messwerte · Netz · Stationen · Audio</text><text x="720" y="53" fill="#cfe0f3" text-anchor="middle" font-size="10.5">jede Sekunde → Trends, CSV-Log, Alarme</text>
+  <line x1="532" y1="95" x2="590" y2="125" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="532" y1="150" x2="590" y2="135" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <line x1="532" y1="205" x2="590" y2="145" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="592" y="105" width="255" height="55" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="720" y="128" text-anchor="middle" font-weight="700" fill="#003a6c">eigene Fenster, Bericht</text><text x="720" y="145" text-anchor="middle" fill="#5a6774" font-size="10.5">nur aktiv, wenn eingeschaltet</text>
+  </g>
+</svg>
+<figcaption>Abb. 2 – Signalweg: ein SDR, mehrere unabhängige Abgriffe.</figcaption></figure>
+
+<h2 id="s1-2">Rechtliche Hinweise</h2>
+<div class="box warn"><b class="t">Nur für Amateurfunk und eigene Netze</b>
+Das Programm ist für den Amateurfunk gedacht: für Amateurfunk-TETRA-Relais, eigene Testaufbauten und Messungen an eigenen Geräten. Aussendungen anderer Funkdienste, die nicht für die Allgemeinheit oder für dich bestimmt sind, dürfen in Deutschland nicht abgehört und ihr Inhalt nicht weitergegeben werden (Abhörverbot, § 5 TDDDG, früher TTDSG). Das gilt auch für Rufnummern, Teilnehmerkennungen und Textnachrichten. Senden kann das Programm nicht. Diese Hinweise sind keine Rechtsberatung.</div>
+<div class="box info"><b class="t">Experimentelle Beta-Version</b>
+Messwerte sind sorgfältig umgesetzt, aber nicht mit kalibrierten Messgeräten verglichen. Grenzwerte im Programm sind Richtwerte – für verbindliche Aussagen bitte immer die Norm (ETSI EN 300 392-2, EN 300 394-1) heranziehen.</div>
+
+<!-- ============================================================ -->
+<h1 id="s2"><span class="num">2</span>Installation und erster Start</h1>
+<h2 id="s2-1">Windows</h2>
+<ol class="steps">
+  <li>Die ZIP-Datei <code>SDRPP-TETRA-SCHWARTZ_v…_windows_x64</code> herunterladen und <b>vollständig</b> in einen eigenen Ordner entpacken (nicht aus der ZIP heraus starten).</li>
+  <li><code>sdrpp.exe</code> starten. Weil das Programm nicht signiert ist, warnt Windows SmartScreen: <span class="ui">Weitere Informationen</span> → <span class="ui">Trotzdem ausführen</span>. Blockiert der Browser schon den Download, die Datei in der Download-Liste ausdrücklich behalten.</li>
+  <li>Einstellungen, Logs und Namenslisten liegen im selben Ordner. Für ein Update den neuen Ordner daneben entpacken; die Konfiguration (<code>config.json</code>, <code>*_config.json</code>) kann übernommen werden.</li>
+</ol>
+<h2 id="s2-2">Linux (AppImage, Ubuntu 24.04)</h2>
+<pre>chmod +x SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage
+sudo apt install libfuse2t64          # einmalig, für AppImages
+./SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage</pre>
+<p>Die Konfiguration liegt unter <code>~/.config/sdrpp_brown_appimage</code>. Für USB-SDRs muss der Benutzer Zugriff auf die Geräte haben (udev-Regeln des jeweiligen SDR-Pakets, z. B. <code>rtl-sdr</code>, <code>hackrf</code>, <code>uhd-host</code>).</p>
+
+<h2 id="s2-3">Treiber und Zusatzsoftware</h2>
+<table>
+<tr><th>SDR</th><th>Windows</th><th>Linux</th></tr>
+<tr><td>RTL-SDR, Airspy, HackRF</td><td>WinUSB-Treiber mit Zadig installieren</td><td>udev-Regeln (Pakete <code>rtl-sdr</code>, <code>airspy</code>, <code>hackrf</code>)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR-USB-Treiber (Analog Devices)</td><td>ohne Treiber; Zugriff per USB oder Netzwerk (<code>ip:192.168.2.1</code>)</td></tr>
+<tr><td>USRP (B2xx)</td><td>im Paket enthalten; FPGA-Images mit <code>uhd_images_downloader</code></td><td><code>sudo apt install uhd-host &amp;&amp; sudo uhd_images_downloader</code></td></tr>
+<tr><td>BladeRF, LimeSDR</td><td>im Paket enthalten</td><td>udev-Regeln der Hersteller-Pakete</td></tr>
+<tr><td>SDRplay</td><td>SDRplay-API installieren (Dienst muss laufen)</td><td>SDRplay-API installieren; wird bewusst nicht mitgeliefert</td></tr>
+<tr><td>Spectran (HTTP)</td><td colspan="2">Spectran-Software mit aktiviertem HTTP-Server; Verbindung über Hostname und Port</td></tr>
+</table>
+
+<h2 id="s2-4">Was beim ersten Start eingestellt ist</h2>
+<ul>
+  <li>Startfrequenz <b>439 MHz</b> (70-cm-TETRA), Farbschema <b>RoSc 2</b>.</li>
+  <li>TETRA-Demodulator im Modus <span class="ui">Amateur radio</span>, 8-Punkte-Konstellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> und <span class="ui">Auto RF gain</span> an, Audio auf <span class="ui">Audio</span>.</li>
+  <li>Für TETRA nicht benötigte Module sind ausgeblendet oder aus: Radio, Frequency Manager, Band Plan, FT8/FT4, Rauschminderung, WebSDR, Rigctl, VFO Color, Debug. Alles lässt sich im <a href="#s3-2">Module Manager</a> wieder einblenden.</li>
+  <li>In der Quellenliste stehen nur die unterstützten SDRs (siehe <a href="#s4-2">Kapitel 4</a>).</li>
+</ul>
+
+<!-- ============================================================ -->
+<h1 id="s3"><span class="num">3</span>Die Oberfläche</h1>
+<div class="cols">
+<div>
+<figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Abb. 3 – Menüspalte mit dem TETRA-Demodulator.</figcaption></figure>
+</div>
+<div>
+<h3>Bereiche</h3>
+<ul>
+  <li><b>Kopfleiste:</b> Start/Stopp, Lautstärke, Frequenzanzeige (Mausrad oder Ziffern anklicken), VFO-Auswahl, Signalpegel.</li>
+  <li><b>Menüspalte</b> links: <span class="ui">Source</span> (SDR), <span class="ui">TETRA Demodulator</span>, <span class="ui">Sinks</span> (Audio), <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>. Jeder Bereich lässt sich auf- und zuklappen und per Ziehen umsortieren.</li>
+  <li><b>Spektrum und Wasserfall</b> rechts. Der TETRA-VFO ist das markierte Band; Ziehen mit der Maus verschiebt ihn, ein Klick in den Wasserfall setzt ihn auf diese Frequenz.</li>
+</ul>
+<h3>Bedienhinweise</h3>
+<ul>
+  <li>Fast jeder Messwert hat einen <b>Tooltip</b>: Maus kurz darüber halten.</li>
+  <li>Die Menüspalte ist in der Breite veränderbar; Inhalte brechen um, statt rechts zu verschwinden.</li>
+  <li>Tabellen: Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Die Anordnung wird gespeichert.</li>
+</ul>
+</div>
+</div>
+
+<h2 id="s3-2">Module Manager</h2>
+<p>Unter <span class="ui">Module Manager</span> steht jedes Modul mit zwei Schaltern: <span class="ui">Menu</span> zeigt es in der Menüspalte, <span class="ui">On</span> schaltet es ein. Darunter lassen sich die eingebauten Menüs (VFO Color, Debug, Band Plan, Display, Theme) einblenden und unter <span class="ui">Sources in the source list</span> weitere SDR-Typen in die Quellenliste aufnehmen. Das gerade benutzte SDR bleibt immer sichtbar.</p>
+
+<h2 id="s3-3">Eigene Fenster</h2>
+<p>Unter <span class="ui">Own window</span> im TETRA-Demodulator lassen sich Konstellation (mit Messwerten), Stationen, Netz, TX-Analyse, Trends, Träger, Bursts und Mehrwege in eigene, frei verschiebbare Fenster auslagern – praktisch auf einem zweiten Bildschirm. Im Menü erscheint dann <span class="ui">Bring to front</span>. Position und Größe merkt sich das Programm.</p>
+
+<!-- ============================================================ -->
+<h1 id="s4"><span class="num">4</span>SDR einrichten</h1>
+<h2>Grundsätze</h2>
+<ul>
+  <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Burst-Zeitlage (Uplink und Downlink gleichzeitig) und weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
+  <li><b>Mitte nicht auf den Träger legen:</b> Der Gleichanteil des SDR liegt in der Bandmitte. Den TETRA-Träger mindestens ~100 kHz daneben einstellen, sonst verfälscht er I/Q-Offset und Trägerrest.</li>
+  <li><b>Pegel:</b> TETRA-Kanal zwischen −35 und −20 dBFS, Spitzen unter −6 dBFS. Das erledigt <span class="ui">Auto RF gain</span>, sofern das SDR es unterstützt.</li>
+  <li><b>Aufwärmen:</b> Nach dem Einschalten 10–15 Minuten warten, bevor Frequenz kalibriert oder Stabilität gemessen wird.</li>
+</ul>
+
+<h2 id="s4-2">Empfehlungen je SDR-Typ</h2>
+<table>
+<tr><th style="width:19%">SDR</th><th>Einstellungen</th><th style="width:26%">Auto RF gain / Kalibrierung</th></tr>
+<tr><td>RTL-SDR</td><td>2,4 MS/s; <span class="ui">Tuner AGC</span> aus; Bias-T nur für aktive Antennen. Günstige Sticks driften stark – TCXO-Modelle bevorzugen.</td><td>Stufen des Tuners; PPM-Korrektur (1-ppm-Schritte)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>2–4 MS/s (für Duplexmessungen bis 20 MS/s, wenn USB/Netz mithalten); Verstärkungsmodus <span class="ui">Manual</span>. Pluto+ mit externer 10-MHz-Referenz ist die beste Wahl für Frequenzmessungen.</td><td>Verstärkung in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
+<tr><td>Airspy</td><td>Modus <span class="ui">Sensitive</span> oder <span class="ui">Linear</span>; Abtastrate 3 oder 10 MS/s.</td><td>Stufen 0–21; keine Frequenzkorrektur über die Oberfläche</td></tr>
+<tr><td>USRP B2xx</td><td>Abtastrate 2–20 MS/s, Antennenanschluss RX2 oder TX/RX passend wählen; externe Referenz möglich.</td><td>Verstärkung in dB</td></tr>
+<tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> nur bei schwachen Signalen (Übersteuerung!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>BladeRF</td><td>Verstärkungsmodus <span class="ui">Manual</span>.</td><td>Gesamtverstärkung; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>LimeSDR</td><td>Antenne passend (<code>LNAW</code> für 70 cm).</td><td>0–73 dB; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>SDRplay</td><td><span class="ui">IF AGC</span> aus; LNA-Stufe von Hand je nach Signalstärke.</td><td>ZF-Verstärkung; <span class="ui">Freq. corr. (ppb)</span></td></tr>
+<tr><td>Spectran (HTTP)</td><td>Pegel (Referenzpegel) und Frequenzkorrektur in der Spectran-Software einstellen.</td><td>nicht über dieses Programm</td></tr>
+</table>
+<div class="box"><b class="t">Tipp für Pluto/Zynq unter Windows</b>Bei Aussetzern („Re-locks … with timing slip“) die Abtastrate senken und das Gerät direkt an einen USB-3-Port ohne Hub hängen. Die Puffer sind bereits auf 20 ms × 8 eingestellt.</div>
+
+<h2 id="s4-3">Kalibrieren</h2>
+<p>Unter <span class="ui">Measurements</span> zeigt <span class="ui">Carrier vs. SYSINFO</span>, wie weit der empfangene Träger von der Frequenz abweicht, die die Basisstation selbst ausstrahlt. Mit <span class="ui">Calibrate SDR</span> stellt das Programm die Frequenzkorrektur des SDR so ein, dass diese Abweichung verschwindet.</p>
+<div class="box warn"><b class="t">Nur an einer vertrauenswürdigen Zelle kalibrieren</b>Der Messwert enthält den Fehler der Basisstation <i>und</i> des SDR. Kalibriere nur an einer Station, deren Frequenz du kennst (GPS-gestützt oder vorher mit referenzgekoppeltem SDR gemessen), und erst nach dem Aufwärmen.</div>
+
+<h2 id="s4-4">Pegel in dBm</h2>
+<p>Das SDR misst in dBFS (bezogen auf Vollaussteuerung). Mit <span class="ui">Level cal. (dB)</span> wird daraus dBm: Ein Signal bekannter Leistung (Messsender) einspeisen und den Wert so einstellen, dass die Anzeige stimmt. Die Kalibrierung gilt nur für dieselbe Verstärkung und Frequenz – <span class="ui">Auto RF gain</span> dafür ausschalten.</p>
+
+<!-- ============================================================ -->
+<h1 id="s5"><span class="num">5</span>TETRA-Demodulator: Grundbedienung</h1>
+<ol class="steps">
+  <li>SDR unter <span class="ui">Source</span> wählen und mit ▶ starten.</li>
+  <li>Im Wasserfall den TETRA-Träger suchen (25 kHz breites, gleichmäßiges Band) und den TETRA-VFO darauf ziehen oder die Frequenz eingeben. Die <span class="ui">AFC</span> zieht den VFO nach, sobald der Decoder einrastet.</li>
+  <li>Betriebsart wählen: <span class="ui">Amateur radio</span> (Duplex-Tabellen für 70 cm, Rufzeichen, Sprechgruppen) oder <span class="ui">ETSI</span>.</li>
+  <li>Prüfen: <span class="ui">RF status</span> „OK“, MER über ~15 dB, im Netzbereich erscheinen MCC/MNC und Frequenzen.</li>
+</ol>
+<div class="cols">
+<div>
+<h3>Konstellation</h3>
+<p>π/4-DQPSK hat acht Zielpunkte (<span class="ui">8 points (pi/4)</span>) – ausgeschaltet werden sie auf vier gefaltet. Die Ringe zeigen die ETSI-Grenzen (EVM 10 % rms, 30 % Spitze). Die Punkte werden grün, wenn die gemessene EVM innerhalb der Grenze liegt.</p>
+<p><span class="ui">Remove I/Q offset</span> rechnet einen Trägerrest des Senders (oder den Gleichanteil des Empfängers) aus der Anzeige heraus. Die Messwerte zeigen ihn trotzdem an.</p>
+<h3>Decoder-Modus</h3>
+<p><span class="ui">OSMO-TETRA</span> dekodiert im Programm (Normalfall). <span class="ui">NETSYMS</span> schickt die Symbole per Netzwerk an ein externes Programm.</p>
+</div>
+<div>
+<figure><img src="shots/win_const.png"><figcaption>Abb. 4 – Konstellation und Messwerte im eigenen Fenster.</figcaption></figure>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s6"><span class="num">6</span>Messwerte (Measurements)</h1>
+<p>Die Werte werden jede Sekunde aktualisiert – auch bei geschlossenem Menü – und gehen in Trends, CSV-Log und Alarme ein.</p>
+<table>
+<tr><th style="width:22%">Anzeige</th><th>Bedeutung</th><th style="width:24%">Gute Werte</th></tr>
+<tr><td>Level, RF status</td><td>Leistung im TETRA-Kanal und Spitzenwert; RF status warnt bei Übersteuerung oder zu schwachem Signal.</td><td>−35 … −20 dBFS, Spitze &lt; −6 dBFS</td></tr>
+<tr><td>MER, EVM</td><td>Modulationsfehler (Verhältnis Signal zu Fehlervektor) bzw. Fehlervektor in % (rms und Spitze).</td><td>MER &gt; 20 dB; EVM &lt; 10 % rms</td></tr>
+<tr><td>MER w/o offset</td><td>MER ohne den I/Q-Offset – zeigt, was der Modulator ohne Trägerrest leistet.</td><td></td></tr>
+<tr><td>I/Q offset</td><td>Trägerrest (Sender) oder Gleichanteil (Empfänger) relativ zum Signal.</td><td>&lt; −30 dB</td></tr>
+<tr><td>I/Q imbalance (IRR)</td><td>Spiegelfrequenzunterdrückung des Senders aus einem I/Q-Modell.</td><td>&gt; 30 dB</td></tr>
+<tr><td>Error split</td><td>Fehler aufgeteilt in Phase und Amplitude; deutlich mehr Phase deutet auf Phasenrauschen.</td><td></td></tr>
+<tr><td>Carrier offset</td><td>Trägerablage zum VFO (bei AFC klein).</td><td></td></tr>
+<tr><td>Symbol clock</td><td>Abweichung des Symboltakts in ppm (Sender + SDR-Takt).</td><td>einige ppm</td></tr>
+<tr><td>Input rate</td><td>tatsächlich ankommende Abtastrate (60-s-Regression); negative Abweichung = verlorene Abtastwerte.</td><td>±(Unsicherheit)</td></tr>
+<tr><td>Audio drops</td><td>verworfene Sprachdaten, weil die Audioausgabe nicht mitkommt.</td><td>none</td></tr>
+<tr><td>Carrier vs. SYSINFO</td><td>Empfangener Träger minus angekündigte Frequenz – Grundlage für <span class="ui">Calibrate SDR</span>.</td><td>±0,2 ppm (ETSI, Basisstation)</td></tr>
+<tr><td>AFC, Auto RF gain</td><td>VFO folgt dem Träger (max. ±6 kHz); Verstärkung wird alle 4 s angepasst.</td><td></td></tr>
+<tr><td>Raw BER</td><td>Bitfehler in bekannten Bits (Trainingssequenzen) vor der Kanaldekodierung.</td><td>&lt; 1·10⁻³</td></tr>
+<tr><td>Bursts/s, Re-locks</td><td>dekodierte Bursts; Neusynchronisation <i>mit</i> Taktsprung = verlorene Abtastwerte (USB/CPU), <i>ohne</i> = gestörter Burst (Signal).</td><td>keine Re-locks</td></tr>
+<tr><td>CRC-Tabelle</td><td>Fehlerquote je Kanal (BSCH, SB2, Halbslot, SCH/F) in der letzten Sekunde und gesamt.</td><td>&lt; 1 %</td></tr>
+<tr><td>Events</td><td>Ereignisliste: Sync-Verluste, AFC- und Verstärkungsschritte, Alarme.</td><td></td></tr>
+</table>
+<p><span class="ui">Reset totals</span> setzt Summen und Statistiken zurück. <span class="ui">Start CSV log</span> schreibt jede Sekunde eine Zeile in den Log-Ordner (siehe <a href="#s19-2">Anhang</a>), dazu Dateien für Ereignisse, Stationen, Verkehr und weitere Träger.</p>
+
+<!-- ============================================================ -->
+<h1 id="s7"><span class="num">7</span>Netz, Zelle und Duplex-Tabellen</h1>
+<div class="cols">
+<div>
+<p>Der Bereich <span class="ui">Network &amp; cell</span> zeigt, was die Basisstation über sich verbreitet: MCC/MNC, Farbcode, Downlink- und Uplink-Frequenz, Dienste (Verschlüsselung, Sprache, Daten), Zellauswahl-Parameter, Netzzeit und Nachbarzellen. Mit <span class="ui">Tune</span> springt der VFO auf eine Nachbarzelle.</p>
+<h3>Duplex-Tabellen</h3>
+<p>Die Uplink-Frequenz ergibt sich aus Downlink und Duplexabstand. Der Abstand steht nicht direkt in der Aussendung, sondern als Index in eine Tabelle. Im Amateurfunkmodus gelten für 70 cm diese Werte:</p>
+<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
+<tr><td>Abstand (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
+<p>Unter <span class="ui">Duplex spacing table</span> lassen sich alle Tabellen bearbeiten; gespeichert wird in <code>tetra_duplex_ham.json</code>. <span class="ui">Table = default</span> stellt die Vorgaben wieder her.</p>
+</div>
+<div><figure><img src="shots/win_network.png"><figcaption>Abb. 5 – Netz und Zelle (Kennungen unkenntlich gemacht).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s8"><span class="num">8</span>Stationen und Verkehr</h1>
+<p>Im Amateurfunkmodus sammelt <span class="ui">Stations &amp; Traffic</span> alle Teilnehmer und Gruppen:</p>
+<ul>
+  <li><b>Stations:</b> ISSI (bei Amateurfunk = DMR-ID; 7-stellig Benutzer, 6-stellig Relais), Rufzeichen und Ort aus radioid.net, Zeitschlitz, zuletzt gehört, gescannte Gruppen, Aktivität.</li>
+  <li><b>Groups:</b> GSSI mit Name der Sprechgruppe (Brandmeister), aktueller und letzter Sprecher, angemeldete Stationen.</li>
+  <li><b>Traffic:</b> Rufaufbau, Sprechrecht, SDS-Textnachrichten und Positionen im Klartext.</li>
+</ul>
+<p>Die Namenslisten lädt <span class="ui">Download name lists</span> (radioid.net und Brandmeister) in den Konfigurationsordner; ohne Internet können die Dateien auch von Hand dort abgelegt werden. <span class="ui">Hide call control</span> blendet Steuermeldungen aus, sodass nur SDS und Status übrig bleiben.</p>
+<figure><img src="shots/win_stations.png"><figcaption>Abb. 6 – Stationen und Verkehr (Kennungen unkenntlich gemacht).</figcaption></figure>
+
+<!-- ============================================================ -->
+<h1 id="s9"><span class="num">9</span>TX-Analyse (Spektrum)</h1>
+<div class="cols">
+<div>
+<p><span class="ui">Run analysis (250 kHz tap)</span> startet einen 250 kHz breiten Abgriff um den Kanal und misst daraus:</p>
+<ul>
+  <li><b>Channel power</b> durch das TETRA-Filter.</li>
+  <li><b>ACP</b> bei ±25, ±50, ±75 kHz in dBc, mit Grenzwerten (einstellbar).</li>
+  <li><b>Occupied BW (99 %)</b> und <b>−26-dB-Bandbreite</b> im Vergleich zum idealen TETRA-Spektrum.</li>
+  <li><b>Shoulders</b> und <b>Edge slope</b> – Schultern deuten auf Nichtlinearität der Endstufe.</li>
+  <li><b>Carrier line</b> – Trägerrest als Spektrallinie.</li>
+</ul>
+<p><span class="ui">RBW</span> und <span class="ui">Avg</span> stellen Auflösung und Mittelung ein. Mit <span class="ui">Store floor</span> wird das Rauschen des Empfängers gespeichert (Sender aus oder Eingang mit 50 Ω abgeschlossen); Werte nahe dieser Grenze werden grau markiert.</p>
+<div class="box warn"><b class="t">Grenzen der Messung</b>Die Nachbarkanalmessung ist durch Dynamik und Phasenrauschen des SDR begrenzt – typischerweise −60 bis −70 dBc. Für Werte am Grenzwert ein starkes, sauberes Signal und eine niedrige Verstärkung verwenden.</div>
+</div>
+<div><figure><img src="shots/win_txa.png"><figcaption>Abb. 7 – TX-Analyse: gemessenes Spektrum, ideales TETRA-Spektrum (dünn) und ACP-Fenster.</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s10"><span class="num">10</span>Trends, Zeitschlitze, Stabilität, Empfangsgrenze</h1>
+<h2>Verlauf über die Zeit</h2>
+<div class="cols">
+<div>
+<p>Der Bereich <span class="ui">Trends &amp; timeslots</span> speichert die letzten 24 Stunden mit einem Wert pro Sekunde: Pegel, MER, CRC-Fehler, Trägerablage, Verkehr je Zeitschlitz und Bursts/s. Bei langen Zeitspannen fasst jedes Pixel mehrere Sekunden zusammen; Linie = Mittelwert, Band = Minimum bis Maximum, rote Striche = Sync-Verluste. Die Maus zeigt die Werte zu jedem Zeitpunkt.</p>
+<p>Mit <span class="ui">Open a CSV log</span> wird ein gespeicherter Log in derselben Ansicht geöffnet – so lassen sich auch Messungen über mehrere Tage auswerten. <span class="ui">Back to live</span> kehrt zur laufenden Messung zurück.</p>
+<h3>Zeitschlitzbelegung</h3>
+<p>Jeder Downlink-Burst kündigt an, wofür der Zeitschlitz genutzt wird. Die Tabelle zählt je Zeitschlitz Verkehr, zugewiesene Steuerung, allgemeine Steuerung und frei sowie den Uplink-Verkehr. Rahmen 18 (immer Steuerung) bleibt außen vor.</p>
+</div>
+<div><figure><img src="shots/win_trends.png"><figcaption>Abb. 8 – Trends und Zeitschlitzbelegung.</figcaption></figure></div>
+</div>
+
+<h2>Frequenzstabilität</h2>
+<p>Der Reiter <span class="ui">Frequency stability</span> zeigt die Abweichung zwischen empfangenem Träger und SYSINFO-Frequenz in ppb über die Zeit und die <b>Allan-Abweichung</b>: wie stark die Frequenz im Mittel über 1 s, 2 s, 4 s … schwankt. Ein Abfall mit der Mittelungszeit ist normales Messrauschen; ein Wiederanstieg bei langen Zeiten zeigt Drift (Temperatur, Alterung).</p>
+<div class="box info"><b class="t">Aussagekräftig nur mit Referenz</b>Der Wert enthält Basisstation und SDR. Ohne GPS-gestützte Referenz am SDR misst man vor allem den eigenen Quarz.</div>
+
+<h2>Pegel gegen Qualität – Empfangsgrenze</h2>
+<p>Der Reiter <span class="ui">Level vs. quality</span> sortiert alle Sekunden nach Pegel (1-dB-Stufen) und zeigt je Stufe CRC-Fehler und MER. Die <b>Empfangsgrenze</b> ist der niedrigste Pegel, ab dem keine Stufe mehr über der <span class="ui">CRC limit</span> (Standard 1 %) liegt. Sie ist ein praxisnaher Schwellwert für Versorgungskarten. Mit kalibriertem Pegel (dBm) ist sie zwischen Messungen vergleichbar.</p>
+
+<!-- ============================================================ -->
+<h1 id="s11"><span class="num">11</span>Weitere Träger</h1>
+<div class="cols">
+<div>
+<p>Unter <span class="ui">Carriers (multi-carrier)</span> werden bis zu acht weitere Träger innerhalb der SDR-Bandbreite gleichzeitig ausgewertet: Pegel, Abstand zum Hauptträger, MER, Trägerablage und Synchronisation – dekodiert wird nur der Hauptträger.</p>
+<ul>
+  <li>Frequenz eingeben → <span class="ui">Add carrier</span>, oder <span class="ui">Add neighbour cells</span> übernimmt die Nachbarzellen aus der Netzinformation.</li>
+  <li>Der Pegelverlauf aller Träger erscheint darunter (10 min bis 24 h).</li>
+  <li>Läuft ein CSV-Log, entsteht zusätzlich <code>…_carriers.csv</code>.</li>
+</ul>
+<p>Jeder Träger kostet etwa so viel Rechenzeit wie ein weiterer VFO.</p>
+</div>
+<div><figure><img src="shots/win_carriers.png"><figcaption>Abb. 9 – Vergleich mehrerer Träger.</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s12"><span class="num">12</span>Burst-Analyse (Uplink)</h1>
+<p>Handfunkgeräte senden in Bursts – kurzen Aussendungen in ihrem Zeitschlitz. Die Burst-Analyse misst sie über ein 25-kHz-Kanalfilter. Als Frequenz dient der Uplink aus der Netzinformation (<span class="ui">Uplink (SYSINFO)</span>), eine eigene Frequenz oder der TETRA-VFO (z. B. Basisstation im unterbrochenen Betrieb).</p>
+<div class="cols">
+<div>
+<h3>Burstform und Zeitmaske</h3>
+<ul>
+  <li><b>Length (−3 dB):</b> Burstlänge; Soll 231 Symbole (12,8 ms) für normale, 103 für halbe Bursts.</li>
+  <li><b>Ramp up/down:</b> Zeit von −20 auf −1 dBc bzw. zurück.</li>
+  <li><b>Ripple:</b> Welligkeit im Nutzteil (gemittelt).</li>
+  <li><b>Outside the burst:</b> Leistung vor und nach dem Burst (dBc) – begrenzt durch das Empfängerrauschen („at the floor“).</li>
+</ul>
+<p>Die Grafik zeigt die über die letzten Bursts gemittelte Form mit der <span class="ui">Time mask</span> (rot). Die Maskenwerte sind einstellbar und nur Richtwerte.</p>
+<h3>Zeitlage gegenüber dem Downlink</h3>
+<p>Mit <span class="ui">Timing vs. downlink</span> öffnet das Programm einen zweiten, abtastgenau ausgerichteten Abgriff auf dem TETRA-VFO (Downlink derselben Zelle), findet dort das Zeitschlitzraster und misst, wann jeder Burst nach Beginn seines Uplink-Zeitschlitzes ansteigt. Wichtig ist vor allem der <b>Vergleich zwischen Geräten</b> und die Streuung; der Absolutwert enthält auch die Laufzeitunterschiede (3,3 µs je km Umweg).</p>
+</div>
+<div><figure><img src="shots/win_bursts.png"><figcaption>Abb. 10 – Burst-Analyse mit Profil, Zeitlage und Rampen-Spektrum (synthetisches Testsignal).</figcaption></figure></div>
+</div>
+<figure>
+<svg viewBox="0 0 860 150" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="11.5">
+  <text x="10" y="32" fill="#003a6c" font-weight="700">Downlink</text>
+  <text x="10" y="102" fill="#003a6c" font-weight="700">Uplink</text>
+  <g stroke="#9fb0c2" fill="#e3edf7">
+    <rect x="90" y="15" width="150" height="28"/><rect x="240" y="15" width="150" height="28"/><rect x="390" y="15" width="150" height="28"/><rect x="540" y="15" width="150" height="28"/><rect x="690" y="15" width="150" height="28"/>
+    <rect x="90" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="240" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="390" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="540" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="690" y="85" width="150" height="28" fill="#f1f5f9"/>
+  </g>
+  <g fill="#003a6c" text-anchor="middle"><text x="165" y="34">TS1</text><text x="315" y="34">TS2</text><text x="465" y="34">TS3</text><text x="615" y="34">TS4</text><text x="765" y="34">TS1</text></g>
+  <g fill="#5a6774" text-anchor="middle"><text x="165" y="104">TS3</text><text x="315" y="104">TS4</text><text x="765" y="104">TS2</text><text x="615" y="104">TS1</text></g>
+  <rect x="398" y="88" width="136" height="22" rx="3" fill="#1d6fb8"/><text x="466" y="103" fill="#fff" text-anchor="middle" font-weight="700">Burst (TS1)</text>
+  <path d="M390,65 L390,120" stroke="#c0392b" stroke-dasharray="4 3"/>
+  <path d="M390,128 L398,128" stroke="#c0392b" stroke-width="2"/><text x="400" y="142" fill="#c0392b">gemessene Zeitlage</text>
+  <path d="M90,52 C200,52 280,70 390,78" stroke="#5a6774" fill="none" marker-end="url(#ar)"/><text x="160" y="68" fill="#5a6774">Uplink = Downlink + 2 Zeitschlitze</text>
+</svg>
+<figcaption>Abb. 11 – Zeitschlitzraster: Der Uplink ist gegenüber dem Downlink um zwei Zeitschlitze (2 × 14,17 ms) verschoben.</figcaption></figure>
+
+<h3>Rampen-Spektrum (Schalttransienten)</h3>
+<p>Beim Ein- und Ausschalten entstehen die meisten Störungen in den Nachbarkanälen. <span class="ui">Ramp spectrum</span> misst die Kanalleistung bei −50, −25, ±0, +25, +50 kHz in 1,8-ms-Fenstern beim Anstieg, in der Mitte und beim Abfall, bezogen auf die Mitte. Orange: Rampe mehr als 6 dB über der Mitte (Splatter).</p>
+<h3>Störpegel auf dem Uplink</h3>
+<p><span class="ui">Noise between bursts</span> misst die Leistung im Kanal, während niemand sendet – auf dem Uplink eines Relais also dessen Empfangsrauschen und Störungen. Der Verlauf über bis zu 24 h zeigt Störer, die das Relais „taub“ machen; ein Alarm kann darauf reagieren.</p>
+<div class="box warn"><b class="t">Sender nie direkt anschließen</b>Ein Handfunkgerät nie ohne ausreichende Dämpfung (z. B. 60–70 dB, belastbares Dämpfungsglied) an das SDR anschließen. Für Messungen genügt meist eine Antenne in einigen Metern Abstand.</div>
+
+<!-- ============================================================ -->
+<h1 id="s13"><span class="num">13</span>Mehrwegeempfang</h1>
+<div class="cols">
+<div>
+<p>Jeder Downlink-Burst enthält eine bekannte Trainingssequenz. Aus ihr schätzt <span class="ui">Multipath (downlink)</span> die Kanalimpulsantwort und mittelt sie zu einem Leistungs-Verzögerungsprofil. Der Vergleich mit dem Profil eines idealen Signals (grün) zeigt Echos:</p>
+<ul>
+  <li><b>Strongest echo:</b> Verzögerung (µs), Umweg (km) und Pegel des stärksten Echos über −15 dB.</li>
+  <li><b>Extra delay spread:</b> zusätzliche Laufzeitstreuung gegenüber dem idealen Signal.</li>
+</ul>
+<p>Erkannt werden Echos von etwa 55 µs (17 km Umweg) bis 222 µs; kürzere verbreitern nur den Hauptpfad. TETRA-Empfänger verkraften Echos bis etwa ¼ Symbol (14 µs) ohne Verlust. <span class="ui">Averaging</span>: 2 s für Fahrten, 60 s oder unbegrenzt für feste Standorte.</p>
+</div>
+<div><figure><img src="shots/win_multipath.png"><figcaption>Abb. 12 – Mehrwegeprofil mit einem Echo bei 111 µs (synthetisches Testsignal).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s14"><span class="num">14</span>Alarme</h1>
+<p>Für die Langzeitüberwachung lassen sich unter <span class="ui">Alarms</span> Grenzwerte setzen:</p>
+<table class="plain">
+<tr><th>Bedingung</th><th>Beispiel</th></tr>
+<tr><td>Pegel unter</td><td>−90 dBFS bzw. dBm (kalibriert)</td></tr>
+<tr><td>MER unter</td><td>15 dB</td></tr>
+<tr><td>CRC-Fehler über</td><td>5 %</td></tr>
+<tr><td>Lock / Sync verloren</td><td>sofort</td></tr>
+<tr><td>Uplink-Rauschen über</td><td>−100 dBFS (Burst-Analyse muss auf dem Uplink laufen)</td></tr>
+</table>
+<p>Eine Bedingung muss die <span class="ui">Hold time</span> lang anhalten, bevor ein Alarm ausgelöst wird (und ebenso lange, bevor er endet). Alarme und ihr Ende stehen im Ereignislog und – bei laufendem Log – in <code>…_events.csv</code>. Optional startet ein Alarm den CSV-Log, unter Windows auch mit Ton. Aktive Alarme erscheinen rot oben im TETRA-Menü.</p>
+
+<!-- ============================================================ -->
+<h1 id="s15"><span class="num">15</span>Messbericht</h1>
+<div class="cols">
+<div>
+<p><span class="ui">Report</span> → <span class="ui">Create report</span> erstellt eine HTML-Datei im Log-Ordner und öffnet sie im Browser. Sie enthält:</p>
+<ul>
+  <li>Zusammenfassung (Pegel, MER, EVM, CRC, Sync-Verluste, Frequenzablage),</li>
+  <li>Zelle und Kennwerte, Verläufe als Grafik,</li>
+  <li>Zeitschlitzbelegung, Empfangsgrenze, Allan-Abweichung,</li>
+  <li>TX-Analyse, Burst-Analyse mit Profil, Mehrwege, weitere Träger,</li>
+  <li>die letzten Ereignisse.</li>
+</ul>
+<p>Zeitraum ist die unter <span class="ui">Trends</span> gewählte Zeitspanne (oder der geladene Log). Unter <span class="ui">Notes</span> lassen sich Ort, Antenne oder Anlass eintragen. Als PDF: im Browser drucken → „Als PDF speichern“.</p>
+</div>
+<div><figure><img src="shots/report.png"><figcaption>Abb. 13 – Messbericht (Ausschnitt).</figcaption></figure></div>
+</div>
+
+<!-- ============================================================ -->
+<h1 id="s16"><span class="num">16</span>GPS, Versorgungsmessung und Karten</h1>
+<p>Mit einer GPS-Maus wird jede Sekunde des CSV-Logs mit einer Position versehen. Daraus entstehen Versorgungskarten mit farbigen Messpunkten und einer Heatmap.</p>
+<figure>
+<svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
+  <g>
+  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 GPS verbinden</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">NMEA, Port, Baudrate</text>
+  <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Zelle sperren</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">Lock current cell</text>
+  <rect x="355" y="20" width="150" height="70" rx="9" fill="#1d6fb8"/><text x="430" y="50" fill="#fff" text-anchor="middle" font-weight="700">3 Log starten</text><text x="430" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Start CSV log, fahren</text>
+  <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Exportieren</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Export map (KML + OSM)</text>
+  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 Ansehen</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">Browser / Google Earth</text>
+  </g>
+  <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
+</svg>
+<figcaption>Abb. 14 – Ablauf einer Versorgungsmessung.</figcaption></figure>
+
+<h2>GPS-Maus anschließen</h2>
+<ol class="steps">
+  <li>GPS-Maus (USB oder seriell, NMEA-Ausgabe) anschließen. Unter Windows erscheint sie als COM-Port, unter Linux meist als <code>/dev/ttyACM0</code> oder <code>/dev/ttyUSB0</code> (Benutzer in die Gruppe <code>dialout</code> aufnehmen).</li>
+  <li>Unter <span class="ui">GPS &amp; coverage map</span> den Port wählen (<span class="ui">Rescan</span> aktualisiert die Liste), Baudrate einstellen (meist 4800 oder 9600) und <span class="ui">Connect</span>.</li>
+  <li>Warten, bis Position, Satellitenzahl und HDOP angezeigt werden. Bei „Waiting for NMEA data“ stimmen Port oder Baudrate nicht.</li>
+</ol>
+<h2>Messfahrt</h2>
+<ol class="steps">
+  <li>Den Decoder auf die gewünschte Zelle einrasten lassen und <span class="ui">Lock current cell</span> drücken: Sekunden, in denen eine andere oder keine Zelle empfangen wird, gelten dann als „keine Versorgung“.</li>
+  <li>Pegel möglichst kalibrieren (<span class="ui">Level cal.</span>) und <span class="ui">Auto RF gain</span> für vergleichbare Werte ausschalten oder den Pegel in dBm auswerten.</li>
+  <li><span class="ui">Start CSV log</span> und losfahren. Antenne fest auf dem Dach, gleicher Aufbau wie bei früheren Fahrten.</li>
+  <li>Nach der Fahrt <span class="ui">Stop CSV log</span>.</li>
+</ol>
+<h2>Karten erzeugen</h2>
+<p><span class="ui">Map value</span> wählt die Farbskala: <b>Level</b> (−115…−65 dBm bzw. −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> oder <b>Quality (CRC)</b> – grün bis zur CRC-Grenze aus Kapitel 10, gelb bis zum Zehnfachen, rot darüber; schwarz = keine Versorgung. <span class="ui">Export map (KML + OSM)</span> schreibt zwei Dateien neben den Log:</p>
+<div class="cols">
+<div>
+<h3>Im Browser (OpenStreetMap)</h3>
+<p><code>…_level_map.html</code> mit einem Doppelklick öffnen (Internetverbindung für Kartenkacheln nötig). Oben rechts lassen sich die Ebenen <i>Points</i>, <i>Heatmap</i> und <i>No service only</i> umschalten; ein Klick auf einen Punkt zeigt Zeit, Pegel, MER, BER und CRC-Fehler.</p>
+<h3>In Google Earth</h3>
+<p><code>…_level.kml</code> in Google Earth (Desktop oder Web: <i>Projekte → KML-Datei importieren</i>) öffnen. Jeder Punkt ist farbig, die Beschreibung enthält die Messwerte. In Google Earth Pro lässt sich die Datei mit Höhenprofil und Gelände kombinieren.</p>
+<h3>Eigene Auswertungen</h3>
+<p>Der CSV-Log (Spalten <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) lässt sich direkt in QGIS (<i>Getrennte Textdatei</i>, Trennzeichen Semikolon) oder einer Tabellenkalkulation öffnen, z. B. für eigene Heatmaps oder Profile entlang einer Strecke.</p>
+</div>
+<div>
+<figure><img src="shots/map_level.png"><figcaption>Abb. 15 – Versorgungskarte „Level“ mit Heatmap (synthetische Beispielfahrt).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Abb. 16 – Karte „Quality (CRC)“ derselben Fahrt.</figcaption></figure>
+</div>
+</div>
+<div class="box"><b class="t">Gute Heatmaps</b>Langsam fahren oder öfter dieselbe Strecke – jede Sekunde ist ein Punkt. Bei hoher Geschwindigkeit liegen die Punkte weit auseinander. Messungen mit unterschiedlicher Antenne oder Verstärkung nicht mischen.</div>
+
+<!-- ============================================================ -->
+<h1 id="s17"><span class="num">17</span>Messszenarien</h1>
+<p>Die folgenden Abläufe sind Vorschläge – sie lassen sich frei kombinieren.</p>
+
+<div class="scen"><h3>A · Senderqualität eines Relais (Downlink)</h3>
+<div class="meta">Ziel: Modulationsqualität und Spektrum der Basisstation · Dauer: 10 Minuten</div>
+<ol class="steps">
+  <li>SDR in Sichtweite oder mit Richtantenne; Signal deutlich über dem Rauschen (MER-Anzeige stabil). Bandmitte ≥ 100 kHz neben dem Träger.</li>
+  <li><span class="ui">Auto RF gain</span> einregeln lassen, dann MER, EVM, I/Q-Offset, IRR und Error split ablesen.</li>
+  <li><span class="ui">Run analysis</span> der TX-Analyse; mit Sender aus (oder Eingang abgeschlossen) vorher <span class="ui">Store floor</span>.</li>
+  <li>ACP, belegte Bandbreite, Schultern und Trägerrest beurteilen; bei Werten nahe der Messgrenze Verstärkung senken.</li>
+  <li><span class="ui">Create report</span> für die Dokumentation.</li>
+</ol>
+<p><b>Deutung:</b> Hoher I/Q-Offset mit schlechter MER, aber guter <i>MER w/o offset</i> → Trägerrest des Modulators. Viel Phasenfehler → Phasenrauschen des Oszillators. Ausgeprägte Schultern → Endstufe übersteuert.</p></div>
+
+<div class="scen"><h3>B · Frequenzgenauigkeit der Basisstation</h3>
+<div class="meta">Ziel: Frequenzfehler in ppb und Stabilität · benötigt GPS-gestütztes SDR (z. B. Pluto+ an 10 MHz)</div>
+<ol class="steps">
+  <li>SDR an die Referenz anschließen, mindestens 15 Minuten aufwärmen.</li>
+  <li><span class="ui">Carrier vs. SYSINFO</span> beobachten (Ziel: ±200 ppb nach ETSI).</li>
+  <li>Unter <span class="ui">Trends</span> → <span class="ui">Frequency stability</span> mindestens eine Stunde laufen lassen; Allan-Abweichung ablesen.</li>
+  <li>Bei Bedarf die Messung über Nacht laufen lassen (CSV-Log) und den Log später öffnen.</li>
+</ol></div>
+
+<div class="scen"><h3>C · Versorgungsmessung mit Heatmap</h3>
+<div class="meta">Ziel: Karte der Versorgung und praktische Empfangsgrenze</div>
+<ol class="steps">
+  <li>Pegel kalibrieren (dBm), Auto RF gain aus, GPS verbinden, Zelle sperren (Kapitel 16).</li>
+  <li>CSV-Log starten, Gebiet abfahren – auch bis zum Rand der Versorgung.</li>
+  <li>Log unter <span class="ui">Trends</span> öffnen → <span class="ui">Level vs. quality</span>: Empfangsgrenze ablesen und <span class="ui">CRC limit</span> passend setzen.</li>
+  <li>Karten <b>Level</b> und <b>Quality (CRC)</b> exportieren und vergleichen; Lücken (schwarz) gezielt nachmessen.</li>
+</ol></div>
+
+<div class="scen"><h3>D · Langzeitüberwachung eines Relais</h3>
+<div class="meta">Ziel: Ausfälle und Verschlechterungen erkennen · Dauer: Tage</div>
+<ol class="steps">
+  <li>Festen Empfänger mit stabiler Verstärkung einrichten (Auto RF gain aus).</li>
+  <li><span class="ui">Alarms</span>: Pegel, MER, CRC und Sync einschalten, Haltezeit z. B. 30 s, „Start CSV log on alarm“.</li>
+  <li>Optional Burst-Analyse auf dem Uplink für den Störpegel und dessen Alarm.</li>
+  <li>Täglich Trends ansehen oder den Log öffnen; bei Auffälligkeiten <span class="ui">Create report</span>.</li>
+</ol></div>
+
+<div class="scen"><h3>E · Handfunkgerät prüfen (Uplink)</h3>
+<div class="meta">Ziel: Burstform, Zeitlage und Splatter eines Endgeräts</div>
+<ol class="steps">
+  <li>SDR so einstellen, dass Downlink <i>und</i> Uplink in der Bandbreite liegen; TETRA-VFO auf den Downlink, Decoder eingerastet.</li>
+  <li><span class="ui">Burst analysis</span> mit Quelle <span class="ui">Uplink (SYSINFO)</span> starten, <span class="ui">Timing vs. downlink</span> und <span class="ui">Ramp spectrum</span> an.</li>
+  <li>Mit dem Gerät einige Durchgänge sprechen (oder SDS senden); Empfänger nahe am Gerät (Dämpfung beachten!).</li>
+  <li>Burstlänge, Rampen, Welligkeit und Maske prüfen; Zeitlage und Streuung mit anderen Geräten vergleichen; Rampen-Spektrum auf Splatter ansehen.</li>
+</ol></div>
+
+<div class="scen"><h3>F · Störungssuche am Relais-Empfänger</h3>
+<div class="meta">Ziel: zeitweise Störer auf dem Uplink nachweisen</div>
+<ol class="steps">
+  <li>Burst-Analyse auf dem Uplink laufen lassen; <span class="ui">Noise between bursts</span> als Basiswert notieren.</li>
+  <li>Alarm „UL noise above“ einige dB über dem Basiswert setzen.</li>
+  <li>Im Verlauf (<span class="ui">Noise history</span>, 24 h) Zeitmuster suchen – z. B. tägliche Uhrzeiten deuten auf Geräte in der Umgebung.</li>
+</ol></div>
+
+<div class="scen"><h3>G · Nachbarzellen vergleichen</h3>
+<ol class="steps">
+  <li>Decoder auf eine Zelle, Nachbarzellen erscheinen unter <span class="ui">Network &amp; cell</span>.</li>
+  <li><span class="ui">Carriers</span> → <span class="ui">Add neighbour cells</span>.</li>
+  <li>Pegelabstände und MER über die Zeit vergleichen (z. B. vom selben Standort zu verschiedenen Tageszeiten).</li>
+</ol></div>
+
+<div class="scen"><h3>H · Mehrwege an einem neuen Standort</h3>
+<ol class="steps">
+  <li>Decoder eingerastet, MER über 15 dB.</li>
+  <li><span class="ui">Multipath</span> mit <span class="ui">Averaging</span> 60 s starten; Echos und Laufzeitstreuung notieren.</li>
+  <li>Bei Fahrten 2 s wählen und Stellen mit starken Echos mit schlechter MER vergleichen.</li>
+</ol></div>
+
+<!-- ============================================================ -->
+<h1 id="s18"><span class="num">18</span>Fehlersuche</h1>
+<table>
+<tr><th style="width:30%">Problem</th><th>Ursache und Abhilfe</th></tr>
+<tr><td>Decoder rastet nicht ein</td><td>VFO genau auf den Träger; Pegel prüfen (RF status); Betriebsart ETSI/Amateur passend; Bandmitte nicht auf dem Träger.</td></tr>
+<tr><td>„Re-locks with timing slip“</td><td>Abtastwerte gehen verloren (USB, CPU). Abtastrate senken, anderen USB-Port, keine Hubs, andere Programme schließen; <span class="ui">Input rate</span> beobachten.</td></tr>
+<tr><td>„reduce gain“, Spitzen nahe 0 dBFS</td><td>Übersteuerung – Verstärkung senken; starke Signale anderswo im Band beachten (Wasserfall).</td></tr>
+<tr><td>Auto RF gain tut nichts</td><td>SDR ohne Schnittstelle oder Hardware-AGC an (RTL: Tuner AGC aus, Pluto/BladeRF: Manual, SDRplay: IF AGC aus).</td></tr>
+<tr><td>Frequenz weicht ab</td><td>SDR kalibrieren (Kapitel 4.3) oder externe Referenz verwenden.</td></tr>
+<tr><td>Kein Ton</td><td>Unter <span class="ui">Sinks</span> beim TETRA Demodulator ein Audiogerät wählen; Lautstärke im TETRA-Menü; verschlüsselte Rufe sind nicht hörbar.</td></tr>
+<tr><td>Burst-Analyse: „outside the SDR span“</td><td>Uplink liegt außerhalb der Bandbreite – Abtastrate erhöhen oder Mittenfrequenz verschieben.</td></tr>
+<tr><td>Timing: „slot grid not found“</td><td>TETRA-VFO muss auf dem Downlink derselben Zelle liegen und eingerastet sein.</td></tr>
+<tr><td>Windows blockiert den Download</td><td>In der Download-Liste des Browsers „Behalten“ wählen; danach SmartScreen-Hinweis bestätigen.</td></tr>
+<tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
+<tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h1 id="s19"><span class="num">19</span>Anhang</h1>
+<h2 id="s19-1">Dateien und Ordner</h2>
+<table class="plain">
+<tr><th>Datei / Ordner</th><th>Inhalt</th></tr>
+<tr><td><code>config.json</code>, <code>*_config.json</code></td><td>Einstellungen (Windows: Programmordner; Linux-AppImage: <code>~/.config/sdrpp_brown_appimage</code>)</td></tr>
+<tr><td><code>tetra_demodulator_config.json</code></td><td>Einstellungen des TETRA-Demodulators</td></tr>
+<tr><td><code>tetra_duplex_ham.json</code></td><td>Duplex-Tabellen (Amateurfunk)</td></tr>
+<tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>Namenslisten</td></tr>
+<tr><td><code>imgui_layout.ini</code></td><td>Fensterpositionen und Tabellenspalten</td></tr>
+<tr><td><code>tetra_logs/</code></td><td>CSV-Logs, Karten, Berichte (Ordner einstellbar)</td></tr>
+</table>
+<h2 id="s19-2">CSV-Log</h2>
+<p>Eine Zeile pro Sekunde, Trennzeichen Semikolon. Begleitdateien: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>.</p>
+<table class="plain">
+<tr><th style="width:36%">Spalten</th><th>Inhalt</th></tr>
+<tr><td><code>time</code></td><td>Ortszeit ISO 8601</td></tr>
+<tr><td><code>level_dbfs</code>, <code>level_dbm</code></td><td>Pegel; dBm nur mit Kalibrierung</td></tr>
+<tr><td><code>mer_db</code>, <code>evm_rms_pct</code>, <code>evm_peak_pct</code></td><td>Modulationsqualität</td></tr>
+<tr><td><code>carrier_offset_hz</code>, <code>carrier_ppm</code>, <code>ref_freq_hz</code>, <code>symbol_rate_ppm</code></td><td>Frequenz und Takt</td></tr>
+<tr><td><code>rx_state</code>, <code>bursts</code>, <code>bursts_tolerated</code>, <code>sync_lost</code>, <code>ber</code></td><td>Decoderzustand (2 = eingerastet)</td></tr>
+<tr><td><code>crc_*_ok</code>, <code>crc_*_fail</code></td><td>CRC je Kanal in dieser Sekunde</td></tr>
+<tr><td><code>mcc</code>, <code>mnc</code>, <code>cc</code>, <code>dl_freq_hz</code>, <code>ul_freq_hz</code>, <code>ts1…ts4</code></td><td>Zelle</td></tr>
+<tr><td><code>cell_match</code>, <code>gps_fix</code>, <code>lat</code>, <code>lon</code>, <code>alt_m</code>, <code>speed_kmh</code>, <code>sats</code>, <code>hdop</code></td><td>Zellsperre und Position</td></tr>
+<tr><td><code>ts1_traffic_pct … ts4_traffic_pct</code></td><td>Verkehrsanteil je Zeitschlitz</td></tr>
+<tr><td><code>carrier_vs_sysinfo_hz</code></td><td>Träger minus SYSINFO-Frequenz</td></tr>
+</table>
+
+<h2 id="s19-3">Glossar</h2>
+<table class="glossary plain">
+<tr><td><b>AACH</b></td><td>Access Assignment Channel – in jedem Downlink-Burst; kündigt die Nutzung der Zeitschlitze an.</td></tr>
+<tr><td><b>ACP</b></td><td>Adjacent Channel Power – Leistung im Nachbarkanal, in dBc.</td></tr>
+<tr><td><b>AFC</b></td><td>Automatische Frequenznachführung des VFO.</td></tr>
+<tr><td><b>Allan-Abweichung</b></td><td>Maß für Frequenzschwankungen in Abhängigkeit von der Mittelungszeit τ.</td></tr>
+<tr><td><b>dBc / dBFS / dBm</b></td><td>bezogen auf den Träger / auf Vollaussteuerung / auf 1 mW.</td></tr>
+<tr><td><b>EVM, MER</b></td><td>Error Vector Magnitude, Modulation Error Ratio – Maße für Modulationsfehler.</td></tr>
+<tr><td><b>GSSI, ISSI</b></td><td>Gruppen- bzw. Einzelteilnehmerkennung (im Amateurfunk DMR-ID).</td></tr>
+<tr><td><b>MCC, MNC, CC</b></td><td>Länder-, Netz- und Farbcode der Zelle.</td></tr>
+<tr><td><b>NTS</b></td><td>Normal Training Sequence – bekannte Bitfolge in jedem Burst (Synchronisation, Kanalschätzung).</td></tr>
+<tr><td><b>OBW</b></td><td>Occupied Bandwidth – Bandbreite mit 99 % der Leistung.</td></tr>
+<tr><td><b>SDS</b></td><td>Short Data Service – Textnachrichten, Status, Positionen (LIP).</td></tr>
+<tr><td><b>SYSINFO</b></td><td>Systeminformation der Basisstation (Frequenzen, Dienste, Parameter).</td></tr>
+<tr><td><b>TDMA, Zeitschlitz</b></td><td>Vier Zeitschlitze je Rahmen, je 14,17 ms; Uplink um zwei Zeitschlitze versetzt.</td></tr>
+</table>
+
+<h2 id="s19-4">Herkunft und Lizenzen</h2>
+<p>SDR++ TETRA-SCHWARTZ ist eine veränderte Fassung (Fork) von SDR++ (Alexandre Rouma, ON5RYZ, und Mitwirkende) auf Basis von SDR++Brown, mit dem TETRA-Demodulator-Plugin von cropinghigh und dem Decoder osmo-tetra (Osmocom). Lizenzen: GPL-3.0, für osmo-tetra AGPL-3.0; der ETSI-Sprachcodec wird beim Bauen von ETSI geladen. Änderungen dieser Ausgabe: © 2026 UnImAtrIXzEr0. Details: <code>NOTICE.md</code> und der Info-Dialog im Programm. Dies ist keine offizielle Veröffentlichung von SDR++ oder SDR++Brown.</p>
+
+</body></html>

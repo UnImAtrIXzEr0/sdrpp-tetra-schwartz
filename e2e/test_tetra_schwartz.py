@@ -296,7 +296,10 @@ def make_two_freq_recording(path, fs=576000, seconds=5.0, off=100000.0, echo_us=
     import numpy as np
     import wave
     sps = int(fs / 18000)
-    nsym = int(seconds * 18000)
+    # the file source loops: whole multiframes of 4 slots (1020 symbols) and a
+    # whole number of carrier periods (100 kHz at 576 kS/s: 4.5 symbols), so
+    # slot grid and phase continue seamlessly at the loop point
+    nsym = max(1, int(seconds * 18000) // 3060) * 3060
     rng = np.random.default_rng(5)
     dl = pi4_waveform(nsym, sps, rng)
     d = int(round(echo_us * 1e-6 * fs))

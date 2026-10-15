@@ -489,7 +489,6 @@ private:
         tetra_sp::SlotFoldState slotState;
         auto t0 = std::chrono::steady_clock::now();
         double phase = NAN;
-        int sinceTiming = 100;
         while (true) {
             {
                 std::unique_lock<std::mutex> lck(cvMtx);
@@ -511,14 +510,13 @@ private:
                     x[i] = ringFilt[k];
                     raw[i] = ringRaw[k];
                 }
-                if (withDl && ++sinceTiming >= 6) {   // slot grid about once per second
+                if (withDl) {   // slot grid on every pass: a sample slip is caught within 0.15 s
                     dlx.resize(WIN);
                     for (size_t i = 0; i < WIN; i++) { dlx[i] = ringDl[(size_t)((s0 + i) & (RING - 1))]; }
                 }
             }
             if (resetReq.exchange(false)) { dsp.reset(); slotState.reset(); }
             if (!dlx.empty()) {
-                sinceTiming = 0;
                 // newest 0.25 s: short enough that a sample clock offset of
                 // the SDR does not smear the correlation peak
                 const size_t SW = (size_t)(FS * 0.25);
