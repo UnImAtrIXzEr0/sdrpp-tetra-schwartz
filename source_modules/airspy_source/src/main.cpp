@@ -8,6 +8,9 @@
 #include <config.h>
 #include <gui/smgui.h>
 #include <airspy.h>
+#include <signal_path/source_gain_interface.h>
+#include <algorithm>
+#include <cstring>
 
 #ifdef __ANDROID__
 #include <android_backend.h>
@@ -25,8 +28,42 @@ SDRPP_MOD_INFO{
 
 ConfigManager config;
 
-class AirspySourceModule : public ModuleManager::Instance {
+class AirspySourceModule : public ModuleManager::Instance, public SourceGainInterface {
 public:
+    // ---- SourceGainInterface (TETRA automatic gain): sensitive / linear mode, steps 0..21 ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        return nullptr;
+    }
+    std::string gainSourceName() override { return "Airspy"; }
+    bool gainControllable() override { return running && (gainMode == 0 || gainMode == 1); }
+    int gainStepCount() override { return 22; }
+    int gainStep() override { return gainMode == 0 ? sensitiveGain : linearGain; }
+    // steps are not calibrated in dB; about 2 dB per step on the R2/Mini
+    float gainStepDb(int step) override { return 2.0f * (float)std::clamp(step, 0, 21); }
+    std::string gainLabel(int step) override {
+        char b[48];
+        snprintf(b, sizeof(b), "%s %d (~%.0f dB)", gainMode == 0 ? "sens." : "lin.", std::clamp(step, 0, 21), gainStepDb(step));
+        return b;
+    }
+    void setGainStep(int step) override {
+        step = std::clamp(step, 0, 21);
+        if (gainMode == 0) {
+            sensitiveGain = step;
+            if (running) { airspy_set_sensitivity_gain(openDev, sensitiveGain); }
+        }
+        else if (gainMode == 1) {
+            linearGain = step;
+            if (running) { airspy_set_linearity_gain(openDev, linearGain); }
+        }
+        else { return; }
+        if (selectedSerStr != "") {
+            config.acquire();
+            config.conf["devices"][selectedSerStr][gainMode == 0 ? "sensitiveGain" : "linearGain"] = step;
+            config.release(true);
+        }
+    }
+
     AirspySourceModule(std::string name) {
         this->name = name;
 

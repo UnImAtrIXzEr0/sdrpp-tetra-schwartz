@@ -1,6 +1,7 @@
 #include <utils/flog.h>
 #include <module.h>
 #include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
 #include <cstring>
 #include <gui/gui.h>
 #include <signal_path/signal_path.h>
@@ -56,12 +57,27 @@ const char* sampleRatesTxt[] = {
 
 const char* directSamplingModesTxt = "Disabled\0I branch\0Q branch\0";
 
-class RTLSDRSourceModule : public ModuleManager::Instance, public SourceGainInterface {
+class RTLSDRSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
     // ---- SourceGainInterface (used e.g. by the TETRA automatic gain) ----
     void* getInterface(const char* iname) override {
         if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
         return nullptr;
+    }
+    // ---- SourceFreqCorrInterface (TETRA calibration) ----
+    std::string corrSourceName() override { return "RTL-SDR"; }
+    bool corrAvailable() override { return selectedDevName != ""; }
+    double corrPpm() override { return (double)ppm; }
+    double corrResolutionPpm() override { return 1.0; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp<int>((int)std::lround(v), -1000000, 1000000);
+        if (running) { rtlsdr_set_freq_correction(openDev, ppm); }
+        if (selectedDevName != "") {
+            config.acquire();
+            config.conf["devices"][selectedDevName]["ppm"] = ppm;
+            config.release(true);
+        }
     }
     std::string gainSourceName() override { return "RTL-SDR"; }
     bool gainControllable() override { return running && !tunerAgc && !gainList.empty(); }

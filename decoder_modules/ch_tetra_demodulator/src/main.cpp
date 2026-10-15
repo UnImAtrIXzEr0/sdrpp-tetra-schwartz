@@ -40,6 +40,7 @@
 #include "gps.h"
 #include "map_export.h"
 #include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
 #include "const_view.h"
 #include <filesystem>
 #include <chrono>
@@ -64,7 +65,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 15, 0,
+    /* Version:         */ 0, 16, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -479,6 +480,29 @@ private:
                 ImGui::SetTooltip("Received carrier (VFO + offset) minus the DL frequency announced in SYSINFO.\n"
                                   "Independent of AFC. Contains BS error + SDR error; with a GPS-locked SDR\n"
                                   "this is the base station's frequency error (ETSI: +-0.2 ppm).");
+            }
+            SourceFreqCorrInterface* fc = _this->findFreqInterface();
+            if (fc && fc->corrAvailable()) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton(CONCAT("Calibrate SDR##_tetra_cal_", _this->name))) {
+                    double refHz = m.refFreqHz > 1e6 ? m.refFreqHz : 1e6;
+                    double oldPpm = fc->corrPpm();
+                    // carrier too high by e ppm -> SDR oscillator runs slow by e ppm
+                    double newPpm = oldPpm - m.absErrHz / refHz * 1e6;
+                    double res = fc->corrResolutionPpm();
+                    if (res > 0) { newPpm = std::round(newPpm / res) * res; }
+                    fc->setCorrPpm(newPpm);
+                    char b[128];
+                    snprintf(b, sizeof(b), "SDR calibrated: correction %+.3f -> %+.3f ppm (error was %+.1f Hz)", oldPpm, newPpm, m.absErrHz);
+                    _this->meas.addEvent(b);
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Sets the SDR's oscillator correction so that this cell's carrier matches\n"
+                                      "its SYSINFO frequency (current correction %+.3f ppm).\n"
+                                      "Only use a cell whose frequency you trust (GPS-locked base station, or\n"
+                                      "measured before with a reference-locked SDR). Let the SDR warm up first.",
+                                      fc->corrPpm());
+                }
             }
         }
         _this->drawAfcGain(menuWidth, m);
@@ -1029,6 +1053,15 @@ private:
         return nullptr;
     }
 
+    SourceFreqCorrInterface* findFreqInterface() {
+        std::string sel = sigpath::sourceManager.getSelectedName();
+        auto list = core::moduleManager.getAllInterfaces<SourceFreqCorrInterface>("SourceFreqCorrInterface");
+        for (auto* f : list) {
+            if (f && f->corrSourceName() == sel) { return f; }
+        }
+        return nullptr;
+    }
+
     void drawAfcGain(float menuWidth, const TetraMeasSnapshot& m) {
         ImVec4 good = tc::good();
         ImVec4 warn = tc::warn();
@@ -1066,17 +1099,18 @@ private:
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Keeps the TETRA channel between -35 and -20 dBFS (peak below -6 dBFS)\n"
                               "by stepping the SDR gain slowly (one step every 4 s).\n"
-                              "Supported: RTL-SDR (manual gain mode, tuner AGC off).\n"
+                              "Supported: RTL-SDR (tuner AGC off), PlutoSDR (gain mode Manual),\n"
+                              "Airspy (Sensitive or Linear mode), USRP.\n"
                               "Note: strong signals elsewhere in the SDR bandwidth can still overload\n"
                               "the ADC; watch the waterfall.");
         }
         ImGui::SameLine();
         if (g) {
             if (g->gainControllable()) {
-                ImGui::TextColored(autoGain ? good : tc::grey(), "%.1f dB", g->gainStepDb(g->gainStep()));
+                ImGui::TextColored(autoGain ? good : tc::grey(), "%s", g->gainLabel(g->gainStep()).c_str());
             }
             else {
-                ImGui::TextDisabled("(tuner AGC on / not running)");
+                ImGui::TextDisabled("(hardware AGC on / not running)");
             }
         }
         else {
@@ -1141,21 +1175,35 @@ private:
             gainLastStep = now;
             SourceGainInterface* g = findGainInterface();
             if (!g) {
-                gainStatus = "Source has no gain control interface (supported: RTL-SDR)";
+                gainStatus = "Source has no gain control interface (supported: RTL-SDR, PlutoSDR, Airspy, USRP)";
             }
             else if (g->gainControllable()) {
                 gainStatus.clear();
                 int step = g->gainStep();
                 int n = g->gainStepCount();
-                if ((m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) && step > 0) {
-                    g->setGainStep(step - 1);
-                    char b[64]; snprintf(b, sizeof(b), "RF gain down to %.1f dB", g->gainStepDb(step - 1));
-                    meas.addEvent(b);
+                // wanted gain change in dB: back to about -27 dBFS level / -10 dBFS peak,
+                // at most 10 dB per step so the decoder keeps up
+                double cur = g->gainStepDb(step);
+                double want = cur;
+                if (m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) {
+                    want = cur - std::clamp((std::max)((double)m.peakDbfs + 10.0, (double)m.levelDbfs + 27.0), 2.0, 10.0);
                 }
-                else if (m.levelDbfs < -35.0f && m.peakDbfs < -14.0f && step < n - 1) {
-                    g->setGainStep(step + 1);
-                    char b[64]; snprintf(b, sizeof(b), "RF gain up to %.1f dB", g->gainStepDb(step + 1));
-                    meas.addEvent(b);
+                else if (m.levelDbfs < -35.0f && m.peakDbfs < -14.0f) {
+                    want = cur + std::clamp((std::min)(-27.0 - (double)m.levelDbfs, -10.0 - (double)m.peakDbfs), 2.0, 10.0);
+                }
+                if (want != cur) {
+                    int best = step;
+                    double bestErr = 1e9;
+                    for (int s = 0; s < n; s++) {
+                        double e = std::fabs(g->gainStepDb(s) - want);
+                        if (e < bestErr) { bestErr = e; best = s; }
+                    }
+                    if (best == step) { best = std::clamp(step + (want > cur ? 1 : -1), 0, n - 1); }
+                    if (best != step) {
+                        g->setGainStep(best);
+                        std::string b = std::string(want > cur ? "RF gain up to " : "RF gain down to ") + g->gainLabel(best);
+                        meas.addEvent(b);
+                    }
                 }
             }
         }

@@ -12,6 +12,9 @@
 #include <uhd/utils/thread.hpp>
 #include <uhd/usrp/multi_usrp.hpp>
 #include <utils/optionlist.h>
+#include <signal_path/source_gain_interface.h>
+#include <cstring>
+#include <cmath>
 #include <utils/freq_formatting.h>
 #include <cctype>
 #include <algorithm>
@@ -53,8 +56,27 @@ static void start(void* ctx);
 static void stop(void* ctx);
 static void tune(double freq, void* ctx);
 
-class USRPSourceModule : public ModuleManager::Instance {
+class USRPSourceModule : public ModuleManager::Instance, public SourceGainInterface {
 public:
+    // ---- SourceGainInterface (TETRA automatic gain): 1 dB steps over the gain range ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        return nullptr;
+    }
+    std::string gainSourceName() override { return "USRP"; }
+    bool gainControllable() override { return running && dev && gainRange.stop() > gainRange.start(); }
+    int gainStepCount() override { return (int)std::floor(gainRange.stop() - gainRange.start()) + 1; }
+    int gainStep() override { return std::clamp((int)std::lround(gain - gainRange.start()), 0, gainStepCount() - 1); }
+    float gainStepDb(int step) override { return (float)(gainRange.start() + std::clamp(step, 0, gainStepCount() - 1)); }
+    void setGainStep(int step) override {
+        setGain((double)gainStepDb(step));
+        if (!selectedSer.empty() && !selectedChan.empty()) {
+            config.acquire();
+            config.conf["devices"][selectedSer]["channels"][selectedChan]["gain"] = gain;
+            config.release(true);
+        }
+    }
+
     USRPSourceModule(std::string name) {
         this->name = name;
         sampleRate = 8000000.0;

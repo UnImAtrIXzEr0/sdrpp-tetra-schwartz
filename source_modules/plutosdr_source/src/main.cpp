@@ -10,6 +10,10 @@
 #include <utils/optionlist.h>
 #include <algorithm>
 #include <regex>
+#include <cmath>
+#include <cstring>
+#include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
 
 #define CONCAT(a, b) ((std::string(a) + b).c_str())
 
@@ -25,11 +29,63 @@ ConfigManager config;
 
 const std::vector<const char*> deviceWhiteList = {
     "PlutoSDR",
+    "Pluto",
     "ANTSDR",
     "LibreSDR"
 };
 
-class PlutoSDRSourceModule : public ModuleManager::Instance {
+class PlutoSDRSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
+public:
+    // ---- interfaces for the TETRA automatic gain and calibration ----
+    void* getInterface(const char* iname) override {
+        if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        return nullptr;
+    }
+    std::string gainSourceName() override { return "PlutoSDR"; }
+    bool gainControllable() override { return running && gmId == 0; }   // manual gain mode only
+    int gainStepCount() override { return 75; }                         // -1 .. 73 dB in 1 dB steps
+    int gainStep() override { return std::clamp((int)std::lround(gain) + 1, 0, 74); }
+    float gainStepDb(int step) override { return (float)(std::clamp(step, 0, 74) - 1); }
+    void setGainStep(int step) override {
+        gain = gainStepDb(step);
+        if (running && rxChan) { iio_channel_attr_write_double(rxChan, "hardwaregain", gain); }
+        if (!devDesc.empty()) {
+            config.acquire();
+            config.conf["devices"][devDesc]["gain"] = gain;
+            config.release(true);
+        }
+    }
+    std::string corrSourceName() override { return "PlutoSDR"; }
+    bool corrAvailable() override { return !devDesc.empty(); }
+    double corrPpm() override { return xoPpm; }
+    void setCorrPpm(double ppm) override {
+        xoPpm = std::clamp(ppm, -100.0, 100.0);
+        xoSet = true;
+        applyXo();
+        if (!devDesc.empty()) {
+            config.acquire();
+            config.conf["devices"][devDesc]["xoPpm"] = xoPpm;
+            config.conf["devices"][devDesc]["xoSet"] = true;
+            config.release(true);
+        }
+    }
+
+    // Reference oscillator correction: the AD936x driver is told the real
+    // frequency of its reference ("xo_correction"). Only written once the
+    // user has set a value here, so a value from the Pluto's config.txt stays
+    // in effect otherwise.
+    void applyXo() {
+        if (!running || !phy || !xoSet) { return; }
+        long long xo = std::llround(xoNominal * (1.0 + xoPpm * 1e-6));
+        int r = iio_device_attr_write_longlong(phy, "xo_correction", xo);
+        if (r < 0) { flog::warn("PlutoSDR: could not set xo_correction ({})", r); }
+        else { flog::info("PlutoSDR: xo_correction = {} Hz ({} ppm)", std::to_string(xo), xoPpm); }
+        // re-program LO and sample clock so they are derived from the new reference
+        if (rxLO) { iio_channel_attr_write_longlong(rxLO, "frequency", std::llround(freq)); }
+        ad9361_set_bb_rate(phy, std::lround((double)samplerate));
+    }
+
 public:
     PlutoSDRSourceModule(std::string name) {
         this->name = name;
@@ -241,6 +297,10 @@ private:
             gain = config.conf["devices"][devDesc]["gain"];
             gain = std::clamp<int>(gain, -1.0f, 73.0f);
         }
+        xoPpm = 0.0;
+        xoSet = false;
+        if (config.conf["devices"][devDesc].contains("xoPpm")) { xoPpm = config.conf["devices"][devDesc]["xoPpm"]; }
+        if (config.conf["devices"][devDesc].contains("xoSet")) { xoSet = config.conf["devices"][devDesc]["xoSet"]; }
         config.release();
 
         // Update samplerate ID
@@ -287,6 +347,9 @@ private:
             return;
         }
 
+        // USB on Windows can be slow to answer: allow 3 s per request
+        iio_context_set_timeout(_this->ctx, 3000);
+
         // Get phy and device handle
         _this->phy = iio_context_find_device(_this->ctx, "ad9361-phy");
         if (_this->phy == NULL) {
@@ -321,8 +384,17 @@ private:
         // Configure the ADC filters
         ad9361_set_bb_rate(_this->phy, round(_this->samplerate));
 
+        // Nominal reference frequency (usually 40 MHz), from the current setting
+        {
+            long long xo = 0;
+            if (iio_device_attr_read_longlong(_this->phy, "xo_correction", &xo) == 0 && xo > 1000000) {
+                _this->xoNominal = std::round((double)xo / 1e6) * 1e6;
+            }
+        }
+
         // Start worker thread
         _this->running = true;
+        _this->applyXo();
         _this->workerThread = std::thread(worker, _this);
         flog::info("PlutoSDRSourceModule '{0}': Start!", _this->name);
     }
@@ -433,6 +505,17 @@ private:
             }
         }
         if (_this->gmId) { SmGui::EndDisabled(); }
+
+        // reference correction in ppb (1 ppb = 0.001 ppm; 100 ppb = 44 Hz at 440 MHz)
+        SmGui::LeftLabel("XO corr. (ppb)");
+        SmGui::FillWidth();
+        int ppb = (int)std::lround(_this->xoPpm * 1000.0);
+        if (SmGui::InputInt(CONCAT("##_pluto_xo_", _this->name), &ppb, 10, 100)) {
+            _this->setCorrPpm(ppb / 1000.0);
+        }
+        if (!_this->xoSet) {
+            SmGui::Text("(not set: Pluto config.txt applies)");
+        }
     }
 
     void setBandwidth(int bw) {
@@ -446,7 +529,9 @@ private:
 
     static void worker(void* ctx) {
         PlutoSDRSourceModule* _this = (PlutoSDRSourceModule*)ctx;
-        int blockSize = _this->samplerate / 200.0f;
+        // 20 ms per buffer (at least 16k samples) and 8 kernel buffers: the
+        // previous 5 ms x 4 buffers overflowed on Windows/USB and lost samples
+        int blockSize = std::clamp((int)(_this->samplerate / 50.0), 16384, 500000);
 
         // Acquire channels
         iio_channel* rx0_i = iio_device_find_channel(_this->dev, "voltage0", 0);
@@ -461,6 +546,7 @@ private:
         iio_channel_enable(rx0_q);
 
         // Allocate buffer
+        iio_device_set_kernel_buffers_count(_this->dev, 8);
         iio_buffer* rxbuf = iio_device_create_buffer(_this->dev, blockSize, false);
         if (!rxbuf) {
             flog::error("Could not create RX buffer");
@@ -468,9 +554,20 @@ private:
         }
 
         // Receive loop
+        int errCount = 0;
         while (true) {
             // Read samples
-            iio_buffer_refill(rxbuf);
+            ssize_t got = iio_buffer_refill(rxbuf);
+            if (got < 0) {
+                if (!_this->running) { break; }
+                if (++errCount > 5) {
+                    flog::error("PlutoSDR: buffer refill failed repeatedly ({}), stopping stream", (int)got);
+                    break;
+                }
+                flog::warn("PlutoSDR: buffer refill failed ({}), retrying", (int)got);
+                continue;
+            }
+            errCount = 0;
 
             // Get buffer pointer
             int16_t* buf = (int16_t*)iio_buffer_first(rxbuf, rx0_i);
@@ -508,6 +605,9 @@ private:
 
     double freq;
     int samplerate = 4000000;
+    double xoPpm = 0.0;
+    bool xoSet = false;
+    double xoNominal = 40000000.0;
     int bandwidth = 0;
     float gain = -1;
 
