@@ -36,7 +36,7 @@
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s1"><span class="num">1</span>Überblick</h1>
+<h1 id="s1" class="pb"><span class="num">1</span>Überblick</h1>
 <p class="lead">SDR++ TETRA-SCHWARTZ ist eine experimentelle Amateurfunk-Ausgabe von SDR++ für die Analyse von TETRA-Netzen. Sie empfängt mit einem SDR, dekodiert TETRA-Aussendungen und misst die Signalqualität so, wie man es von einem Messplatz kennt – vom Konstellationsdiagramm bis zur Versorgungskarte.</p>
 
 <h2 id="s1-1">Was das Programm kann</h2>
@@ -130,7 +130,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </ul>
 
 <!-- ============================================================ -->
-<h1 id="s3"><span class="num">3</span>Die Oberfläche</h1>
+<h1 id="s3" class="pb"><span class="num">3</span>Die Oberfläche</h1>
 <div class="cols">
 <div>
 <figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Abb. 3 – Menüspalte mit dem TETRA-Demodulator.</figcaption></figure>
@@ -158,7 +158,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <p>Unter <span class="ui">Own window</span> im TETRA-Demodulator lassen sich Konstellation (mit Messwerten), Stationen, Netz, TX-Analyse, Trends, Träger, Bursts und Mehrwege in eigene, frei verschiebbare Fenster auslagern – praktisch auf einem zweiten Bildschirm. Im Menü erscheint dann <span class="ui">Bring to front</span>. Position und Größe merkt sich das Programm.</p>
 
 <!-- ============================================================ -->
-<h1 id="s4"><span class="num">4</span>SDR einrichten</h1>
+<h1 id="s4" class="pb"><span class="num">4</span>SDR einrichten</h1>
 <h2>Grundsätze</h2>
 <ul>
   <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Burst-Zeitlage (Uplink und Downlink gleichzeitig) und weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
@@ -211,7 +211,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s6"><span class="num">6</span>Messwerte (Measurements)</h1>
+<h1 id="s6" class="pb"><span class="num">6</span>Messwerte (Measurements)</h1>
 <p>Die Werte werden jede Sekunde aktualisiert – auch bei geschlossenem Menü – und gehen in Trends, CSV-Log und Alarme ein.</p>
 <table>
 <tr><th style="width:22%">Anzeige</th><th>Bedeutung</th><th style="width:24%">Gute Werte</th></tr>
@@ -278,7 +278,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s10"><span class="num">10</span>Trends, Zeitschlitze, Stabilität, Empfangsgrenze</h1>
+<h1 id="s10" class="pb"><span class="num">10</span>Trends, Zeitschlitze, Stabilität, Empfangsgrenze</h1>
 <h2>Verlauf über die Zeit</h2>
 <div class="cols">
 <div>
@@ -287,15 +287,19 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <h3>Zeitschlitzbelegung</h3>
 <p>Jeder Downlink-Burst kündigt an, wofür der Zeitschlitz genutzt wird. Die Tabelle zählt je Zeitschlitz Verkehr, zugewiesene Steuerung, allgemeine Steuerung und frei sowie den Uplink-Verkehr. Rahmen 18 (immer Steuerung) bleibt außen vor.</p>
 </div>
-<div><figure><img src="shots/win_trends.png"><figcaption>Abb. 8 – Trends und Zeitschlitzbelegung.</figcaption></figure></div>
+<div><figure><img src="shots/win_trends_log.png"><figcaption>Abb. 8 – Trends eines geladenen 6-Stunden-Logs (synthetische Beispieldaten): Pegelabsenkung bei einem Antennentest, Verkehr am Abend.</figcaption></figure></div>
 </div>
 
 <h2>Frequenzstabilität</h2>
 <p>Der Reiter <span class="ui">Frequency stability</span> zeigt die Abweichung zwischen empfangenem Träger und SYSINFO-Frequenz in ppb über die Zeit und die <b>Allan-Abweichung</b>: wie stark die Frequenz im Mittel über 1 s, 2 s, 4 s … schwankt. Ein Abfall mit der Mittelungszeit ist normales Messrauschen; ein Wiederanstieg bei langen Zeiten zeigt Drift (Temperatur, Alterung).</p>
+<div class="cols"><div>
 <div class="box info"><b class="t">Aussagekräftig nur mit Referenz</b>Der Wert enthält Basisstation und SDR. Ohne GPS-gestützte Referenz am SDR misst man vor allem den eigenen Quarz.</div>
+<p><b>Lesen der Grafik:</b> Oben der Frequenzverlauf, unten die Allan-Abweichung doppelt logarithmisch. Ausgewertet wird der längste lückenlose Abschnitt; Sekunden ohne Synchronisation unterbrechen ihn.</p>
+</div><div><figure><img src="shots/win_stability.png" style="max-height:105mm"><figcaption>Abb. 8a – Frequenzverlauf und Allan-Abweichung.</figcaption></figure></div></div>
 
 <h2>Pegel gegen Qualität – Empfangsgrenze</h2>
 <p>Der Reiter <span class="ui">Level vs. quality</span> sortiert alle Sekunden nach Pegel (1-dB-Stufen) und zeigt je Stufe CRC-Fehler und MER. Die <b>Empfangsgrenze</b> ist der niedrigste Pegel, ab dem keine Stufe mehr über der <span class="ui">CRC limit</span> (Standard 1 %) liegt. Sie ist ein praxisnaher Schwellwert für Versorgungskarten. Mit kalibriertem Pegel (dBm) ist sie zwischen Messungen vergleichbar.</p>
+<figure><img src="shots/win_quality.png" style="max-width:80%"><figcaption>Abb. 8b – CRC-Fehler und MER je Pegelstufe mit der ermittelten Empfangsgrenze (synthetische Beispieldaten).</figcaption></figure>
 
 <!-- ============================================================ -->
 <h1 id="s11"><span class="num">11</span>Weitere Träger</h1>
@@ -313,7 +317,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s12"><span class="num">12</span>Burst-Analyse (Uplink)</h1>
+<h1 id="s12" class="pb"><span class="num">12</span>Burst-Analyse (Uplink)</h1>
 <p>Handfunkgeräte senden in Bursts – kurzen Aussendungen in ihrem Zeitschlitz. Die Burst-Analyse misst sie über ein 25-kHz-Kanalfilter. Als Frequenz dient der Uplink aus der Netzinformation (<span class="ui">Uplink (SYSINFO)</span>), eine eigene Frequenz oder der TETRA-VFO (z. B. Basisstation im unterbrochenen Betrieb).</p>
 <div class="cols">
 <div>
@@ -398,7 +402,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s16"><span class="num">16</span>GPS, Versorgungsmessung und Karten</h1>
+<h1 id="s16" class="pb"><span class="num">16</span>GPS, Versorgungsmessung und Karten</h1>
 <p>Mit einer GPS-Maus wird jede Sekunde des CSV-Logs mit einer Position versehen. Daraus entstehen Versorgungskarten mit farbigen Messpunkten und einer Heatmap.</p>
 <figure>
 <svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
@@ -445,7 +449,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <div class="box"><b class="t">Gute Heatmaps</b>Langsam fahren oder öfter dieselbe Strecke – jede Sekunde ist ein Punkt. Bei hoher Geschwindigkeit liegen die Punkte weit auseinander. Messungen mit unterschiedlicher Antenne oder Verstärkung nicht mischen.</div>
 
 <!-- ============================================================ -->
-<h1 id="s17"><span class="num">17</span>Messszenarien</h1>
+<h1 id="s17" class="pb"><span class="num">17</span>Messszenarien</h1>
 <p>Die folgenden Abläufe sind Vorschläge – sie lassen sich frei kombinieren.</p>
 
 <div class="scen"><h3>A · Senderqualität eines Relais (Downlink)</h3>
@@ -518,7 +522,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </ol></div>
 
 <!-- ============================================================ -->
-<h1 id="s18"><span class="num">18</span>Fehlersuche</h1>
+<h1 id="s18" class="pb"><span class="num">18</span>Fehlersuche</h1>
 <table>
 <tr><th style="width:30%">Problem</th><th>Ursache und Abhilfe</th></tr>
 <tr><td>Decoder rastet nicht ein</td><td>VFO genau auf den Träger; Pegel prüfen (RF status); Betriebsart ETSI/Amateur passend; Bandmitte nicht auf dem Träger.</td></tr>
@@ -535,7 +539,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 </table>
 
 <!-- ============================================================ -->
-<h1 id="s19"><span class="num">19</span>Anhang</h1>
+<h1 id="s19" class="pb"><span class="num">19</span>Anhang</h1>
 <h2 id="s19-1">Dateien und Ordner</h2>
 <table class="plain">
 <tr><th>Datei / Ordner</th><th>Inhalt</th></tr>
