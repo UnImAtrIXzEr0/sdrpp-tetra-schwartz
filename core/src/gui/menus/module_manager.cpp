@@ -119,7 +119,12 @@ namespace module_manager_menu {
             bool hidChanged = false;
             for (int i = 0; i < (int)(sizeof(builtins) / sizeof(builtins[0])); i++) {
                 bool shown = !gui::menu.isHidden(builtins[i]);
-                if (i % 3) { ImGui::SameLine(); }
+                if (i > 0) {
+                    // same line only if the box still fits, else wrap
+                    float w = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(builtins[i]).x;
+                    float x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+                    if (x + w <= ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x) { ImGui::SameLine(); }
+                }
                 if (ImGui::Checkbox((std::string(builtins[i]) + "##module_mgr_show_" + std::to_string(i)).c_str(), &shown)) {
                     if (shown) { gui::menu.hidden.erase(builtins[i]); }
                     else { gui::menu.hidden.insert(builtins[i]); }

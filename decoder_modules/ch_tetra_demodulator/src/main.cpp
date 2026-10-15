@@ -33,6 +33,7 @@
 #include <gui/tuner.h>
 #include "gui_widgets.h"
 #include "tetra_colors.h"
+#include "tetra_layout.h"
 #include "tx_analyzer.h"
 #include "measurements.h"
 #include "subscribers.h"
@@ -65,7 +66,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 16, 1,
+    /* Version:         */ 0, 16, 2,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -347,44 +348,37 @@ private:
         ImVec4 val = tc::val();
 
         // Level
-        ImGui::Text("Level:"); ImGui::SameLine();
+        tw::Text("Level:"); tw::SameNext();
         if (m.valid) {
             if (_this->levelCalDb != 0.0f) {
-                ImGui::TextColored(val, "%6.1f dBm", m.levelDbfs + _this->levelCalDb); ImGui::SameLine();
-                ImGui::TextDisabled("(%.1f dBFS)", m.levelDbfs);
+                tw::TextColored(val, "%6.1f dBm", m.levelDbfs + _this->levelCalDb); tw::SameTextDisabled("(%.1f dBFS)", m.levelDbfs);
             } else {
-                ImGui::TextColored(val, "%6.1f dBFS", m.levelDbfs);
+                tw::TextColored(val, "%6.1f dBFS", m.levelDbfs);
             }
-        } else { ImGui::TextDisabled("--"); }
+        } else { tw::TextDisabled("--"); }
         // fixed row (rows must not appear/disappear, the lines below would jump)
-        ImGui::Text("RF status:"); ImGui::SameLine();
-        if (!m.valid) { ImGui::TextDisabled("--"); }
-        else if (m.peakDbfs > -3.0f) { ImGui::TextColored(bad, "ADC OVERLOAD (peak %.1f dBFS) - reduce gain", m.peakDbfs); }
-        else if (m.levelDbfs > -15.0f) { ImGui::TextColored(warn, "level high (peak %.1f dBFS)", m.peakDbfs); }
-        else if (m.levelDbfs < -45.0f) { ImGui::TextColored(warn, "level low (peak %.1f dBFS)", m.peakDbfs); }
-        else { ImGui::TextColored(good, "OK (peak %.1f dBFS)", m.peakDbfs); }
+        tw::Text("RF status:"); tw::SameNext();
+        if (!m.valid) { tw::TextDisabled("--"); }
+        else if (m.peakDbfs > -3.0f) { tw::TextColored(bad, "ADC OVERLOAD (peak %.1f dBFS) - reduce gain", m.peakDbfs); }
+        else if (m.levelDbfs > -15.0f) { tw::TextColored(warn, "level high (peak %.1f dBFS)", m.peakDbfs); }
+        else if (m.levelDbfs < -45.0f) { tw::TextColored(warn, "level low (peak %.1f dBFS)", m.peakDbfs); }
+        else { tw::TextColored(good, "OK (peak %.1f dBFS)", m.peakDbfs); }
 
         // MER / EVM
-        ImGui::Text("MER:"); ImGui::SameLine();
+        tw::Text("MER:"); tw::SameNext();
         if (m.valid && m.symSync) {
-            ImGui::TextColored(m.merDb >= 20.0f ? good : (m.merDb >= 12.0f ? warn : bad), "%5.1f dB", m.merDb); ImGui::SameLine();
-            ImGui::Text(" EVM rms"); ImGui::SameLine();
-            ImGui::TextColored(val, "%4.1f %%", m.evmPct); ImGui::SameLine();
-            ImGui::Text(" peak"); ImGui::SameLine();
-            ImGui::TextColored(val, "%4.0f %%", m.evmPeakPct);
-        } else { ImGui::TextDisabled("-- (no symbol sync)"); }
+            tw::TextColored(m.merDb >= 20.0f ? good : (m.merDb >= 12.0f ? warn : bad), "%5.1f dB", m.merDb); tw::SameText(" EVM rms"); tw::SameTextColored(val, "%4.1f %%", m.evmPct); tw::SameText(" peak"); tw::SameTextColored(val, "%4.0f %%", m.evmPeakPct);
+        } else { tw::TextDisabled("-- (no symbol sync)"); }
         ImGui::SetNextItemWidth(menuWidth);
         float merFrac = m.symSync ? std::clamp(m.merDb / 30.0f, 0.0f, 1.0f) : 0.0f;
         char merTxt[32];
         snprintf(merTxt, sizeof(merTxt), "%.1f dB", m.symSync ? m.merDb : 0.0f);
         ImGui::ProgressBar(merFrac, ImVec2(menuWidth, 0), merTxt);
-        ImGui::Text("I/Q offset:"); ImGui::SameLine();
-        if (!(m.valid && m.symSync)) { ImGui::TextDisabled("--"); }
+        tw::Text("I/Q offset:"); tw::SameNext();
+        if (!(m.valid && m.symSync)) { tw::TextDisabled("--"); }
         else {
-            ImGui::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%5.1f dB", m.iqOffsetDb);
-            ImGui::SameLine();
-            ImGui::Text(" MER w/o offset"); ImGui::SameLine();
-            ImGui::TextColored(val, "%4.1f dB", m.merExclDb);
+            tw::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%5.1f dB", m.iqOffsetDb);
+            tw::SameText(" MER w/o offset"); tw::SameTextColored(val, "%4.1f dB", m.merExclDb);
             if (ImGui::IsItemHovered() || ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("I/Q (origin) offset = unmodulated carrier component.\n"
                                   "Shifts every point cloud by the same vector.\n"
@@ -394,16 +388,16 @@ private:
             }
         }
 
-        ImGui::Text("I/Q imbalance:"); ImGui::SameLine();
-        if (!(m.valid && m.symSync)) { ImGui::TextDisabled("--"); }
+        tw::Text("I/Q imbalance:"); tw::SameNext();
+        if (!(m.valid && m.symSync)) { tw::TextDisabled("--"); }
         else {
             float irr = _this->symbolExtractor.getImageRejectionDb();
             double k = _this->symbolExtractor.getImbalanceRatio();
-            ImGui::TextColored(irr >= 30.0f ? good : (irr >= 20.0f ? warn : bad), "IRR %4.1f dB", irr);
-            ImGui::SameLine();
+            tw::TextColored(irr >= 30.0f ? good : (irr >= 20.0f ? warn : bad), "IRR %4.1f dB", irr);
+            tw::SameNext();
             double gdb = (k < 0.99) ? 20.0 * std::log10((1.0 + k) / (1.0 - k)) : 99.0;
             double pdeg = 2.0 * std::asin((std::min)(k, 1.0)) * 180.0 / 3.14159265;
-            ImGui::TextDisabled("(= %.2f dB or %.1f deg)", gdb, pdeg);
+            tw::TextDisabled("(= %.2f dB or %.1f deg)", gdb, pdeg);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Image rejection of the transmitter's I/Q modulator, from a fit of\n"
                                   "r = mu*d + nu*conj(d) + c to the symbols. Shown as an equivalent pure\n"
@@ -412,16 +406,15 @@ private:
                                   "and contributes to EVM and to unequal lower/upper shoulders.");
             }
         }
-        ImGui::Text("Error split:"); ImGui::SameLine();
-        if (!(m.valid && m.symSync)) { ImGui::TextDisabled("--"); }
+        tw::Text("Error split:"); tw::SameNext();
+        if (!(m.valid && m.symSync)) { tw::TextDisabled("--"); }
         else {
             float ph = _this->symbolExtractor.getPhaseErrDeg();
             float am = _this->symbolExtractor.getAmpErrPct();
-            ImGui::TextColored(val, "phase %.2f deg", ph); ImGui::SameLine();
-            ImGui::TextColored(val, "amplitude %.2f %%", am); ImGui::SameLine();
+            tw::TextColored(val, "phase %.2f deg", ph); tw::SameTextColored(val, "amplitude %.2f %%", am); tw::SameNext();
             double rel = (am > 1e-3f) ? (ph * 3.14159265 / 180.0) / (am / 100.0) : 0.0;
             const char* why = rel > 2.0 ? "phase noise" : (rel < 0.5 ? "amplitude (AM)" : "noise-like");
-            ImGui::TextDisabled("-> %s", why);
+            tw::TextDisabled("-> %s", why);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("RMS phase and amplitude error of the symbols around the fitted model.\n"
                                   "Both similar: additive noise (low level, interference).\n"
@@ -431,31 +424,30 @@ private:
         }
 
         // Frequency / clock
-        ImGui::Text("Carrier offset:"); ImGui::SameLine();
+        tw::Text("Carrier offset:"); tw::SameNext();
         if (m.valid && m.symSync) {
-            ImGui::TextColored(val, "%+7.1f Hz", m.carrierOffsetHz); ImGui::SameLine();
-            ImGui::TextColored(std::fabs(m.carrierPpm) <= 0.2f ? good : (std::fabs(m.carrierPpm) <= 1.0f ? warn : bad), "(%+.3f ppm)", m.carrierPpm);
+            tw::TextColored(val, "%+7.1f Hz", m.carrierOffsetHz); tw::SameTextColored(std::fabs(m.carrierPpm) <= 0.2f ? good : (std::fabs(m.carrierPpm) <= 1.0f ? warn : bad), "(%+.3f ppm)", m.carrierPpm);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Reference: %s %.4f MHz\nIncludes the SDR's own frequency error.\nETSI: BS +-0.2 ppm, MS +-1 ppm (vs. received).",
                                   m.refFromSysinfo ? "SYSINFO DL" : "VFO", m.refFreqHz / 1e6);
             }
-        } else { ImGui::TextDisabled("--"); }
-        ImGui::Text("Symbol clock:"); ImGui::SameLine();
+        } else { tw::TextDisabled("--"); }
+        tw::Text("Symbol clock:"); tw::SameNext();
         if (m.valid && m.symSync) {
-            ImGui::TextColored(val, "%+7.1f ppm", m.symbolRatePpm);
+            tw::TextColored(val, "%+7.1f ppm", m.symbolRatePpm);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Symbol rate vs. 18 ksym/s, measured against the SDR clock.\nAveraged over ~2 s, includes SDR clock error.");
             }
-        } else { ImGui::TextDisabled("--"); }
-        ImGui::Text("Input rate:"); ImGui::SameLine();
-        if (m.inputRate <= 0.0) { ImGui::TextDisabled("--"); }
+        } else { tw::TextDisabled("--"); }
+        tw::Text("Input rate:"); tw::SameNext();
+        if (m.inputRate <= 0.0) { tw::TextDisabled("--"); }
         else {
             // the PC clock is the reference: some 10 ppm are clock differences;
             // a deficit clearly beyond the uncertainty means lost samples
             double tol = 3.0 * m.inputRateUncPpm + 50.0;
             bool loss = m.inputRatePpm < -tol;
             bool warnSt = !loss && std::fabs(m.inputRatePpm) > tol;
-            ImGui::TextColored(loss ? bad : (warnSt ? warn : good), "%.0f S/s (%+.0f +-%.0f ppm)", m.inputRate, m.inputRatePpm, m.inputRateUncPpm);
+            tw::TextColored(loss ? bad : (warnSt ? warn : good), "%.0f S/s (%+.0f +-%.0f ppm)", m.inputRate, m.inputRatePpm, m.inputRateUncPpm);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Samples per second arriving at the TETRA demodulator (nominal 72000),\n"
                                   "least-squares rate over the last %.0f s against the PC clock.\n"
@@ -465,21 +457,21 @@ private:
                                   m.inputRateWindowS);
             }
         }
-        ImGui::Text("Audio drops:"); ImGui::SameLine();
+        tw::Text("Audio drops:"); tw::SameNext();
         {
             double droppedS = (double)_this->audioDecoupler.getDroppedSamples() / 8000.0;
-            if (droppedS <= 0.0) { ImGui::TextColored(good, "none"); }
-            else { ImGui::TextColored(warn, "%.1f s (audio sink too slow)", droppedS); }
+            if (droppedS <= 0.0) { tw::TextColored(good, "none"); }
+            else { tw::TextColored(warn, "%.1f s (audio sink too slow)", droppedS); }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Decoded TETRA audio discarded because the audio sink did not take it in time.\n"
                                   "The audio path is decoupled: a slow sink costs audio, never RF samples.");
             }
         }
-        ImGui::Text("Carrier vs. SYSINFO:"); ImGui::SameLine();
-        if (!m.absErrValid) { ImGui::TextDisabled("-- (needs decoder lock)"); }
+        tw::Text("Carrier vs. SYSINFO:"); tw::SameNext();
+        if (!m.absErrValid) { tw::TextDisabled("-- (needs decoder lock)"); }
         else {
             float ppm = (float)(m.absErrHz / (m.refFreqHz > 1e6 ? m.refFreqHz : 1e6) * 1e6);
-            ImGui::TextColored(std::fabs(ppm) <= 0.2f ? good : (std::fabs(ppm) <= 1.0f ? warn : bad), "%+7.1f Hz (%+.3f ppm)", m.absErrHz, ppm);
+            tw::TextColored(std::fabs(ppm) <= 0.2f ? good : (std::fabs(ppm) <= 1.0f ? warn : bad), "%+7.1f Hz (%+.3f ppm)", m.absErrHz, ppm);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Received carrier (VFO + offset) minus the DL frequency announced in SYSINFO.\n"
                                   "Independent of AFC. Contains BS error + SDR error; with a GPS-locked SDR\n"
@@ -487,8 +479,7 @@ private:
             }
             SourceFreqCorrInterface* fc = _this->findFreqInterface();
             if (fc && fc->corrAvailable()) {
-                ImGui::SameLine();
-                if (ImGui::SmallButton(CONCAT("Calibrate SDR##_tetra_cal_", _this->name))) {
+                if (tw::SameButtonOrFull(CONCAT("Calibrate SDR##_tetra_cal_", _this->name))) {
                     double refHz = m.refFreqHz > 1e6 ? m.refFreqHz : 1e6;
                     double oldPpm = fc->corrPpm();
                     // carrier too high by e ppm -> SDR oscillator runs slow by e ppm
@@ -513,25 +504,16 @@ private:
 
         if (_this->decoder_mode == 0) {
             // Bit errors in known bits (training sequences, FCF, tail bits)
-            ImGui::Text("Raw BER:"); ImGui::SameLine();
+            tw::Text("Raw BER:"); tw::SameNext();
             if (m.ber >= 0.0) {
-                ImGui::TextColored(m.ber < 1e-3 ? good : (m.ber < 1e-2 ? warn : bad), "%.1e", m.ber); ImGui::SameLine();
-                ImGui::Text(" total"); ImGui::SameLine();
-                ImGui::TextColored(val, "%.1e", m.berTotal);
+                tw::TextColored(m.ber < 1e-3 ? good : (m.ber < 1e-2 ? warn : bad), "%.1e", m.ber); tw::SameText(" total"); tw::SameTextColored(val, "%.1e", m.berTotal);
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Bit error ratio in known bits before channel decoding\n(training sequences, frequency correction field, tail bits).");
                 }
-            } else { ImGui::TextDisabled("--"); }
-            ImGui::Text("Bursts/s:"); ImGui::SameLine();
-            ImGui::TextColored(val, "%u", m.bursts); ImGui::SameLine();
-            ImGui::Text(" with errors"); ImGui::SameLine();
-            ImGui::TextColored(m.tolerated ? warn : val, "%u", m.tolerated); ImGui::SameLine();
-            ImGui::Text(" sync lost"); ImGui::SameLine();
-            ImGui::TextColored(m.syncLostTotal ? warn : val, "%u", m.syncLostTotal);
+            } else { tw::TextDisabled("--"); }
+            tw::Text("Bursts/s:"); tw::SameTextColored(val, "%u", m.bursts); tw::SameText(" with errors"); tw::SameTextColored(m.tolerated ? warn : val, "%u", m.tolerated); tw::SameText(" sync lost"); tw::SameTextColored(m.syncLostTotal ? warn : val, "%u", m.syncLostTotal);
             {
-                ImGui::Text("Re-locks:"); ImGui::SameLine();
-                ImGui::TextColored(m.resyncSlip ? bad : val, "%u with timing slip", m.resyncSlip); ImGui::SameLine();
-                ImGui::TextColored(val, " %u without", m.resyncNoSlip);
+                tw::Text("Re-locks:"); tw::SameTextColored(m.resyncSlip ? bad : val, "%u with timing slip", m.resyncSlip); tw::SameTextColored(val, " %u without", m.resyncNoSlip);
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("After a sync loss the new burst timing is compared with the old one.\n"
                                       "Timing slip = symbols were lost or inserted in the sample stream\n"
@@ -554,13 +536,13 @@ private:
                     uint32_t n = m.crcOk[i] + m.crcFail[i];
                     if (n) {
                         float f = 100.0f * m.crcFail[i] / n;
-                        ImGui::TextColored(f == 0.0f ? good : (f < 5.0f ? warn : bad), "%u/%u fail", m.crcFail[i], n);
-                    } else { ImGui::TextDisabled("--"); }
+                        tw::TextColored(f == 0.0f ? good : (f < 5.0f ? warn : bad), "%u/%u fail", m.crcFail[i], n);
+                    } else { tw::TextDisabled("--"); }
                     ImGui::TableSetColumnIndex(2);
                     uint32_t nt = m.crcOkTotal[i] + m.crcFailTotal[i];
                     if (nt) {
-                        ImGui::Text("%.2f %% fail", 100.0 * m.crcFailTotal[i] / nt);
-                    } else { ImGui::TextDisabled("--"); }
+                        tw::Text("%.2f %% fail", 100.0 * m.crcFailTotal[i] / nt);
+                    } else { tw::TextDisabled("--"); }
                 }
                 ImGui::EndTable();
             }
@@ -569,7 +551,7 @@ private:
         if (ImGui::TreeNode(CONCAT("Events##_tetra_events_", _this->name))) {
             auto ev = _this->meas.getEvents();
             if (ImGui::SmallButton(CONCAT("Clear##_tetra_evclr_", _this->name))) { _this->meas.clearEvents(); ev.clear(); }
-            if (ev.empty()) { ImGui::TextDisabled("no events"); }
+            if (ev.empty()) { tw::TextDisabled("no events"); }
             int shown = 0;
             for (auto it = ev.rbegin(); it != ev.rend() && shown < 30; ++it, ++shown) {
                 struct tm lt;
@@ -581,8 +563,8 @@ private:
                 char ts[16];
                 strftime(ts, sizeof(ts), "%H:%M:%S", &lt);
                 bool isLoss = it->text.rfind("SYNC", 0) == 0 || it->text.find("slip ") != std::string::npos;
-                ImGui::TextDisabled("%s", ts); ImGui::SameLine();
-                if (isLoss) { ImGui::TextColored(warn, "%s", it->text.c_str()); }
+                tw::TextDisabled("%s", ts); tw::SameNext();
+                if (isLoss) { tw::TextColored(warn, "%s", it->text.c_str()); }
                 else { ImGui::TextUnformatted(it->text.c_str()); }
             }
             ImGui::TreePop();
@@ -592,7 +574,7 @@ private:
         }
 
         // Level calibration
-        ImGui::Text("Level cal. (dB):"); ImGui::SameLine();
+        tw::Text("Level cal. (dB):"); ImGui::SameLine();
         ImGui::SetNextItemWidth(menuWidth - ImGui::GetCursorPosX());
         if (ImGui::InputFloat(CONCAT("##_tetra_lcal_", _this->name), &_this->levelCalDb, 0.0f, 0.0f, "%.1f")) {
             config.acquire();
@@ -632,10 +614,10 @@ private:
             if (ImGui::Button(CONCAT("Stop CSV log##_tetra_log_", _this->name), ImVec2(menuWidth, 0))) {
                 _this->meas.stopLog();
             }
-            ImGui::TextDisabled("%s", _this->meas.getLogPath().c_str());
+            tw::TextDisabled("%s", _this->meas.getLogPath().c_str());
         }
         if (!_this->logError.empty()) {
-            ImGui::TextColored(bad, "%s", _this->logError.c_str());
+            tw::TextColored(bad, "%s", _this->logError.c_str());
         }
     }
 
@@ -684,9 +666,9 @@ private:
             style::beginDisabled();
         }
 
-        ImGui::TextDisabled("TETRA demodulator v" TETRA_PLUGIN_VERSION);
+        tw::TextDisabled("TETRA demodulator v" TETRA_PLUGIN_VERSION);
         // own audio volume / mute, independent of the Radio module
-        ImGui::Text("Audio:"); ImGui::SameLine();
+        tw::Text("Audio:"); ImGui::SameLine();
         sigpath::sinkManager.showVolumeSlider(_this->name, "##_tetra_vol_", menuWidth - ImGui::GetCursorPosX(), 0, 2, false);
         if (ImGui::RadioButton(CONCAT("ETSI##_tetra_mode_etsi_", _this->name), !_this->hamMode) && _this->hamMode) {
             _this->hamMode = false;
@@ -695,7 +677,7 @@ private:
             config.conf[_this->name]["hamMode"] = false;
             config.release(true);
         }
-        ImGui::SameLine();
+        tw::SameLineFor(tw::checkboxWidth("Amateur radio"));
         if (ImGui::RadioButton(CONCAT("Amateur radio##_tetra_mode_ham_", _this->name), _this->hamMode) && !_this->hamMode) {
             _this->hamMode = true;
             _this->applyDuplexMode();
@@ -703,45 +685,36 @@ private:
             config.conf[_this->name]["hamMode"] = true;
             config.release(true);
         }
-        ImGui::Text("Signal constellation: ");
-        ImGui::SameLine();
-        if (ImGui::Checkbox(CONCAT("8 points (pi/4)##_tetra_c8_", _this->name), &_this->constellation8)) {
+        tw::Text("Signal constellation: ");
+        if (tw::SameCheckbox(CONCAT("8 points (pi/4)##_tetra_c8_", _this->name), &_this->constellation8)) {
             config.acquire();
             config.conf[_this->name]["constellation8"] = _this->constellation8;
             config.release(true);
         }
         _this->drawOffsetCompCheckbox();
-        ImGui::Text("Own window:"); ImGui::SameLine();
-        if (ImGui::Checkbox(CONCAT("Constellation##_tetra_cdet_", _this->name), &_this->constDetached)) {
-            config.acquire();
-            config.conf[_this->name]["constDetached"] = _this->constDetached;
-            config.release(true);
-        }
-        ImGui::SameLine();
-        if (!_this->hamMode) { style::beginDisabled(); }
-        if (ImGui::Checkbox(CONCAT("Stations##_tetra_sdet_top_", _this->name), &_this->subsDetached)) {
-            config.acquire();
-            config.conf[_this->name]["subsDetached"] = _this->subsDetached;
-            config.release(true);
-            if (_this->subsDetached) { _this->focusSubsWin = true; }
-        }
-        if (!_this->hamMode) { style::endDisabled(); }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !_this->hamMode) {
-            ImGui::SetTooltip("The station list (ISSI) is only available in 'Amateur radio' mode.");
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox(CONCAT("Network##_tetra_ndet_top_", _this->name), &_this->netDetached)) {
-            config.acquire();
-            config.conf[_this->name]["netDetached"] = _this->netDetached;
-            config.release(true);
-            if (_this->netDetached) { _this->focusNetWin = true; }
-        }
-        ImGui::SameLine();
-        if (ImGui::Checkbox(CONCAT("TX analysis##_tetra_tdet_top_", _this->name), &_this->txaDetached)) {
-            config.acquire();
-            config.conf[_this->name]["txaDetached"] = _this->txaDetached;
-            config.release(true);
-            if (_this->txaDetached) { _this->focusTxaWin = true; }
+        {
+            // one line if it fits, otherwise two columns under the label
+            std::string l0 = std::string("Constellation##_tetra_cdet_") + _this->name;
+            std::string l1 = std::string("Stations##_tetra_sdet_top_") + _this->name;
+            std::string l2 = std::string("Network##_tetra_ndet_top_") + _this->name;
+            std::string l3 = std::string("TX analysis##_tetra_tdet_top_") + _this->name;
+            tw::CheckRow row;
+            row.add(l0.c_str(), &_this->constDetached);
+            row.add(l1.c_str(), &_this->subsDetached, _this->hamMode);   // stations: amateur radio mode only
+            row.add(l2.c_str(), &_this->netDetached);
+            row.add(l3.c_str(), &_this->txaDetached);
+            int ch = row.draw("Own window:");
+            if (ch >= 0) {
+                config.acquire();
+                config.conf[_this->name]["constDetached"] = _this->constDetached;
+                config.conf[_this->name]["subsDetached"] = _this->subsDetached;
+                config.conf[_this->name]["netDetached"] = _this->netDetached;
+                config.conf[_this->name]["txaDetached"] = _this->txaDetached;
+                config.release(true);
+                if (ch == 1 && _this->subsDetached) { _this->focusSubsWin = true; }
+                if (ch == 2 && _this->netDetached) { _this->focusNetWin = true; }
+                if (ch == 3 && _this->txaDetached) { _this->focusTxaWin = true; }
+            }
         }
         if (!_this->constDetached) {
             _this->drawConstellation(menuWidth);
@@ -750,18 +723,16 @@ private:
         if (ImGui::CollapsingHeader(CONCAT("Measurements##_tetra_meas_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
             if (_this->constDetached) {
                 // shown below the constellation in its own window, not twice
-                ImGui::TextDisabled("Shown in the constellation window.");
-                ImGui::SameLine();
-                if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
+                tw::TextDisabled("Shown in the constellation window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
             } else {
                 drawMeasurements(_this, menuWidth);
             }
         }
         if (ImGui::CollapsingHeader(CONCAT("TX analysis (spectrum)##_tetra_txa_", _this->name))) {
             if (_this->txaDetached) {
-                ImGui::TextDisabled("Shown in its own window.");
-                ImGui::SameLine();
-                if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
+                tw::TextDisabled("Shown in its own window.");
+                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
             } else {
                 _this->drawTxAnalysis(menuWidth);
             }
@@ -794,9 +765,8 @@ private:
                     if (_this->netDetached) { _this->focusNetWin = true; }
                 }
                 if (_this->netDetached) {
-                    ImGui::TextDisabled("Shown in its own window.");
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_nfront_", _this->name))) { _this->focusNetWin = true; }
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_nfront_", _this->name))) { _this->focusNetWin = true; }
                 } else {
                     _this->drawNetworkBody(menuWidth);
                 }
@@ -808,11 +778,9 @@ private:
         } else {
             //NETWORK SYM STREAMING
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, _this->symbolExtractor.sync ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
-            ImGui::SameLine();
-            ImGui::Text(" Sync");
+            tw::SameText(" Sync");
             ImGui::BoxIndicator(menuWidth, _this->tsfound ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
-            ImGui::SameLine();
-            ImGui::Text(" Training sequences");
+            tw::SameText(" Training sequences");
 
             bool netActive = (_this->conn && _this->conn->isOpen());
             if(netActive) { style::beginDisabled(); }
@@ -843,9 +811,9 @@ private:
             }
 
             ImGui::TextUnformatted("Net status:");
-            ImGui::SameLine();
+            tw::SameNext();
             if (netActive) {
-                ImGui::TextColored(tc::good(), "Sending");
+                tw::TextColored(tc::good(), "Sending");
             } else {
                 ImGui::TextUnformatted("Idle");
             }
@@ -976,10 +944,10 @@ private:
         ImGui::SetNextItemWidth(menuWidth);
         ImGui::Combo(CONCAT("##_tetra_dup_tbl_", name), &duplexEditTable, tableNames);
         if (hamMode) {
-            ImGui::TextDisabled("Amateur radio tables (kHz, -1 = undefined).");
+            tw::TextDisabled("Amateur radio tables (kHz, -1 = undefined).");
         }
         else {
-            ImGui::TextDisabled("ETSI TS 100 392-15 values (read only).");
+            tw::TextDisabled("ETSI TS 100 392-15 values (read only).");
         }
 
         bool changed = false;
@@ -997,13 +965,13 @@ private:
                 int32_t etsi = tetra_get_duplex_spacing_etsi_khz(duplexEditTable, b);
                 int val = hamMode ? hamTable[duplexEditTable][b] : etsi;
                 if (active) {
-                    ImGui::TextColored(tc::good(), "%2d %4d MHz", b, b * 100);
+                    tw::TextColored(tc::good(), "%2d %4d MHz", b, b * 100);
                 } else {
-                    ImGui::Text("%2d %4d MHz", b, b * 100);
+                    tw::Text("%2d %4d MHz", b, b * 100);
                 }
                 ImGui::TableSetColumnIndex(1);
                 if (!hamMode) {
-                    if (val < 0) { ImGui::TextDisabled("--"); } else { ImGui::Text("%d", val); }
+                    if (val < 0) { tw::TextDisabled("--"); } else { tw::Text("%d", val); }
                     continue;
                 }
                 ImGui::SetNextItemWidth(-FLT_MIN);
@@ -1028,22 +996,20 @@ private:
                 ImGui::SetTooltip("Amateur radio defaults: ETSI values, 70 cm (band 4):\n"
                                   "Table 0 9.0 MHz, 1 7.6 MHz, 3 8.0 MHz, 4 9.4 MHz, 5 4.8 MHz, 7 7.6 MHz");
             }
-            ImGui::SameLine();
-            if (ImGui::Button(CONCAT("Reload file##_tetra_dup_rl_", name), ImVec2(w3, 0))) {
+            if (tw::SameButton(CONCAT("Reload file##_tetra_dup_rl_", name), ImVec2(w3, 0))) {
                 loadHamTable(json());
                 applyDuplexMode();
             }
-            ImGui::SameLine();
-            if (ImGui::Button(CONCAT("Save file##_tetra_dup_sv_", name), ImVec2(w3, 0))) {
+            if (tw::SameButton(CONCAT("Save file##_tetra_dup_sv_", name), ImVec2(w3, 0))) {
                 saveHamTable();
             }
             if (changed) {
                 saveHamTable();
                 applyDuplexMode();
             }
-            ImGui::TextDisabled("%s", hamTableStatus.c_str());
+            tw::TextDisabled("%s", hamTableStatus.c_str());
         }
-        ImGui::TextDisabled("Changes apply with the next SYSINFO.");
+        tw::TextDisabled("Changes apply with the next SYSINFO.");
     }
 
     // ---------------- AFC (VFO follows the carrier) and automatic RF gain ----------------
@@ -1083,14 +1049,14 @@ private:
                               "Leave off with a GPS/TCXO-stabilised SDR for pure measurements.");
         }
         if (afcEnabled) {
-            ImGui::SameLine();
+            tw::SameNext();
             if (afcAnchorValid) {
-                ImGui::TextColored(afcStatus.empty() ? good : warn, "%+.0f Hz", afcLastSet - afcAnchor);
+                tw::TextColored(afcStatus.empty() ? good : warn, "%+.0f Hz", afcLastSet - afcAnchor);
             }
             else {
-                ImGui::TextDisabled("waiting for lock");
+                tw::TextDisabled("waiting for lock");
             }
-            if (!afcStatus.empty()) { ImGui::SameLine(); ImGui::TextColored(warn, "(limit)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", afcStatus.c_str()); } }
+            if (!afcStatus.empty()) { tw::SameTextColored(warn, "(limit)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", afcStatus.c_str()); } }
         }
 
         SourceGainInterface* g = findGainInterface();
@@ -1108,24 +1074,24 @@ private:
                               "Note: strong signals elsewhere in the SDR bandwidth can still overload\n"
                               "the ADC; watch the waterfall.");
         }
-        ImGui::SameLine();
+        tw::SameNext();
         if (g) {
             if (g->gainControllable()) {
-                ImGui::TextColored(autoGain ? good : tc::grey(), "%s", g->gainLabel(g->gainStep()).c_str());
+                tw::TextColored(autoGain ? good : tc::grey(), "%s", g->gainLabel(g->gainStep()).c_str());
             }
             else {
-                ImGui::TextDisabled("(hardware AGC on / not running)");
+                tw::TextDisabled("(hardware AGC on / not running)");
             }
         }
         else {
             // Advisor for sources without gain interface
             if (m.valid) {
-                if (m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) { ImGui::TextColored(warn, "reduce gain"); }
-                else if (m.levelDbfs < -35.0f) { ImGui::TextColored(warn, "increase gain"); }
-                else { ImGui::TextColored(good, "gain OK"); }
+                if (m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) { tw::TextColored(warn, "reduce gain"); }
+                else if (m.levelDbfs < -35.0f) { tw::TextColored(warn, "increase gain"); }
+                else { tw::TextColored(good, "gain OK"); }
             }
         }
-        if (!gainStatus.empty()) { ImGui::SameLine(); ImGui::TextDisabled("(?)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", gainStatus.c_str()); } }
+        if (!gainStatus.empty()) { tw::SameTextDisabled("(?)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", gainStatus.c_str()); } }
     }
 
     // Called every frame from the GUI thread
@@ -1234,11 +1200,10 @@ private:
                     config.release(true);
                 }
             }
-            if (gpsPorts.empty()) { ImGui::TextDisabled("no serial ports found"); }
+            if (gpsPorts.empty()) { tw::TextDisabled("no serial ports found"); }
             ImGui::EndCombo();
         }
-        ImGui::SameLine();
-        if (ImGui::Button(CONCAT("Rescan##_tetra_gps_scan_", name))) { gpsPorts = NmeaGps::listPorts(); }
+        if (tw::SameButton(CONCAT("Rescan##_tetra_gps_scan_", name))) { gpsPorts = NmeaGps::listPorts(); }
         static const int bauds[] = { 4800, 9600, 19200, 38400, 57600, 115200 };
         static const char* baudTxt = "4800\09600\019200\038400\057600\0115200\0";
         int bi = 1;
@@ -1251,7 +1216,7 @@ private:
             config.release(true);
         }
         if (running) { style::endDisabled(); }
-        ImGui::SameLine();
+        tw::SameLineFor(tw::buttonWidth("Disconnect"));
         if (!running) {
             bool can = !gpsPort.empty();
             if (!can) { style::beginDisabled(); }
@@ -1275,18 +1240,17 @@ private:
         GpsFix f = gps.get();
         std::string err = gps.getError();
         if (!err.empty() && !running) {
-            ImGui::TextColored(bad, "%s", err.c_str());
+            tw::TextColored(bad, "%s", err.c_str());
         }
         else if (running && !f.connected) {
-            ImGui::TextColored(warn, "Waiting for NMEA data (check port/baud rate)");
+            tw::TextColored(warn, "Waiting for NMEA data (check port/baud rate)");
         }
         else if (running && !f.valid) {
-            ImGui::TextColored(warn, "No GPS fix yet (%d satellites)", f.sats);
+            tw::TextColored(warn, "No GPS fix yet (%d satellites)", f.sats);
         }
         else if (running) {
-            ImGui::TextColored(good, "%.5f, %.5f", f.lat, f.lon);
-            ImGui::SameLine();
-            ImGui::TextDisabled(" %d sat, HDOP %.1f, %.0f km/h", f.sats, f.hdop, f.speedKmh);
+            tw::TextColored(good, "%.5f, %.5f", f.lat, f.lon);
+            tw::SameTextDisabled(" %d sat, HDOP %.1f, %.0f km/h", f.sats, f.hdop, f.speedKmh);
         }
 
         // Cell lock
@@ -1310,9 +1274,8 @@ private:
         }
         else {
             TetraMeasSnapshot m = meas.get();
-            ImGui::Text("Cell lock:");
-            ImGui::SameLine();
-            ImGui::TextColored(m.cellMatch == 1 ? good : bad, "%03d/%03d CC 0x%02x %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
+            tw::Text("Cell lock:");
+            tw::SameTextColored(m.cellMatch == 1 ? good : bad, "%03d/%03d CC 0x%02x %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
             if (ImGui::Button(CONCAT("Unlock cell##_tetra_unlock_", name), ImVec2(menuWidth, 0))) {
                 lock.active = false;
                 meas.setCellLock(lock);
@@ -1338,7 +1301,7 @@ private:
             ImGui::SetTooltip("Creates a .kml (Google Earth) and a _map.html (OpenStreetMap)\nnext to the current/last CSV log. Start a CSV log with GPS connected first.");
         }
         if (logPath.empty()) {
-            ImGui::TextDisabled("Start a CSV log (Measurements) to record a drive.");
+            tw::TextDisabled("Start a CSV log (Measurements) to record a drive.");
         }
         std::string st = mapExport.status();
         if (!st.empty()) { ImGui::TextWrapped("%s", st.c_str()); }
@@ -1434,13 +1397,13 @@ private:
             ImGui::TextUnformatted(label);
             if (tip && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", tip); }
             ImGui::TableSetColumnIndex(1);
-            ImGui::TextColored(val, fmt, args...);
+            tw::TextColored(val, fmt, args...);
             if (tip && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", tip); }
         };
         ImGuiTableFlags tf = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg;
 
         if (ImGui::TreeNode(CONCAT("Cell parameters (SYNC / SYSINFO)##_tetra_cellp_", name))) {
-            if (!d->sync_valid && !d->sysinfo_valid) { ImGui::TextDisabled("no SYNC / SYSINFO received yet"); }
+            if (!d->sync_valid && !d->sysinfo_valid) { tw::TextDisabled("no SYNC / SYSINFO received yet"); }
             else if (ImGui::BeginTable(CONCAT("##_tetra_cellt_", name), 2, tf)) {
                 static const float offKHz[4] = { 0.0f, 6.25f, -6.25f, 12.5f };
                 static const char* sharing[4] = { "continuous transmission", "carrier sharing", "MCCH sharing", "traffic carrier sharing" };
@@ -1483,14 +1446,13 @@ private:
         if (ImGui::TreeNode(CONCAT("Network broadcast & neighbour cells##_tetra_nb_", name))) {
             int64_t now = (int64_t)time(nullptr);
             if (!d->nwrk_count) {
-                ImGui::TextDisabled("no D-NWRK-BROADCAST received yet");
+                tw::TextDisabled("no D-NWRK-BROADCAST received yet");
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Sent by the network every few seconds to minutes, if at all\n(see 'Neighbour broadcast' in the cell parameters).");
                 }
             } else {
-                ImGui::Text("Received: %u, last %llds ago", d->nwrk_count, (long long)(now - d->nwrk_rx_time));
-                ImGui::SameLine();
-                if (ImGui::SmallButton(CONCAT("Clear##_tetra_nbclr_", name))) { osmotetradecoder.clearNeighbours(); }
+                tw::Text("Received: %u, last %llds ago", d->nwrk_count, (long long)(now - d->nwrk_rx_time));
+                if (tw::SameSmallButton(CONCAT("Clear##_tetra_nbclr_", name))) { osmotetradecoder.clearNeighbours(); }
                 if (ImGui::BeginTable(CONCAT("##_tetra_nwt_", name), 2, tf)) {
                     if (d->reselect_valid) {
                         row("Slow reselect", "Threshold / hysteresis for normal cell reselection (2 dB steps).", "%d dB / %d dB", 2 * d->slow_resel_thr, 2 * d->slow_resel_hyst);
@@ -1508,7 +1470,7 @@ private:
                     ImGui::EndTable();
                 }
                 if (d->n_neigh > 0) {
-                    ImGui::Text("Neighbour cells: %d", d->n_neigh);
+                    tw::Text("Neighbour cells: %d", d->n_neigh);
                     if (ImGui::BeginTable(CONCAT("##_tetra_neigh_", name), 7, tf | ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable)) {
                         ImGui::TableSetupColumn("Cell");
                         ImGui::TableSetupColumn("DL MHz");
@@ -1525,7 +1487,7 @@ private:
                             double f = (double)tetra_dl_carrier_hz((uint8_t)band, (uint16_t)n.main_carrier, (uint8_t)off);
                             ImGui::TableNextRow();
                             ImGui::TableSetColumnIndex(0);
-                            ImGui::Text("%d%s", n.cell_id, n.synced ? " (sync)" : "");
+                            tw::Text("%d%s", n.cell_id, n.synced ? " (sync)" : "");
                             if (ImGui::IsItemHovered()) {
                                 ImGui::SetTooltip("Cell identifier %d, carrier %d%s\nMCC %s, MNC %s, max MS TX %s",
                                                   n.cell_id, n.main_carrier, n.synced ? ", synchronised to this cell" : "",
@@ -1534,15 +1496,15 @@ private:
                                                   n.txpwr > 0 ? (std::to_string(10 + 5 * n.txpwr) + " dBm").c_str() : "-");
                             }
                             ImGui::TableSetColumnIndex(1);
-                            ImGui::TextColored(val, "%.4f", f / 1e6);
+                            tw::TextColored(val, "%.4f", f / 1e6);
                             ImGui::TableSetColumnIndex(2);
-                            if (n.la >= 0) { ImGui::Text("%d", n.la); } else { ImGui::TextDisabled("-"); }
+                            if (n.la >= 0) { tw::Text("%d", n.la); } else { tw::TextDisabled("-"); }
                             ImGui::TableSetColumnIndex(3);
                             ImGui::TextUnformatted(cellLoadName(n.load));
                             ImGui::TableSetColumnIndex(4);
-                            if (n.rxlev_min >= 0) { ImGui::Text("%d dBm", -125 + 5 * n.rxlev_min); } else { ImGui::TextDisabled("-"); }
+                            if (n.rxlev_min >= 0) { tw::Text("%d dBm", -125 + 5 * n.rxlev_min); } else { tw::TextDisabled("-"); }
                             ImGui::TableSetColumnIndex(5);
-                            ImGui::Text("%llds", (long long)(now - n.rx_time));
+                            tw::Text("%llds", (long long)(now - n.rx_time));
                             ImGui::TableSetColumnIndex(6);
                             if (f > 1e6 && ImGui::SmallButton(CONCAT("Tune##_tetra_ntune_" + std::to_string(i) + "_", name))) {
                                 tuner::tune(tuner::TUNER_MODE_NORMAL, name, f);
@@ -1559,104 +1521,62 @@ private:
     void drawNetworkBody(float menuWidth) {
         TetraDemodulatorModule* _this = this;
         ImGui::BoxIndicator(ImGui::GetFontSize()*2, _this->symbolExtractor.sync ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
-        ImGui::SameLine();
-        ImGui::Text(" Sync");
+        tw::SameText(" Sync");
         //OSMO-TETRA
         int dec_st = _this->osmotetradecoder.getRxState();
         ImGui::BoxIndicator(ImGui::GetFontSize()*2, (dec_st == 0) ? IM_COL32(230, 5, 5, 255) : ((dec_st == 2) ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 230, 5, 255)));
-        ImGui::SameLine();
-        ImGui::Text(" Decoder:  %s", (dec_st == 0) ? "Unlocked" : ((dec_st == 2) ? "Locked" : "Know next start"));
+        tw::SameText(" Decoder:  %s", (dec_st == 0) ? "Unlocked" : ((dec_st == 2) ? "Locked" : "Know next start"));
         if(dec_st != 2) {
             style::beginDisabled();
         }
-        ImGui::Text("Hyperframe: "); ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%05d", _this->osmotetradecoder.getCurrHyperframe()); ImGui::SameLine();
-        ImGui::Text(" | Multiframe: "); ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%02d", _this->osmotetradecoder.getCurrMultiframe()); ImGui::SameLine();
-        ImGui::Text("| Frame: "); ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%02d", _this->osmotetradecoder.getCurrFrame());
-        ImGui::Text("Timeslots: ");
+        tw::Text("Hyperframe: "); tw::SameTextColored(tc::val(), "%05d", _this->osmotetradecoder.getCurrHyperframe()); tw::SameText(" | Multiframe: "); tw::SameTextColored(tc::val(), "%02d", _this->osmotetradecoder.getCurrMultiframe()); tw::SameText("| Frame: "); tw::SameTextColored(tc::val(), "%02d", _this->osmotetradecoder.getCurrFrame());
+        tw::Text("Timeslots: ");
         for(int i = 0; i < 4; i++) {
             switch(_this->osmotetradecoder.getTimeslotContent(i)) {
                 case 0:
-                    ImGui::SameLine();
-                    ImGui::TextColored(tc::lgrey(), "   UL  ");
+                    tw::SameTextColored(tc::lgrey(), "   UL  ");
                     break;
                 case 1:
-                    ImGui::SameLine();
-                    ImGui::TextColored(tc::magenta(), " DATA  ");
+                    tw::SameTextColored(tc::magenta(), " DATA  ");
                     break;
                 case 2:
-                    ImGui::SameLine();
-                    ImGui::TextColored(tc::val(), "  NDB  ");
+                    tw::SameTextColored(tc::val(), "  NDB  ");
                     break;
                 case 3:
-                    ImGui::SameLine();
-                    ImGui::TextColored(tc::cyan(), " SYNC  ");
+                    tw::SameTextColored(tc::cyan(), " SYNC  ");
                     break;
                 case 4:
-                    ImGui::SameLine();
-                    ImGui::TextColored(tc::good(), " VOICE ");
+                    tw::SameTextColored(tc::good(), " VOICE ");
                     break;
             }
         }
         int crc_failed = _this->osmotetradecoder.getLastCrcFail();
         if(crc_failed) {
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, IM_COL32(230, 5, 5, 255));
-            ImGui::SameLine();
-            ImGui::Text(" CRC: "); ImGui::SameLine();
-            ImGui::TextColored(tc::bad(), "FAIL");
+            tw::SameText(" CRC: "); tw::SameTextColored(tc::bad(), "FAIL");
             style::beginDisabled();
         } else {
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, IM_COL32(5, 230, 5, 255));
-            ImGui::SameLine();
-            ImGui::Text(" CRC: "); ImGui::SameLine();
-            ImGui::TextColored(tc::good(), "PASS");
+            tw::SameText(" CRC: "); tw::SameTextColored(tc::good(), "PASS");
         }
         int dl_usg = _this->osmotetradecoder.getDlUsage();
         int ul_usg = _this->osmotetradecoder.getUlUsage();
-        ImGui::Text("DL:");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%7.4f", ((float)_this->osmotetradecoder.getDlFreq()/1000000.0f));ImGui::SameLine();
-        ImGui::Text(" MHz ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), (dl_usg == 0 ? "Unalloc" : (dl_usg == 1 ? "Assigned ctl" : (dl_usg == 2 ? "Common ctl" : (dl_usg == 3 ? "Reserved" : "Traffic")))));
-        ImGui::Text("UL:");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%7.4f", ((float)_this->osmotetradecoder.getUlFreq()/1000000.0f));ImGui::SameLine();
-        ImGui::Text(" MHz ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), (ul_usg == 0 ? "Unalloc" : "Traffic"));
-        ImGui::Text("Duplex: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "Table %d, Band %d%s",
+        tw::Text("DL:");tw::SameTextColored(tc::val(), "%7.4f", ((float)_this->osmotetradecoder.getDlFreq()/1000000.0f));tw::SameText(" MHz ");tw::SameTextColored(tc::val(), (dl_usg == 0 ? "Unalloc" : (dl_usg == 1 ? "Assigned ctl" : (dl_usg == 2 ? "Common ctl" : (dl_usg == 3 ? "Reserved" : "Traffic")))));
+        tw::Text("UL:");tw::SameTextColored(tc::val(), "%7.4f", ((float)_this->osmotetradecoder.getUlFreq()/1000000.0f));tw::SameText(" MHz ");tw::SameTextColored(tc::val(), (ul_usg == 0 ? "Unalloc" : "Traffic"));
+        tw::Text("Duplex: ");tw::SameTextColored(tc::val(), "Table %d, Band %d%s",
             _this->osmotetradecoder.getDuplexIdx(), _this->osmotetradecoder.getFreqBand(),
             _this->osmotetradecoder.getReverseOp() ? ", reverse" : "");
-        ImGui::Text("Access1: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess1Code());ImGui::SameLine();
-        ImGui::Text("/");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess1());ImGui::SameLine();
-        ImGui::Text("| Access2: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess2Code());ImGui::SameLine();
-        ImGui::Text("/");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess2());
-        ImGui::Text("MCC: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%03d", _this->osmotetradecoder.getMcc());ImGui::SameLine();
-        ImGui::Text("| MNC: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%03d", _this->osmotetradecoder.getMnc());ImGui::SameLine();
-        ImGui::Text("| CC: ");ImGui::SameLine();
-        ImGui::TextColored(tc::val(), "%d", _this->osmotetradecoder.getCc());
+        tw::Text("Access1: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess1Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess1());tw::SameText("| Access2: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess2Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess2());
+        tw::Text("MCC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMcc());tw::SameText("| MNC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMnc());tw::SameText("| CC: ");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getCc());
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Colour code (decimal, 0..63) from the SYNC PDU = 0x%02X.\nIt is part of the scrambling code: if it were wrong,\nno other channel would pass its CRC.", _this->osmotetradecoder.getCc());
         }
         ImVec4 on_color = tc::good();
         ImVec4 off_color = tc::bad();
-        ImGui::TextColored(_this->osmotetradecoder.getAdvancedLink() ? on_color : off_color, "Adv. link  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getAirEncryption() ? on_color : off_color, "Encryption  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getSndcpData() ? on_color : off_color, "SNDCP");
-        ImGui::TextColored(_this->osmotetradecoder.getCircuitData() ? on_color : off_color, "Circuit data  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getVoiceService() ? on_color : off_color, "Voice  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getNormalMode() ? on_color : off_color, "Normal mode");
-        ImGui::TextColored(_this->osmotetradecoder.getMigrationSupported() ? on_color : off_color, "Migration  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getNeverMinimumMode() ? on_color : off_color, "Never min mode  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getPriorityCell() ? on_color : off_color, "Priority cell");
-        ImGui::TextColored(_this->osmotetradecoder.getDeregMandatory() ? on_color : off_color, "Dereg req.  ");ImGui::SameLine();
-        ImGui::TextColored(_this->osmotetradecoder.getRegMandatory() ? on_color : off_color, "Reg req.");
+        tw::TextColored(_this->osmotetradecoder.getAdvancedLink() ? on_color : off_color, "Adv. link  ");tw::SameTextColored(_this->osmotetradecoder.getAirEncryption() ? on_color : off_color, "Encryption  ");tw::SameTextColored(_this->osmotetradecoder.getSndcpData() ? on_color : off_color, "SNDCP");
+        tw::TextColored(_this->osmotetradecoder.getCircuitData() ? on_color : off_color, "Circuit data  ");tw::SameTextColored(_this->osmotetradecoder.getVoiceService() ? on_color : off_color, "Voice  ");tw::SameTextColored(_this->osmotetradecoder.getNormalMode() ? on_color : off_color, "Normal mode");
+        tw::TextColored(_this->osmotetradecoder.getMigrationSupported() ? on_color : off_color, "Migration  ");tw::SameTextColored(_this->osmotetradecoder.getNeverMinimumMode() ? on_color : off_color, "Never min mode  ");tw::SameTextColored(_this->osmotetradecoder.getPriorityCell() ? on_color : off_color, "Priority cell");
+        tw::TextColored(_this->osmotetradecoder.getDeregMandatory() ? on_color : off_color, "Dereg req.  ");tw::SameTextColored(_this->osmotetradecoder.getRegMandatory() ? on_color : off_color, "Reg req.");
         if(crc_failed) {
             style::endDisabled();
         }
@@ -1786,7 +1706,7 @@ private:
                               "Costs some CPU; switch off when not needed.");
         }
         if (!txaRun) {
-            ImGui::TextDisabled("Spectrum, adjacent channel power, occupied bandwidth,\nshoulders and carrier leakage of the received carrier.");
+            tw::TextDisabled("Spectrum, adjacent channel power, occupied bandwidth,\nshoulders and carrier leakage of the received carrier.");
             return;
         }
         ImGui::SetNextItemWidth(menuWidth * 0.45f);
@@ -1795,15 +1715,14 @@ private:
             txa.setFftSize(4096 << txaFftIdx);
             saveTxaConfig();
         }
-        ImGui::SameLine();
+        tw::SameLineFor(menuWidth * 0.3f + tw::textWidth("Avg") + ImGui::GetStyle().ItemInnerSpacing.x);
         ImGui::SetNextItemWidth(menuWidth * 0.3f);
         if (ImGui::SliderInt(CONCAT("Avg##_tetra_txaavg_", name), &txaAvg, 1, 100)) {
             txa.setAverages(txaAvg);
             saveTxaConfig();
         }
         if (ImGui::SmallButton(CONCAT("Reset average##_tetra_txarst_", name))) { txa.resetAverage(); }
-        ImGui::SameLine();
-        if (ImGui::SmallButton(CONCAT("Store floor##_tetra_txaflr_", name))) { txa.storeFloor(); }
+        if (tw::SameSmallButton(CONCAT("Store floor##_tetra_txaflr_", name))) { txa.storeFloor(); }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Stores the current averaged spectrum as the receiver's measurement floor.\n"
                               "Do this with the transmitter off or the SDR input terminated (50 ohm),\n"
@@ -1811,8 +1730,7 @@ private:
                               "Without a stored floor, the noise far from the carrier is used.");
         }
         if (txa.hasFloor()) {
-            ImGui::SameLine();
-            if (ImGui::SmallButton(CONCAT("Clear floor##_tetra_txaflc_", name))) { txa.clearFloor(); }
+            if (tw::SameSmallButton(CONCAT("Clear floor##_tetra_txaflc_", name))) { txa.clearFloor(); }
         }
 
         TxAnalysisResult r = txa.get();
@@ -1823,40 +1741,38 @@ private:
         double centerOff = vfo ? vfo->wtfVFO->centerOffset : 0.0;
         double rxDcHz = -centerOff;   // the SDR's own DC, seen from the channel centre
         if (std::fabs(centerOff) < 15000.0) {
-            ImGui::TextColored(bad, "Channel is on the receiver's centre frequency.");
+            tw::TextColored(bad, "Channel is on the receiver's centre frequency.");
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("The SDR's own DC offset lands on the carrier: I/Q offset and carrier\n"
                                   "leakage then include the receiver. Tune the SDR so that the channel\n"
                                   "is at least ~100 kHz away from the centre.");
             }
         } else if (std::fabs(rxDcHz) < 90000.0) {
-            ImGui::TextColored(warn, "Receiver DC at %+.0f kHz falls into the analysis span.", rxDcHz / 1000.0);
+            tw::TextColored(warn, "Receiver DC at %+.0f kHz falls into the analysis span.", rxDcHz / 1000.0);
         }
         if (!r.valid) {
-            ImGui::TextDisabled("collecting samples ...");
+            tw::TextDisabled("collecting samples ...");
             return;
         }
         if (r.peakDbfs > -3.0) {
-            ImGui::TextColored(bad, "Tap peak %.1f dBFS: overload risk, reduce RF gain.", r.peakDbfs);
+            tw::TextColored(bad, "Tap peak %.1f dBFS: overload risk, reduce RF gain.", r.peakDbfs);
         }
 
         drawTxaSpectrum(r, menuWidth, rxDcHz);
-        ImGui::TextDisabled("measured spectrum, ideal TETRA spectrum (thin), stored floor (grey), ACP windows (shaded)");
+        tw::TextDisabled("measured spectrum, ideal TETRA spectrum (thin), stored floor (grey), ACP windows (shaded)");
 
         // Adjacent channel power table
         auto acpCell = [&](double v, double floorDb, float limit) {
             bool limited = v - floorDb < 3.0;
             ImVec4 c = limited ? tc::grey() : (v <= limit ? good : bad);
-            ImGui::TextColored(c, "%6.1f%s", v, limited ? " *" : "");
+            tw::TextColored(c, "%6.1f%s", v, limited ? " *" : "");
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip(limited ? "Within 3 dB of the measurement floor (%.1f dBc):\nthe true value may be lower (receiver limited)."
                                           : "Measurement floor %.1f dBc", floorDb);
             }
         };
-        ImGui::Text("Channel power:"); ImGui::SameLine();
-        ImGui::TextColored(val, "%.1f dBFS", r.chanPowerDbfs);
-        ImGui::SameLine();
-        ImGui::TextDisabled("(%d avg)", r.averages);
+        tw::Text("Channel power:"); tw::SameTextColored(val, "%.1f dBFS", r.chanPowerDbfs);
+        tw::SameTextDisabled("(%d avg)", r.averages);
         if (ImGui::BeginTable(CONCAT("##_tetra_acp_", name), 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("ACP");
             ImGui::TableSetupColumn("lower dBc");
@@ -1871,8 +1787,8 @@ private:
                 ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(lbl[i]);
                 ImGui::TableSetColumnIndex(1); acpCell(r.acpDbc[lo], r.acpFloorDbc[lo], txaLimit[i]);
                 ImGui::TableSetColumnIndex(2); acpCell(r.acpDbc[hi], r.acpFloorDbc[hi], txaLimit[i]);
-                ImGui::TableSetColumnIndex(3); ImGui::Text("%.0f", txaLimit[i]);
-                ImGui::TableSetColumnIndex(4); ImGui::TextDisabled("%.0f", (std::max)(r.acpFloorDbc[lo], r.acpFloorDbc[hi]));
+                ImGui::TableSetColumnIndex(3); tw::Text("%.0f", txaLimit[i]);
+                ImGui::TableSetColumnIndex(4); tw::TextDisabled("%.0f", (std::max)(r.acpFloorDbc[lo], r.acpFloorDbc[hi]));
             }
             ImGui::EndTable();
         }
@@ -1882,23 +1798,19 @@ private:
             ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("50 kHz##_tetra_l50_", name), &txaLimit[1], 0, 0, "%.0f dBc");
             ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("75 kHz##_tetra_l75_", name), &txaLimit[2], 0, 0, "%.0f dBc");
             if (ch) { saveTxaConfig(); }
-            ImGui::TextDisabled("Measured through the TETRA filter (RRC, 18 ksym/s, a=0.35)\nin the adjacent channel and in the own channel.\nDefaults: typical ETSI TETRA values, please check against the standard.");
+            tw::TextDisabled("Measured through the TETRA filter (RRC, 18 ksym/s, a=0.35)\nin the adjacent channel and in the own channel.\nDefaults: typical ETSI TETRA values, please check against the standard.");
             ImGui::TreePop();
         }
 
         // Bandwidth and spectral shape
-        ImGui::Text("Occupied BW (99%%):"); ImGui::SameLine();
-        ImGui::TextColored(std::fabs(r.obwHz - r.obwIdealHz) < 1500.0 ? good : warn, "%.2f kHz", r.obwHz / 1000.0);
-        ImGui::SameLine(); ImGui::TextDisabled("(ideal %.2f)", r.obwIdealHz / 1000.0);
-        ImGui::Text("-26 dB bandwidth:"); ImGui::SameLine();
-        ImGui::TextColored(std::fabs(r.bw26Hz - r.bw26IdealHz) < 2000.0 ? good : warn, "%.2f kHz", r.bw26Hz / 1000.0);
-        ImGui::SameLine(); ImGui::TextDisabled("(ideal %.2f)", r.bw26IdealHz / 1000.0);
-        ImGui::Text("Shoulders (13.5-20 kHz):"); ImGui::SameLine();
+        tw::Text("Occupied BW (99%%):"); tw::SameTextColored(std::fabs(r.obwHz - r.obwIdealHz) < 1500.0 ? good : warn, "%.2f kHz", r.obwHz / 1000.0);
+        tw::SameTextDisabled("(ideal %.2f)", r.obwIdealHz / 1000.0);
+        tw::Text("-26 dB bandwidth:"); tw::SameTextColored(std::fabs(r.bw26Hz - r.bw26IdealHz) < 2000.0 ? good : warn, "%.2f kHz", r.bw26Hz / 1000.0);
+        tw::SameTextDisabled("(ideal %.2f)", r.bw26IdealHz / 1000.0);
+        tw::Text("Shoulders (13.5-20 kHz):"); tw::SameNext();
         {
             auto shCol = [&](double v) { return (v - r.shoulderFloorDb < 3.0) ? tc::grey() : (v <= -45.0 ? good : (v <= -35.0 ? warn : bad)); };
-            ImGui::TextColored(shCol(r.shoulderLoDb), "%.1f", r.shoulderLoDb); ImGui::SameLine();
-            ImGui::Text("/"); ImGui::SameLine();
-            ImGui::TextColored(shCol(r.shoulderHiDb), "%.1f dB", r.shoulderHiDb);
+            tw::TextColored(shCol(r.shoulderLoDb), "%.1f", r.shoulderLoDb); tw::SameText("/"); tw::SameTextColored(shCol(r.shoulderHiDb), "%.1f dB", r.shoulderHiDb);
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Spectral density just outside the TETRA spectrum, relative to the in-band density.\n"
                                   "An ideal transmitter has nothing there. Raised shoulders = spectral regrowth from\n"
@@ -1907,29 +1819,28 @@ private:
                                   r.shoulderFloorDb);
             }
         }
-        ImGui::Text("Edge slope (-6..-30 dB):"); ImGui::SameLine();
+        tw::Text("Edge slope (-6..-30 dB):"); tw::SameNext();
         if (r.slopeLoDbPerKHz > 0 && r.slopeHiDbPerKHz > 0) {
-            ImGui::TextColored(val, "%.1f / %.1f dB/kHz", r.slopeLoDbPerKHz, r.slopeHiDbPerKHz);
-            ImGui::SameLine(); ImGui::TextDisabled("(ideal %.1f)", r.slopeIdealDbPerKHz);
+            tw::TextColored(val, "%.1f / %.1f dB/kHz", r.slopeLoDbPerKHz, r.slopeHiDbPerKHz);
+            tw::SameTextDisabled("(ideal %.1f)", r.slopeIdealDbPerKHz);
         } else {
-            ImGui::TextDisabled("-- (not enough dynamic range)");
+            tw::TextDisabled("-- (not enough dynamic range)");
         }
 
         // Carrier leakage / DC: spectral line and constellation
-        ImGui::Text("Carrier line (spectrum):"); ImGui::SameLine();
-        if (r.carrierLeakBelow) { ImGui::TextColored(good, "< %.1f dBc", r.carrierLeakDbc); }
-        else { ImGui::TextColored(r.carrierLeakDbc <= -30.0 ? good : (r.carrierLeakDbc <= -20.0 ? warn : bad), "%.1f dBc", r.carrierLeakDbc); }
+        tw::Text("Carrier line (spectrum):"); tw::SameNext();
+        if (r.carrierLeakBelow) { tw::TextColored(good, "< %.1f dBc", r.carrierLeakDbc); }
+        else { tw::TextColored(r.carrierLeakDbc <= -30.0 ? good : (r.carrierLeakDbc <= -20.0 ? warn : bad), "%.1f dBc", r.carrierLeakDbc); }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Unmodulated line at the carrier (transmitter LO leakage), found with a 3.8 Hz\n"
                               "resolution FFT. Detection limit about -35 dBc; the constellation value below\n"
                               "is far more sensitive.");
         }
-        ImGui::Text("I/Q offset (constellation):"); ImGui::SameLine();
+        tw::Text("I/Q offset (constellation):"); tw::SameNext();
         if (m.valid && m.symSync) {
-            ImGui::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%.1f dB", m.iqOffsetDb);
-        } else { ImGui::TextDisabled("--"); }
-        ImGui::Text("Noise density:"); ImGui::SameLine();
-        ImGui::TextDisabled("%.1f dBFS/bin, in-band %.1f dBFS/bin", r.noiseDensityDb, r.inbandDensityDb);
+            tw::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%.1f dB", m.iqOffsetDb);
+        } else { tw::TextDisabled("--"); }
+        tw::Text("Noise density:"); tw::SameTextDisabled("%.1f dBFS/bin, in-band %.1f dBFS/bin", r.noiseDensityDb, r.inbandDensityDb);
     }
 
     void drawFloatingWindows() {
@@ -1960,7 +1871,7 @@ private:
             if (ImGui::Begin(title.c_str(), &open)) {
                 float w = ImGui::GetContentRegionAvail().x;
                 ImGui::Checkbox(CONCAT("8 points (pi/4)##_tetra_c8w_", name), &constellation8);
-                ImGui::SameLine();
+                tw::SameLineFor(tw::checkboxWidth("Remove I/Q offset"));
                 drawOffsetCompCheckbox("w");
                 drawConstellation(w);
                 drawMeasurements(this, w);
@@ -2020,9 +1931,8 @@ private:
             config.release(true);
         }
         if (subsDetached) {
-            ImGui::TextDisabled("Shown in its own window.");
-            ImGui::SameLine();
-            if (ImGui::SmallButton(CONCAT("Bring to front##_tetra_sfront_", name))) { focusSubsWin = true; }
+            tw::TextDisabled("Shown in its own window.");
+            if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_sfront_", name))) { focusSubsWin = true; }
             return;
         }
         drawSubscribersBody(menuWidth, 12);
@@ -2061,7 +1971,7 @@ private:
 
     void drawSubscribersBody(float menuWidth, int visibleRows) {
         // Name databases
-        ImGui::TextDisabled("%s", radioid.status().c_str());
+        tw::TextDisabled("%s", radioid.status().c_str());
         bool busy = radioid.busy();
         if (busy) { style::beginDisabled(); }
         float w2 = menuWidth / 2.0f - 4;
@@ -2071,8 +1981,7 @@ private:
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("radioid.net users (7-digit ISSI) and repeaters (6-digit),\nBrandmeister talkgroup names for groups (GSSI).");
         }
-        ImGui::SameLine();
-        if (ImGui::Button(CONCAT("Reload files##_tetra_rid_rl_", name), ImVec2(w2, 0))) {
+        if (tw::SameButton(CONCAT("Reload files##_tetra_rid_rl_", name), ImVec2(w2, 0))) {
             radioid.loadAsync();
         }
         if (busy) { style::endDisabled(); }
@@ -2118,17 +2027,17 @@ private:
                     long ago = (long)(now - sub.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextColored(sub.talkingIn ? green : (ago < 120 ? yellow : grey), "%u", sub.ssi);
+                    tw::TextColored(sub.talkingIn ? green : (ago < 120 ? yellow : grey), "%u", sub.ssi);
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::TextDisabled("%s", kindName(sub.kind));
+                    tw::TextDisabled("%s", kindName(sub.kind));
                     if (ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("ISSI = individual (seen as calling/talking party or registering)\n"
                                           "? = only seen as MAC address so far (individual or group)");
                     }
                     ImGui::TableSetColumnIndex(2);
-                    if (!call.empty()) { ImGui::TextUnformatted(call.c_str()); } else { ImGui::TextDisabled("-"); }
+                    if (!call.empty()) { ImGui::TextUnformatted(call.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(3);
-                    ImGui::Text("%u%s%s", sub.lastTn, sub.chanAlloc ? "C" : "", sub.encrypted ? "E" : "");
+                    tw::Text("%u%s%s", sub.lastTn, sub.chanAlloc ? "C" : "", sub.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(4);
                     char ab[16];
                     agoText(ago, ab, sizeof(ab));
@@ -2137,7 +2046,7 @@ private:
                     if (sub.talkingIn) {
                         std::string gc, gi;
                         describeSsi(sub.talkingIn, TetraSubscriber::KIND_GROUP, gc, gi);
-                        ImGui::TextColored(green, "TALKING in %u%s", sub.talkingIn, gi.empty() ? "" : (" " + gi).c_str());
+                        tw::TextColored(green, "TALKING in %u%s", sub.talkingIn, gi.empty() ? "" : (" " + gi).c_str());
                     }
                     else if (!sub.lastActivity.empty()) { ImGui::TextUnformatted(sub.lastActivity.c_str()); }
                     if (sub.hasPos && ImGui::IsItemHovered()) {
@@ -2185,11 +2094,11 @@ private:
                     long ago = (long)(now - g.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextColored(g.talker ? green : (ago < 120 ? yellow : grey), "%u", g.ssi);
+                    tw::TextColored(g.talker ? green : (ago < 120 ? yellow : grey), "%u", g.ssi);
                     ImGui::TableSetColumnIndex(1);
-                    if (!info.empty()) { ImGui::TextUnformatted(info.c_str()); } else { ImGui::TextDisabled("-"); }
+                    if (!info.empty()) { ImGui::TextUnformatted(info.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(2);
-                    ImGui::Text("%u%s", g.lastTn, g.encrypted ? "E" : "");
+                    tw::Text("%u%s", g.lastTn, g.encrypted ? "E" : "");
                     ImGui::TableSetColumnIndex(3);
                     char ab[16];
                     agoText(ago, ab, sizeof(ab));
@@ -2198,13 +2107,13 @@ private:
                     if (g.talker) {
                         std::string tc, ti;
                         describeSsi(g.talker, TetraSubscriber::KIND_INDIVIDUAL, tc, ti);
-                        ImGui::TextColored(green, "%u %s", g.talker, tc.c_str());
+                        tw::TextColored(green, "%u %s", g.talker, tc.c_str());
                     }
                     ImGui::TableSetColumnIndex(5);
                     if (g.lastTalker) {
                         std::string tc, ti;
                         describeSsi(g.lastTalker, TetraSubscriber::KIND_INDIVIDUAL, tc, ti);
-                        ImGui::Text("%u %s", g.lastTalker, tc.c_str());
+                        tw::Text("%u %s", g.lastTalker, tc.c_str());
                     }
                     ImGui::TableSetColumnIndex(6);
                     {
@@ -2219,9 +2128,9 @@ private:
                             }
                         }
                         if (members) {
-                            ImGui::Text("%d", members);
+                            tw::Text("%d", members);
                             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", who.c_str()); }
-                        } else { ImGui::TextDisabled("-"); }
+                        } else { tw::TextDisabled("-"); }
                     }
                 }
                 ImGui::EndTable();
@@ -2234,8 +2143,7 @@ private:
         std::string trTitle = "Traffic (" + std::to_string(traffic.size()) + ")##_tetra_tab_tr_" + name;
         if (ImGui::BeginTabItem(trTitle.c_str())) {
             if (ImGui::SmallButton(CONCAT("Clear##_tetra_tr_clr_", name))) { subscribers.clearTraffic(); traffic.clear(); }
-            ImGui::SameLine();
-            ImGui::Checkbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
+            tw::SameCheckbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
             if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())))) {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("Time");
@@ -2258,22 +2166,22 @@ private:
                     strftime(ts, sizeof(ts), "%H:%M:%S", &lt);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    ImGui::TextDisabled("%s", ts);
+                    tw::TextDisabled("%s", ts);
                     ImGui::TableSetColumnIndex(1);
-                    ImGui::Text("%u", it->tn);
+                    tw::Text("%u", it->tn);
                     ImGui::TableSetColumnIndex(2);
-                    if (control) { ImGui::TextUnformatted(it->pdu.c_str()); } else { ImGui::TextColored(yellow, "%s", it->pdu.c_str()); }
+                    if (control) { ImGui::TextUnformatted(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
                     ImGui::TableSetColumnIndex(3);
                     if (it->from) {
                         std::string c, i;
                         describeSsi(it->from, TetraSubscriber::KIND_INDIVIDUAL, c, i);
-                        ImGui::Text("%u %s", it->from, c.c_str());
+                        tw::Text("%u %s", it->from, c.c_str());
                     }
                     ImGui::TableSetColumnIndex(4);
                     if (it->to) {
                         std::string c, i;
                         describeSsi(it->to, it->toGroup ? TetraSubscriber::KIND_GROUP : TetraSubscriber::KIND_UNKNOWN, c, i);
-                        ImGui::Text("%s%u %s", it->toGroup ? "G " : "", it->to, it->toGroup ? i.c_str() : c.c_str());
+                        tw::Text("%s%u %s", it->toGroup ? "G " : "", it->to, it->toGroup ? i.c_str() : c.c_str());
                     }
                     ImGui::TableSetColumnIndex(5);
                     ImGui::TextUnformatted(it->text.c_str());
