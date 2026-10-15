@@ -33,12 +33,17 @@ def grab(name, rect=None):
 
 
 def base_cfg(rec):
-    b = get_base_config()
-    cfg = {"modulesDirectory": b["modulesDirectory"], "resourcesDirectory": b["resourcesDirectory"]}
+    cfg = get_base_config()
+    cfg["moduleInstances"].pop("Radio", None)   # hidden by default in this edition
+    cfg["streams"].pop("Radio", None)
+    cfg["vfoOffsets"] = {}
+    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
+    cfg["File Source"] = {"path": rec, "filename": rec}
     cfg["windowSize"] = {"w": W, "h": H}
     cfg["menuWidth"] = 360
     cfg["source"] = "File"
-    cfg["streams"] = {"TETRA Demodulator": {"muted": False, "sink": "None", "volume": 1.0}}
+    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
     return cfg
 
 
