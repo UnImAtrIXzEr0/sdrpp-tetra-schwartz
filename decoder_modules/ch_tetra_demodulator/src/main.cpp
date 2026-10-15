@@ -37,6 +37,7 @@
 #include "tx_analyzer.h"
 #include "trend_view.h"
 #include "carrier_monitor.h"
+#include "band_monitor.h"
 #include "burst_analyzer.h"
 #include "channel_analyzer.h"
 #include "eval_view.h"
@@ -587,6 +588,7 @@ private:
         tw::Text("RF status:"); tw::SameNext();
         if (!m.valid) { tw::TextDisabled("--"); }
         else if (m.peakDbfs > -3.0f) { tw::TextColored(bad, "ADC OVERLOAD (peak %.1f dBFS) - reduce gain", m.peakDbfs); }
+        else if (_this->bandRes.valid && _this->bandRes.peakDbfs > -3.0f) { tw::TextColored(bad, "ADC OVERLOAD by a signal in the band (%.1f dBFS)", _this->bandRes.peakDbfs); }
         else if (m.levelDbfs > -15.0f) { tw::TextColored(warn, "level high (peak %.1f dBFS)", m.peakDbfs); }
         else if (m.levelDbfs < -45.0f) { tw::TextColored(warn, "level low (peak %.1f dBFS)", m.peakDbfs); }
         else { tw::TextColored(good, "OK (peak %.1f dBFS)", m.peakDbfs); }
@@ -1356,14 +1358,16 @@ private:
             gainLastSet = -1;
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Keeps the TETRA channel between -35 and -20 dBFS (peak below -6 dBFS)\n"
-                              "by stepping the SDR gain slowly (one step every 4 s).\n"
+            ImGui::SetTooltip("Looks for the best signal-to-noise ratio with as little gain as possible:\n"
+                              "steps up (3 dB every 4 s) while the SNR still improves, steps back once\n"
+                              "the noise floor only rises with the gain, and goes down at once when the\n"
+                              "ADC peak over the whole SDR bandwidth or the TETRA peak nears full scale.\n"
                               "Supported: RTL-SDR (tuner AGC off), PlutoSDR (gain mode Manual),\n"
                               "Airspy (Sensitive or Linear mode), USRP, HackRF (LNA + VGA),\n"
                               "BladeRF (gain mode Manual), LimeSDR, SDRplay (IF gain, IF AGC off).\n"
                               "Spectran: set the reference level in the Spectran software.\n"
-                              "Note: strong signals elsewhere in the SDR bandwidth can still overload\n"
-                              "the ADC; watch the waterfall.");
+                              "Strong signals elsewhere in the SDR bandwidth are taken into account\n"
+                              "(ADC peak of the whole band).");
         }
         tw::SameNext();
         if (g) {
@@ -1383,12 +1387,31 @@ private:
             }
         }
         if (!gainStatus.empty()) { tw::SameTextDisabled("(?)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", gainStatus.c_str()); } }
+        // whole-band view: ADC peak over the full SDR bandwidth and channel SNR
+        tw::Text("Band:"); tw::SameNext();
+        if (bandRes.valid) {
+            ImVec4 pc = bandRes.peakDbfs > -3.0f ? tc::bad() : (bandRes.peakDbfs > -10.0f ? tc::warn() : tc::good());
+            tw::TextColored(pc, "ADC peak %.1f dBFS", bandRes.peakDbfs);
+            if (!std::isnan(bandRes.snrDb)) { tw::SameText(" SNR"); tw::SameTextColored(tc::val(), "%.1f dB", bandRes.snrDb); }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("ADC peak: largest I/Q value over the whole SDR bandwidth in the last second\n"
+                                  "(any signal, not only TETRA). Above -3 dBFS the ADC clips.\n"
+                                  "SNR: TETRA channel against the noise floor 30-400 kHz around it\n"
+                                  "(per 1 kHz bin, coarse). Auto RF gain looks for the lowest gain\n"
+                                  "that still gives the best SNR.");
+            }
+        }
+        else { tw::TextDisabled("--"); }
     }
 
     // Called every frame from the GUI thread
     void controlLoops() {
         if (!enabled) { return; }
         auto now = std::chrono::steady_clock::now();
+        if (bandMon.isRunning() && std::chrono::duration<double>(now - bandLast).count() >= 1.0) {
+            bandLast = now;
+            bandRes = bandMon.update(vfo ? vfo->getOffset() : 0.0);
+        }
         TetraMeasSnapshot m = meas.get();
         if (!m.valid) { return; }
 
@@ -1463,16 +1486,48 @@ private:
                     return;
                 }
                 gainLastSet = step;
-                // wanted gain change in dB: back to about -27 dBFS level / -10 dBFS peak,
-                // at most 10 dB per step so the decoder keeps up
                 double cur = g->gainStepDb(step);
                 double want = cur;
-                if (m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) {
-                    want = cur - std::clamp((std::max)((double)m.peakDbfs + 10.0, (double)m.levelDbfs + 27.0), 2.0, 10.0);
+                std::string why;
+                TetraBandMonitor::Result b = bandRes;
+                bool haveSnr = b.valid && !std::isnan(b.snrDb);
+                double bandPk = b.valid ? (double)b.peakDbfs : -200.0;
+                if (!std::isnan(agcCeilDb) && std::chrono::duration<double>(now - agcCeilT).count() > 120.0) { agcCeilDb = NAN; }
+                if (bandPk > -3.0 || m.peakDbfs > -3.0f || m.levelDbfs > -12.0f) {
+                    // overload, in the channel or anywhere in the SDR bandwidth: down fast
+                    want = cur - std::clamp((std::max)({ bandPk + 12.0, (double)m.peakDbfs + 12.0, (double)m.levelDbfs + 30.0 }), 3.0, 10.0);
+                    why = bandPk > -3.0 && m.peakDbfs <= -3.0f ? " (ADC overload by a signal in the band)" : " (overload)";
+                    agcCeilDb = want;
+                    agcCeilT = now;
                 }
-                else if (m.levelDbfs < -35.0f && m.peakDbfs < -14.0f) {
-                    want = cur + std::clamp((std::min)(-27.0 - (double)m.levelDbfs, -10.0 - (double)m.peakDbfs), 2.0, 10.0);
+                else if (!haveSnr) {
+                    // no spectrum: level window -35 ... -20 dBFS, peak below -10 dBFS
+                    if (m.peakDbfs > -6.0f || m.levelDbfs > -20.0f) {
+                        want = cur - std::clamp((std::max)((double)m.peakDbfs + 10.0, (double)m.levelDbfs + 27.0), 2.0, 10.0);
+                    }
+                    else if (m.levelDbfs < -35.0f && m.peakDbfs < -14.0f) {
+                        want = cur + std::clamp((std::min)(-27.0 - (double)m.levelDbfs, -10.0 - (double)m.peakDbfs), 2.0, 10.0);
+                    }
                 }
+                else {
+                    // best signal-to-noise with as little gain as possible: go up while
+                    // the SNR still improves (the SDR's own noise dominates); once the
+                    // noise floor rises with the gain, more gain only costs headroom
+                    if (agcLastUp && !std::isnan(agcPrevSnr) && b.snrDb - agcPrevSnr < 1.0) {
+                        want = agcPrevGainDb;
+                        why = " (no SNR gain above this)";
+                        agcCeilDb = agcPrevGainDb;
+                        agcCeilT = now;
+                    }
+                    else if (b.snrDb < 35.0f && bandPk < -10.0 && m.peakDbfs < -10.0f && (std::isnan(agcCeilDb) || cur + 2.5 <= agcCeilDb)) {
+                        want = cur + 3.0;
+                    }
+                    else if (b.snrDb > 45.0f && bandPk > -20.0) {
+                        want = cur - 3.0;
+                        why = " (SNR ample, more headroom)";
+                    }
+                }
+                agcLastUp = false;
                 if (want != cur) {
                     int best = step;
                     double bestErr = 1e9;
@@ -1484,8 +1539,10 @@ private:
                     if (best != step) {
                         g->setGainStep(best);
                         gainLastSet = g->gainStep();
-                        std::string b = std::string(want > cur ? "RF gain up to " : "RF gain down to ") + g->gainLabel(best);
-                        meas.addEvent(b);
+                        agcLastUp = g->gainStepDb(best) > cur;
+                        agcPrevSnr = haveSnr ? (double)b.snrDb : NAN;
+                        agcPrevGainDb = cur;
+                        meas.addEvent(std::string(want > cur ? "RF gain up to " : "RF gain down to ") + g->gainLabel(best) + why);
                     }
                 }
             }
@@ -2229,6 +2286,7 @@ private:
         double pc = pendingCarrierHz.exchange(0.0);
         if (pc > 1e6) { carrierMon.add("", pc); }
         carrierMon.update(enabled && vfo != nullptr);
+        bandMon.loop(enabled && vfo != nullptr);
         if (carrierMon.takeChanged()) { saveCarriers(); }
         double f = 0.0;
         if (burstSt.source == 0) { f = (double)meas.get().ulFreq; }
@@ -3083,6 +3141,13 @@ private:
     std::string gainStatus;
     std::chrono::steady_clock::time_point gainLastStep;
     int gainLastSet = -1;
+    // auto RF gain by SNR: state of the last step and an upper limit found
+    bool agcLastUp = false;
+    double agcPrevSnr = NAN, agcPrevGainDb = NAN, agcCeilDb = NAN;
+    std::chrono::steady_clock::time_point agcCeilT;
+    TetraBandMonitor bandMon;
+    TetraBandMonitor::Result bandRes;
+    std::chrono::steady_clock::time_point bandLast;
     SourceGainInterface* gainLastIf = nullptr;       // gain step auto RF gain last saw / set (detects manual changes)
     bool subsDetached = false;
     bool trafficHideControl = false;

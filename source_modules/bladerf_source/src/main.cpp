@@ -644,7 +644,8 @@ private:
             if (ret != 0) { break; }
 
             // Convert to complex float and swap buffers
-            volk_16i_s32f_convert_32f((float*)stream.writeBuf, buffer, 32768.0f, bufferSize * 2);
+            // SC16 Q11: -2048 ... 2047 is the ADC range, 2048 = full scale
+            volk_16i_s32f_convert_32f((float*)stream.writeBuf, buffer, 2048.0f, bufferSize * 2);
             if (!stream.swap(bufferSize)) { break; }
         }
 
