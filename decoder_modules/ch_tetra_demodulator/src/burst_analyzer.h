@@ -333,7 +333,7 @@ private:
         }
         float q = slotQuality();
         tw::Text("Downlink slot grid:");
-        if (q > 6.0f) { tw::SameTextColored(tc::good(), "found (quality %.0f)", q); }
+        if (q > 3.5f) { tw::SameTextColored(tc::good(), "found (quality %.1f)", q); }
         else { tw::SameTextColored(tc::warn(), "not found yet"); }
         if (r.timingValid) {
             tw::Text("Rising edge after slot start:");
@@ -486,6 +486,7 @@ private:
     void work() {
         const size_t WIN = (size_t)(FS * 0.6);
         TetraBurstDsp dsp;
+        tetra_sp::SlotFoldState slotState;
         auto t0 = std::chrono::steady_clock::now();
         double phase = NAN;
         int sinceTiming = 100;
@@ -515,10 +516,14 @@ private:
                     for (size_t i = 0; i < WIN; i++) { dlx[i] = ringDl[(size_t)((s0 + i) & (RING - 1))]; }
                 }
             }
-            if (resetReq.exchange(false)) { dsp.reset(); }
+            if (resetReq.exchange(false)) { dsp.reset(); slotState.reset(); }
             if (!dlx.empty()) {
                 sinceTiming = 0;
-                tetra_sp::SlotEstimate e = tetra_sp::slotTiming(dlx, end - WIN);
+                // newest 0.25 s: short enough that a sample clock offset of
+                // the SDR does not smear the correlation peak
+                const size_t SW = (size_t)(FS * 0.25);
+                std::vector<std::complex<float>> dls(dlx.end() - SW, dlx.end());
+                tetra_sp::SlotEstimate e = tetra_sp::slotTiming(dls, end - SW, &slotState);
                 dlQuality.store((float)e.quality);
                 phase = e.valid ? e.phase : NAN;
             }

@@ -423,6 +423,21 @@ public:
             pendingCarrierHz.store(atof(args.c_str()));
             return "{\"status\": \"ok\"}";
         }
+        if (cmd == "only_window") {
+            // "name x y w h": show only this own window at a fixed place
+            // (const, stations, network, txa, trends, carriers, bursts, multipath)
+            static const char* names[8] = { "const", "stations", "network", "txa", "trends", "carriers", "bursts", "multipath" };
+            char nm[32] = "";
+            float r[4] = { 380, 40, 820, 760 };
+            sscanf(args.c_str(), "%31s %f %f %f %f", nm, &r[0], &r[1], &r[2], &r[3]);
+            int idx = -1;
+            for (int i = 0; i < 8; i++) { if (!strcmp(nm, names[i])) { idx = i; } }
+            if (idx < 0) { return "{\"error\": \"unknown window\"}"; }
+            std::lock_guard<std::mutex> lck(dbgMtx);
+            soloReq = idx;
+            for (int i = 0; i < 4; i++) { soloRect[i] = r[i]; }
+            return "{\"status\": \"ok\"}";
+        }
         if (cmd == "set_multipath") {
             mpRun = (args == "1" || args == "true");
             return "{\"status\": \"ok\"}";
@@ -2472,7 +2487,10 @@ private:
         for (auto& e : meas.getEvents()) { d.events.push_back({ e.t, e.text }); }
         d.crcLimit = evalView.crcLimit;
         std::string dir = logFolder.expandString(logFolder.path);
-        if (!logFolder.pathIsValid() || dir.empty()) { return "!Log folder not valid (Measurements)"; }
+        if (dir.empty()) { return "!No log folder (Measurements)"; }
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (!std::filesystem::is_directory(dir)) { return "!Log folder not valid (Measurements): " + dir; }
         return TetraReport::write(dir, d);
     }
 
@@ -2499,10 +2517,19 @@ private:
         }
     }
 
+    // automation (documentation screenshots): one own window at a fixed place
+    void placeSolo() {
+        if (soloFrames <= 0) { return; }
+        ImGui::SetNextWindowPos(ImVec2(soloRect[0], soloRect[1]), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(soloRect[2], soloRect[3]), ImGuiCond_Always);
+        ImGui::SetNextWindowFocus();
+    }
+
     void floatingWindow(bool& detached, bool& focus, const char* title, const char* key, ImVec2 size, ImVec2 pos, void (TetraDemodulatorModule::*body)(float)) {
         if (!detached) { return; }
         ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(pos, ImGuiCond_FirstUseEver);
+        placeSolo();
         bool open = true;
         std::string t = std::string(title) + " (" + name + ")##_tetra_" + key + "_" + name;
         if (focus) { ImGui::SetNextWindowFocus(); focus = false; }
@@ -2520,6 +2547,16 @@ private:
 
     void drawFloatingWindows() {
         if (!enabled) { return; }
+        {
+            std::lock_guard<std::mutex> lck(dbgMtx);
+            if (soloReq >= 0) {
+                bool* f[8] = { &constDetached, &subsDetached, &netDetached, &txaDetached, &trendDetached, &carrDetached, &burstDetached, &mpDetached };
+                for (int i = 0; i < 8; i++) { *f[i] = (i == soloReq); }
+                soloReq = -1;
+                soloFrames = 30;
+            }
+        }
+        if (soloFrames > 0) { soloFrames--; }
         floatingWindow(trendDetached, focusTrendWin, "TETRA trends & timeslots", "trend", ImVec2(620, 640), ImVec2(560, 90), &TetraDemodulatorModule::drawTrends);
         floatingWindow(carrDetached, focusCarrWin, "TETRA carriers", "carr", ImVec2(560, 420), ImVec2(600, 130), &TetraDemodulatorModule::drawCarriers);
         floatingWindow(burstDetached, focusBurstWin, "TETRA burst analysis", "burst", ImVec2(520, 620), ImVec2(640, 110), &TetraDemodulatorModule::drawBursts);
@@ -2531,6 +2568,7 @@ private:
         if (txaDetached) {
             ImGui::SetNextWindowSize(ImVec2(560, 760), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(520, 100), ImGuiCond_FirstUseEver);
+            placeSolo();
             bool open = true;
             std::string title = "TETRA TX analysis (" + name + ")##_tetra_twin_" + name;
             if (focusTxaWin) { ImGui::SetNextWindowFocus(); focusTxaWin = false; }
@@ -2548,6 +2586,7 @@ private:
         if (constDetached) {
             ImGui::SetNextWindowSize(ImVec2(420, 720), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(470, 80), ImGuiCond_FirstUseEver);
+            placeSolo();
             bool open = true;
             std::string title = "TETRA constellation (" + name + ")##_tetra_cwin_" + name;
             if (focusConstWin) { ImGui::SetNextWindowFocus(); focusConstWin = false; }
@@ -2570,6 +2609,7 @@ private:
         if (netDetached && decoder_mode == 0) {
             ImGui::SetNextWindowSize(ImVec2(400, 560), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(470, 120), ImGuiCond_FirstUseEver);
+            placeSolo();
             bool open = true;
             std::string title = "TETRA network & cell (" + name + ")##_tetra_nwin_" + name;
             if (focusNetWin) { ImGui::SetNextWindowFocus(); focusNetWin = false; }
@@ -2588,6 +2628,7 @@ private:
             ImGui::SetNextWindowSize(ImVec2(560, 360), ImGuiCond_FirstUseEver);
             // not on top of the constellation window
             ImGui::SetNextWindowPos(ImVec2(900, 80), ImGuiCond_FirstUseEver);
+            placeSolo();
             bool open = true;
             std::string title = "TETRA stations & traffic (" + name + ")##_tetra_swin_" + name;
             if (focusSubsWin) { ImGui::SetNextWindowFocus(); focusSubsWin = false; }
@@ -3039,6 +3080,8 @@ private:
     std::mutex dbgMtx;
     int dbgCarr[3] = { 0, 0, 0 };
     int dbgAlarmTotal = 0;
+    int soloReq = -1, soloFrames = 0;
+    float soloRect[4] = { 380, 40, 820, 760 };
     bool dbgAlarmActive = false;
     EventHandler<ImGuiContext*> windowDrawHandler;
 

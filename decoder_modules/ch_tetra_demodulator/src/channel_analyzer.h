@@ -178,6 +178,7 @@ private:
         }
         const size_t WIN = (size_t)(FS * 0.6);
         tetra_sp::ChannelEstimator ce;
+        tetra_sp::SlotFoldState slotState;
         uint64_t done = 0;
         while (true) {
             {
@@ -193,18 +194,20 @@ private:
                 x.resize(WIN);
                 for (size_t i = 0; i < WIN; i++) { x[i] = ring[(size_t)((end - WIN + i) & (RING - 1))]; }
             }
-            if (resetReq.exchange(false)) { ce.reset(); }
+            if (resetReq.exchange(false)) { ce.reset(); slotState.reset(); }
             int ms = memSec.load();
             ce.setMemory(ms > 0 ? (int)(ms * 70.6) : 0);   // 70.6 slots per second
-            auto e = tetra_sp::slotTiming(x, end - WIN);
-            // evaluate only the part not seen before (windows overlap)
+            const size_t SW = (size_t)(FS * 0.25);   // short: robust against sample clock offsets
+            std::vector<std::complex<float>> xs(x.end() - SW, x.end());
+            auto e = tetra_sp::slotTiming(xs, end - SW, &slotState);
+            // evaluate only the part not seen before (windows overlap), within
+            // the stretch the slot grid was taken from
             if (e.valid) {
-                size_t skip = (size_t)(done > end - WIN ? done - (end - WIN) : 0);
-                if (skip > 0 && skip < WIN) {
-                    std::vector<std::complex<float>> y(x.begin() + skip, x.end());
-                    ce.accumulate(y, end - WIN + skip, e.phase, e.variant);
+                size_t skip = (size_t)(done > end - SW ? done - (end - SW) : 0);
+                if (skip < SW) {
+                    std::vector<std::complex<float>> y(xs.begin() + skip, xs.end());
+                    ce.accumulate(y, end - SW + skip, e.phase, e.variant);
                 }
-                else { ce.accumulate(x, end - WIN, e.phase, e.variant); }
             }
             done = end;
             TetraChannelResult r;

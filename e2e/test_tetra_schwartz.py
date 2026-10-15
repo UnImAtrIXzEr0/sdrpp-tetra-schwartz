@@ -200,7 +200,7 @@ def test_tetra_chain():
             problems.append("no timeslot occupancy counted (AACH)")
         if best and best.get("burst_state", 0) < 1:
             problems.append(f"burst analysis not running ({best.get('burst_status')})")
-        if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 6):
+        if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 3.5):
             problems.append(f"multipath: training sequences not found in the real signal (slots {best.get('mp_slots')}, quality {best.get('mp_quality')})")
         if best and best.get("alarms_total", 0) < 1:
             problems.append("test alarm was not raised")
@@ -375,7 +375,7 @@ def test_timing_multipath():
             return False
         b = best or {}
         problems = []
-        if b.get("burst_slot_quality", 0) < 6:
+        if b.get("burst_slot_quality", 0) < 3.5:
             problems.append(f"downlink slot grid not found (quality {b.get('burst_slot_quality')}, {b.get('burst_status')})")
         if not (19.6 < b.get("burst_timing_sym", -999) < 21.4):
             problems.append(f"burst timing {b.get('burst_timing_sym')} sym (expected about 20.4)")

@@ -91,13 +91,23 @@ namespace tetra_sp {
         int peak = 0;            // bin of the peak
     };
 
+    // running folds of slotTiming (both rotation senses); the bins are
+    // absolute sample indices mod SLOT, so successive windows add up directly
+    struct SlotFoldState {
+        std::vector<float> fold[2];
+        int windows = 0;
+        void reset() { fold[0].clear(); fold[1].clear(); windows = 0; }
+    };
+
     // Folded correlation of x (x[0] = absolute index 'base') with the training
-    // sequences, sampled at the symbol centres (12 taps).
-    inline SlotEstimate slotTiming(const std::vector<std::complex<float>>& x, uint64_t base) {
+    // sequences, sampled at the symbol centres (12 taps). With 'st' the fold is
+    // averaged over the windows (decay 0.7): stable on real signals.
+    inline SlotEstimate slotTiming(const std::vector<std::complex<float>>& x, uint64_t base, SlotFoldState* st = nullptr) {
         SlotEstimate best;
         const size_t W = x.size();
         if (W < (size_t)(3 * SLOT)) { return best; }
         const int L = 11 * SPS;
+        if (st) { st->windows++; }
         for (int v = 0; v < 2; v++) {
             auto r1 = tsPoints(NTS1, v == 1), r2 = tsPoints(NTS2, v == 1);
             std::vector<float> fold(SLOT, 0.0f);
@@ -109,6 +119,16 @@ namespace tetra_sp {
                     c2 += s * std::conj(r2[k]);
                 }
                 fold[(size_t)((base + m) % SLOT)] += std::norm(c1) + std::norm(c2);
+            }
+            if (st) {
+                // normalise per window so level changes do not dominate
+                double sum = 0.0;
+                for (float f : fold) { sum += f; }
+                float sc = sum > 0 ? (float)(SLOT / sum) : 1.0f;
+                std::vector<float>& acc = st->fold[v];
+                if ((int)acc.size() != SLOT) { acc.assign(SLOT, 0.0f); }
+                for (int i = 0; i < SLOT; i++) { acc[i] = 0.7f * acc[i] + fold[i] * sc; }
+                fold = acc;
             }
             int pk = (int)(std::max_element(fold.begin(), fold.end()) - fold.begin());
             std::vector<float> srt(fold);
@@ -130,7 +150,7 @@ namespace tetra_sp {
                 best.fold = std::move(fold);
             }
         }
-        best.valid = best.quality > 6.0;   // clear training sequence peak
+        best.valid = best.quality > (st ? 3.5 : 5.0);   // clear training sequence peak
         return best;
     }
 
@@ -220,6 +240,20 @@ namespace tetra_sp {
             while (first < 0) { first += SLOT; }
             for (long ts = first; ts < W; ts += SLOT) {
                 long t0 = ts + (long)NTS_FIRST_SYM * SPS;          // centre of training point 0
+                // follow small timing drifts (sample clock offset): correlation
+                // maximum within +-3 samples of the predicted position
+                if (t0 - 8 >= 0 && t0 + 11 * SPS + 8 < W) {
+                    double bestP = -1.0;
+                    long bestT = t0;
+                    for (long dt = -3; dt <= 3; dt++) {
+                        for (int q = 0; q < 2; q++) {
+                            std::complex<float> c(0.0f, 0.0f);
+                            for (int k = 0; k < 12; k++) { c += x[t0 + dt + k * SPS] * std::conj(pts[variant][q][k]); }
+                            if (std::norm(c) > bestP) { bestP = std::norm(c); bestT = t0 + dt; }
+                        }
+                    }
+                    t0 = bestT;
+                }
                 long lo = t0 + (long)(K0 - (LMAX - 1)) * SPS + (long)LMIN * SPS - SPS;
                 long hi = t0 + (long)(K1 - LMIN) * SPS + (long)(LMAX) * SPS + SPS;
                 if (t0 - 4 * SPS < 0 || hi >= W || lo < 0) { continue; }

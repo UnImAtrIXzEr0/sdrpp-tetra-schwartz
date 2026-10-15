@@ -43,6 +43,7 @@ namespace dsp::routing {
 
             // Add to the list
             base_type::tempStop();
+            if ((size_t)(sit - streams.begin()) < resumeIdx) { resumeIdx--; }
             streams.erase(sit);
             base_type::unregisterOutput(stream);
             base_type::tempStart();
@@ -71,17 +72,25 @@ namespace dsp::routing {
 
             workedCount += count;
 
-            for (const auto& stream : streams) {
+            // A stop (e.g. binding a new output) can interrupt the delivery of a
+            // block: the outputs before that point already have it. The block is
+            // then kept in the input and delivered to the remaining outputs after
+            // the restart, so all outputs always receive exactly the same samples
+            // (needed for sample-aligned VFOs).
+            if (resumeIn != base_type::_in) { resumeIdx = 0; resumeIn = base_type::_in; }
+            for (size_t i = (std::min)(resumeIdx, streams.size()); i < streams.size(); i++) {
+                stream<T>* stream = streams[i];
                 memcpy(stream->writeBuf, base_type::_in->readBuf, count * sizeof(T));
 //                flog::info("Splitter {} flushing to {}", origin, stream->origin);
                 if (!stream->swap(count)) {
 //                    flog::info("Splitter {} flushing to {} - oops", origin, stream->origin);
-                    base_type::_in->flush();
+                    resumeIdx = i;
                     return -1;
                 }
 //                flog::info("Splitter {} flushed to {}.", origin, stream->origin);
             }
 
+            resumeIdx = 0;
             if (hook) {
                 hook(base_type::_in->readBuf, count);
             }
@@ -93,6 +102,8 @@ namespace dsp::routing {
 
     protected:
         std::vector<stream<T>*> streams;
+        size_t resumeIdx = 0;
+        stream<T>* resumeIn = nullptr;
 
     };
 }
