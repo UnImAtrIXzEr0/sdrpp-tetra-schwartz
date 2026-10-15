@@ -413,7 +413,7 @@ private:
         int lastK = -1000000;
         for (int k = 0; k < cols; k++) {
             if (!n[k]) { continue; }
-            bool pen = (k - lastK) * secPerCol <= 2.5;
+            bool pen = k - lastK <= 1 || (k - lastK) * secPerCol <= 2.5;
             lastK = k;
             double x = L + k + 0.5;
             if (cmax[k] > cmin[k]) { band << "M" << x << " " << Y(cmax[k]) << "V" << Y(cmin[k]); }
@@ -460,7 +460,7 @@ private:
                 double a = 0; int c = 0;
                 for (int j = (std::max)(0, k - half); j <= (std::min)(nc - 1, k + half); j++) { a += sum[j]; c += n[j]; }
                 if (!c) { continue; }
-                bool pen = (k - lastK) * secPerCol <= 2.5;
+                bool pen = k - lastK <= 1 || (k - lastK) * secPerCol <= 2.5;
                 lastK = k;
                 line << (pen ? "L" : "M") << L + k + 0.5 << " " << Y(a / c);
             }

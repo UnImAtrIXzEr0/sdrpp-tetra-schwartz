@@ -2470,6 +2470,7 @@ private:
         d.levelCalibrated = levelCalDb != 0.0f;
         int span = TetraTrendView::spanSeconds(trendView.spanIdx);
         d.trend = trendView.fileMode ? trendView.filePts : meas.trend().copy(span > 0 ? time(nullptr) - span : 0);
+        if (trendView.fileMode) { d.levelCalibrated = !d.trend.empty() && d.trend.front().calibrated; }   // unit of the loaded log
         memcpy(d.dlUseTotal, m.dlUseTotal, sizeof(d.dlUseTotal));
         memcpy(d.ulUseTotal, m.ulUseTotal, sizeof(d.ulUseTotal));
         d.syncLostTotal = m.syncLostTotal;
