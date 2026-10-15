@@ -489,6 +489,7 @@ private:
 
         if (_this->tunerAgc || _this->gainList.size() == 0) { SmGui::BeginDisabled(); }
 
+        _this->gainLockBegin();
         SmGui::LeftLabel("Gain");
         SmGui::FillWidth();
         SmGui::ForceSync();
@@ -519,6 +520,7 @@ private:
                 }
             }
         }
+        _this->gainLockEnd(_this->name);
 
 
 

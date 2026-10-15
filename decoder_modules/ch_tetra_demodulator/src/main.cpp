@@ -75,7 +75,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 19, 0,
+    /* Version:         */ 0, 20, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -109,6 +109,7 @@ public:
         }
         if (config.conf[name].contains("constDetached")) { constDetached = config.conf[name]["constDetached"]; }
         if (config.conf[name].contains("subsDetached")) { subsDetached = config.conf[name]["subsDetached"]; }
+        loadSectionOrder();
         if (config.conf[name].contains("netDetached")) { netDetached = config.conf[name]["netDetached"]; }
         if (config.conf[name].contains("txaDetached")) { txaDetached = config.conf[name]["txaDetached"]; }
         if (config.conf[name].contains("txaRun")) { txaRun = config.conf[name]["txaRun"]; }
@@ -157,7 +158,7 @@ public:
             gb("enabled", alarmSt.enabled); gb("levelOn", alarmSt.levelOn); gf("levelBelow", alarmSt.levelBelow);
             gb("merOn", alarmSt.merOn); gf("merBelow", alarmSt.merBelow); gb("crcOn", alarmSt.crcOn); gf("crcAbove", alarmSt.crcAbove);
             gb("syncOn", alarmSt.syncOn); gb("ulOn", alarmSt.ulOn); gf("ulAbove", alarmSt.ulAbove);
-            gb("beep", alarmSt.beep); gb("autoLog", alarmSt.autoLog);
+            gb("beep", alarmSt.beep); gb("autoLog", alarmSt.autoLog); gb("lossOn", alarmSt.lossOn);
             if (a.contains("holdS") && a["holdS"].is_number()) { alarmSt.holdS = a["holdS"]; }
         }
         if (config.conf[name].contains("reportNotes") && config.conf[name]["reportNotes"].is_string()) {
@@ -320,6 +321,8 @@ public:
 
     void disable() {
         if (!enabled) { return; }
+        bandMon.loop(false);
+        if (SourceGainInterface* gi = findGainInterface()) { gi->gainLockedExt.store(false); }
 
         // Stop the measurement thread first: it reads the blocks and the VFO
         meas.stop();
@@ -508,7 +511,7 @@ public:
                 alarmTotal = dbgAlarmTotal;
                 alarmActive = dbgAlarmActive;
             }
-            char b[2600];
+            char b[4096];
             snprintf(b, sizeof(b),
                      "{\"valid\": %s, \"sync\": %s, \"rx_state\": %d, \"mer_db\": %.2f, \"evm_pct\": %.2f, "
                      "\"iq_offset_db\": %.2f, \"irr_db\": %.2f, \"phase_err_deg\": %.3f, \"amp_err_pct\": %.3f, "
@@ -524,7 +527,7 @@ public:
                      "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -540,7 +543,8 @@ public:
                      nz(br.gapDbfs), nz(br.timingMeanSym), nz(br.timingStdSym), br.timingN, (double)burstAn.slotQuality(),
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
-                     alarmTotal, alarmActive ? "true" : "false");
+                     alarmTotal, alarmActive ? "true" : "false",
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size());
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -972,65 +976,6 @@ private:
             _this->drawConstellation(menuWidth);
         }
 
-        if (ImGui::CollapsingHeader(CONCAT("Measurements##_tetra_meas_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
-            if (_this->constDetached) {
-                // shown below the constellation in its own window, not twice
-                tw::TextDisabled("Shown in the constellation window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
-            } else {
-                drawMeasurements(_this, menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("TX analysis (spectrum)##_tetra_txa_", _this->name))) {
-            if (_this->txaDetached) {
-                tw::TextDisabled("Shown in its own window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
-            } else {
-                _this->drawTxAnalysis(menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Trends & timeslots##_tetra_trend_", _this->name))) {
-            if (_this->trendDetached) {
-                tw::TextDisabled("Shown in its own window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_trfront_", _this->name))) { _this->focusTrendWin = true; }
-            } else {
-                _this->drawTrends(menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Carriers (multi-carrier)##_tetra_carr_", _this->name))) {
-            if (_this->carrDetached) {
-                tw::TextDisabled("Shown in its own window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_crfront_", _this->name))) { _this->focusCarrWin = true; }
-            } else {
-                _this->drawCarriers(menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Burst analysis (uplink)##_tetra_burst_", _this->name))) {
-            if (_this->burstDetached) {
-                tw::TextDisabled("Shown in its own window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_bfront_", _this->name))) { _this->focusBurstWin = true; }
-            } else {
-                _this->drawBursts(menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Multipath (downlink)##_tetra_mp_", _this->name))) {
-            if (_this->mpDetached) {
-                tw::TextDisabled("Shown in its own window.");
-                if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mpfront_", _this->name))) { _this->focusMpWin = true; }
-            } else {
-                _this->drawMultipath(menuWidth);
-            }
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Alarms##_tetra_alarm_", _this->name))) {
-            _this->drawAlarms(menuWidth);
-        }
-        if (ImGui::CollapsingHeader(CONCAT("Report##_tetra_report_", _this->name))) {
-            _this->drawReport(menuWidth);
-        }
-        if (ImGui::CollapsingHeader(CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) {
-            _this->drawGpsCoverage(menuWidth);
-        }
-
         ImGui::BeginGroup();
         ImGui::Columns(2, CONCAT("TetraModeColumns##_", _this->name), false);
         if (ImGui::RadioButton(CONCAT("OSMO-TETRA##_", _this->name), _this->decoder_mode == 0) && _this->decoder_mode != 0) {
@@ -1045,27 +990,12 @@ private:
         ImGui::Columns(1, CONCAT("EndTetraModeColumns##_", _this->name), false);
         ImGui::EndGroup();
 
-        if(_this->decoder_mode == 0) {
-            //OSMO-TETRA: network & cell information (optionally in its own window)
-            if (ImGui::CollapsingHeader(CONCAT("Network & cell##_tetra_net_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (ImGui::Checkbox(CONCAT("Separate window##_tetra_ndet_", _this->name), &_this->netDetached)) {
-                    config.acquire();
-                    config.conf[_this->name]["netDetached"] = _this->netDetached;
-                    config.release(true);
-                    if (_this->netDetached) { _this->focusNetWin = true; }
-                }
-                if (_this->netDetached) {
-                    tw::TextDisabled("Shown in its own window.");
-                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_nfront_", _this->name))) { _this->focusNetWin = true; }
-                } else {
-                    _this->drawNetworkBody(menuWidth);
-                }
-            }
-            if (_this->hamMode) {
-                _this->drawSubscribers(menuWidth);
-            }
-            _this->drawDuplexEditor(menuWidth);
-        } else {
+        // sections in the user's order (drag the grip on the right of a header,
+        // or right-click it)
+        for (int id : _this->secOrder) { _this->drawSection(id, menuWidth); }
+        _this->applySectionMove();
+
+        if (_this->decoder_mode != 0) {
             //NETWORK SYM STREAMING
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, _this->symbolExtractor.sync ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
             tw::SameText(" Sync");
@@ -1228,7 +1158,7 @@ private:
     }
 
     void drawDuplexEditor(float menuWidth) {
-        if (!ImGui::CollapsingHeader(CONCAT("Duplex spacing table##_tetra_dup_", name))) { return; }
+        if (!sectionHeader(S_DUP, CONCAT("Duplex spacing table##_tetra_dup_", name))) { return; }
 
         static const char* tableNames = "Table 0\0Table 1\0Table 2\0Table 3\0Table 4\0Table 5\0Table 6\0Table 7\0";
         ImGui::SetNextItemWidth(menuWidth);
@@ -1412,6 +1342,30 @@ private:
             bandLast = now;
             bandRes = bandMon.update(vfo ? vfo->getOffset() : 0.0);
         }
+        {
+            // lock the source's gain controls while auto RF gain steps them;
+            // "Release" in the source menu switches auto RF gain off
+            SourceGainInterface* gi = findGainInterface();
+            if (gi) {
+                if (gi->gainReleaseReq.exchange(false)) {
+                    autoGain = false;
+                    gainLastSet = -1;
+                    meas.addEvent("Auto RF gain off (released in the source menu)");
+                    config.acquire();
+                    config.conf[name]["autoGain"] = autoGain;
+                    config.release(true);
+                }
+                gi->gainLockedExt.store(autoGain && gi->gainControllable());
+                // lost samples reported by the SDR (Pluto: ADC core overflow)
+                long long ov = gi->overflowCount();
+                if (gi != ovIf) { ovIf = gi; ovLast = ov; }
+                else if (ov >= 0 && ovLast >= 0 && ov > ovLast) {
+                    meas.addEvent("SDR lost samples: " + std::to_string(ov - ovLast) + " overflow(s), " + std::to_string(ov) + " since start");
+                    lossThisSecond = true;
+                }
+                ovLast = ov;
+            }
+        }
         TetraMeasSnapshot m = meas.get();
         if (!m.valid) { return; }
 
@@ -1546,6 +1500,232 @@ private:
                     }
                 }
             }
+        }
+    }
+
+
+    // ---------------- Menu sections in a user-defined order ----------------
+
+    enum SectionId { S_MEAS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_ALARM, S_REPORT, S_GPS, S_NET, S_SUBS, S_DUP, S_COUNT };
+    static const char* sectionKey(int id) {
+        static const char* k[S_COUNT] = { "meas", "txa", "trend", "carriers", "bursts", "multipath", "alarms", "report", "gps", "network", "stations", "duplex" };
+        return (id >= 0 && id < S_COUNT) ? k[id] : "";
+    }
+    void defaultSectionOrder() {
+        secOrder.clear();
+        for (int i = 0; i < S_COUNT; i++) { secOrder.push_back(i); }
+    }
+    void loadSectionOrder() {
+        defaultSectionOrder();
+        if (!config.conf[name].contains("sectionOrder") || !config.conf[name]["sectionOrder"].is_array()) { return; }
+        std::vector<int> o;
+        for (auto& v : config.conf[name]["sectionOrder"]) {
+            if (!v.is_string()) { continue; }
+            std::string k = v.get<std::string>();
+            for (int i = 0; i < S_COUNT; i++) {
+                if (k == sectionKey(i) && std::find(o.begin(), o.end(), i) == o.end()) { o.push_back(i); }
+            }
+        }
+        for (int i = 0; i < S_COUNT; i++) { if (std::find(o.begin(), o.end(), i) == o.end()) { o.push_back(i); } }   // new sections
+        secOrder = o;
+    }
+    void saveSectionOrder() {
+        config.acquire();
+        config.conf[name]["sectionOrder"] = json::array();
+        for (int id : secOrder) { config.conf[name]["sectionOrder"].push_back(sectionKey(id)); }
+        config.release(true);
+    }
+    // move 'src' to the position of 'dst' (before or after it); applied after the frame's loop
+    void requestSectionMove(int src, int dst, bool after) { secMoveSrc = src; secMoveDst = dst; secMoveAfter = after; }
+    void applySectionMove() {
+        if (secResetReq) { secResetReq = false; defaultSectionOrder(); saveSectionOrder(); }
+        if (secMoveSrc < 0) { return; }
+        int src = secMoveSrc, dst = secMoveDst;
+        bool after = secMoveAfter;
+        secMoveSrc = -1;
+        if (src == dst) { return; }
+        auto it = std::find(secOrder.begin(), secOrder.end(), src);
+        if (it == secOrder.end()) { return; }
+        secOrder.erase(it);
+        if (dst == -1) { secOrder.insert(secOrder.begin(), src); }          // top
+        else if (dst == -2) { secOrder.push_back(src); }                     // bottom
+        else {
+            auto d = std::find(secOrder.begin(), secOrder.end(), dst);
+            if (d == secOrder.end()) { secOrder.push_back(src); }
+            else { secOrder.insert(after ? d + 1 : d, src); }
+        }
+        saveSectionOrder();
+    }
+    bool sectionVisible(int id) {
+        if (id == S_NET || id == S_DUP) { return decoder_mode == 0; }
+        if (id == S_SUBS) { return decoder_mode == 0 && hamMode; }
+        return true;
+    }
+
+    // Collapsing header with a drag grip on the right, drop target and a
+    // context menu (move up / down / top / bottom / reset)
+    bool sectionHeader(int id, const char* label, ImGuiTreeNodeFlags flags = 0) {
+        bool open = ImGui::CollapsingHeader(label, flags | ImGuiTreeNodeFlags_AllowItemOverlap);
+        ImVec2 hMin = ImGui::GetItemRectMin(), hMax = ImGui::GetItemRectMax();
+        // drop target: the header; the line shows where the section lands
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("TETRA_SECTION", ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+                int src = *(const int*)pl->Data;
+                bool after = ImGui::GetMousePos().y > (hMin.y + hMax.y) * 0.5f;
+                if (src != id) {
+                    float y = after ? hMax.y + 1.0f : hMin.y - 2.0f;
+                    ImU32 c = ImGui::GetColorU32(ImGuiCol_DragDropTarget);
+                    ImDrawList* fdl = ImGui::GetForegroundDrawList();
+                    fdl->AddLine(ImVec2(hMin.x, y), ImVec2(hMax.x, y), c, 3.0f);
+                    fdl->AddCircleFilled(ImVec2(hMin.x, y), 4.0f, c);
+                    fdl->AddCircleFilled(ImVec2(hMax.x, y), 4.0f, c);
+                    if (pl->IsDelivery()) { requestSectionMove(src, id, after); }
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        if (ImGui::BeginPopupContextItem((std::string("##_tetra_secctx_") + sectionKey(id) + name).c_str())) {
+            auto pos = std::find(secOrder.begin(), secOrder.end(), id) - secOrder.begin();
+            // neighbours among the sections that are shown
+            int prev = -1, next = -1;
+            for (int i = (int)pos - 1; i >= 0; i--) { if (sectionVisible(secOrder[i])) { prev = secOrder[i]; break; } }
+            for (int i = (int)pos + 1; i < (int)secOrder.size(); i++) { if (sectionVisible(secOrder[i])) { next = secOrder[i]; break; } }
+            if (ImGui::MenuItem("Move up", nullptr, false, prev >= 0)) { requestSectionMove(id, prev, false); }
+            if (ImGui::MenuItem("Move down", nullptr, false, next >= 0)) { requestSectionMove(id, next, true); }
+            if (ImGui::MenuItem("Move to top", nullptr, false, prev >= 0)) { requestSectionMove(id, -1, false); }
+            if (ImGui::MenuItem("Move to bottom", nullptr, false, next >= 0)) { requestSectionMove(id, -2, true); }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reset order")) { secResetReq = true; }
+            ImGui::EndPopup();
+        }
+        // grip on the right end of the header: the drag source
+        float gw = ImGui::GetFontSize() * 1.2f;
+        ImVec2 back = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(hMax.x - gw - ImGui::GetStyle().FramePadding.x, hMin.y));
+        ImGui::InvisibleButton((std::string("##_tetra_secgrip_") + sectionKey(id) + name).c_str(), ImVec2(gw, hMax.y - hMin.y));
+        bool gh = ImGui::IsItemHovered() || ImGui::IsItemActive();
+        if (gh) { ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll); }
+        {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 gmin = ImGui::GetItemRectMin(), gmax = ImGui::GetItemRectMax();
+            ImU32 dc = ImGui::GetColorU32(gh ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+            float r = (std::max)(1.2f, ImGui::GetFontSize() * 0.09f);
+            float cx = (gmin.x + gmax.x) * 0.5f, cy = (gmin.y + gmax.y) * 0.5f, dx = r * 2.6f, dy = r * 2.6f;
+            for (int i = -1; i <= 1; i++) {
+                dl->AddCircleFilled(ImVec2(cx - dx * 0.5f, cy + i * dy), r, dc);
+                dl->AddCircleFilled(ImVec2(cx + dx * 0.5f, cy + i * dy), r, dc);
+            }
+        }
+        if (gh && !ImGui::IsItemActive()) { ImGui::SetTooltip("Drag to move this section, right-click the header for more"); }
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
+            ImGui::SetDragDropPayload("TETRA_SECTION", &id, sizeof(int));
+            const char* hash = strstr(label, "##");
+            ImGui::TextUnformatted(label, hash ? hash : nullptr);
+            ImGui::EndDragDropSource();
+        }
+        ImGui::SetCursorScreenPos(back);
+        return open;
+    }
+
+    void drawSection(int id, float menuWidth) {
+        if (!sectionVisible(id)) { return; }
+        TetraDemodulatorModule* _this = this;
+        switch (id) {
+        case S_MEAS:
+            if (sectionHeader(id, CONCAT("Measurements##_tetra_meas_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (_this->constDetached) {
+                    // shown below the constellation in its own window, not twice
+                    tw::TextDisabled("Shown in the constellation window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
+                } else {
+                    drawMeasurements(_this, menuWidth);
+                }
+            }
+            break;
+        case S_TXA:
+            if (sectionHeader(id, CONCAT("TX analysis (spectrum)##_tetra_txa_", _this->name))) {
+                if (_this->txaDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_tfront_", _this->name))) { _this->focusTxaWin = true; }
+                } else {
+                    _this->drawTxAnalysis(menuWidth);
+                }
+            }
+            break;
+        case S_TREND:
+            if (sectionHeader(id, CONCAT("Trends & timeslots##_tetra_trend_", _this->name))) {
+                if (_this->trendDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_trfront_", _this->name))) { _this->focusTrendWin = true; }
+                } else {
+                    _this->drawTrends(menuWidth);
+                }
+            }
+            break;
+        case S_CARR:
+            if (sectionHeader(id, CONCAT("Carriers (multi-carrier)##_tetra_carr_", _this->name))) {
+                if (_this->carrDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_crfront_", _this->name))) { _this->focusCarrWin = true; }
+                } else {
+                    _this->drawCarriers(menuWidth);
+                }
+            }
+            break;
+        case S_BURST:
+            if (sectionHeader(id, CONCAT("Burst analysis (uplink)##_tetra_burst_", _this->name))) {
+                if (_this->burstDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_bfront_", _this->name))) { _this->focusBurstWin = true; }
+                } else {
+                    _this->drawBursts(menuWidth);
+                }
+            }
+            break;
+        case S_MP:
+            if (sectionHeader(id, CONCAT("Multipath (downlink)##_tetra_mp_", _this->name))) {
+                if (_this->mpDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mpfront_", _this->name))) { _this->focusMpWin = true; }
+                } else {
+                    _this->drawMultipath(menuWidth);
+                }
+            }
+            break;
+        case S_ALARM:
+            if (sectionHeader(id, CONCAT("Alarms##_tetra_alarm_", _this->name))) { _this->drawAlarms(menuWidth); }
+            break;
+        case S_REPORT:
+            if (sectionHeader(id, CONCAT("Report##_tetra_report_", _this->name))) { _this->drawReport(menuWidth); }
+            break;
+        case S_GPS:
+            if (sectionHeader(id, CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) { _this->drawGpsCoverage(menuWidth); }
+            break;
+        case S_NET:
+            //OSMO-TETRA: network & cell information (optionally in its own window)
+            if (sectionHeader(id, CONCAT("Network & cell##_tetra_net_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::Checkbox(CONCAT("Separate window##_tetra_ndet_", _this->name), &_this->netDetached)) {
+                    config.acquire();
+                    config.conf[_this->name]["netDetached"] = _this->netDetached;
+                    config.release(true);
+                    if (_this->netDetached) { _this->focusNetWin = true; }
+                }
+                if (_this->netDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_nfront_", _this->name))) { _this->focusNetWin = true; }
+                } else {
+                    _this->drawNetworkBody(menuWidth);
+                }
+            }
+            break;
+        case S_SUBS:
+            _this->drawSubscribers(menuWidth);
+            break;
+        case S_DUP:
+            _this->drawDuplexEditor(menuWidth);
+            break;
+        default:
+            break;
         }
     }
 
@@ -2213,6 +2393,24 @@ private:
         if (m.valid && m.symSync) {
             tw::TextColored(m.iqOffsetDb <= -30.0f ? good : (m.iqOffsetDb <= -20.0f ? warn : bad), "%.1f dB", m.iqOffsetDb);
         } else { tw::TextDisabled("--"); }
+        // diagnosis: where does a strong carrier component come from?
+        if (m.valid && m.symSync && m.iqOffsetDb > -30.0f) {
+            if (std::fabs(rxDcHz) < 15000.0) {
+                ImGui::TextColored(warn, "%s", "Cause unclear: the receiver DC is inside the channel (see above).");
+            }
+            else if (!r.carrierLeakBelow && std::fabs(r.carrierLeakDbc - m.iqOffsetDb) <= 4.0) {
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + menuWidth);
+                ImGui::TextColored(m.iqOffsetDb > -20.0f ? bad : warn,
+                    "Carrier leakage of the transmitter: spectrum and constellation agree (%.1f / %.1f dB) and the receiver DC is %+.0f kHz away. Check the TX LO / DC calibration.",
+                    r.carrierLeakDbc, m.iqOffsetDb, rxDcHz / 1000.0);
+                ImGui::PopTextWrapPos();
+            }
+            else if (!r.carrierLeakBelow) {
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + menuWidth);
+                ImGui::TextColored(warn, "%s", "Carrier component: spectrum and constellation disagree. Check the level (overload?) and measure again.");
+                ImGui::PopTextWrapPos();
+            }
+        }
         tw::Text("Noise density:"); tw::SameTextDisabled("%.1f dBFS/bin, in-band %.1f dBFS/bin", r.noiseDensityDb, r.inbandDensityDb);
     }
 
@@ -2489,6 +2687,10 @@ private:
             TetraBurstResult br = burstAn.get();
             if (!std::isnan(br.gapDbfs)) { in.ulNoise = br.gapDbfs + m.levelCalDb; }
         }
+        if (m.resyncSlip > slipLast) { lossThisSecond = true; }
+        slipLast = m.resyncSlip;
+        in.dataLoss = lossThisSecond;
+        lossThisSecond = false;
         bool raised = false;
         auto ev = alarms.evaluate(alarmSt, in, raised);
         for (auto& e : ev) { meas.addEvent(e); }
@@ -2504,7 +2706,7 @@ private:
         a["enabled"] = alarmSt.enabled; a["levelOn"] = alarmSt.levelOn; a["levelBelow"] = alarmSt.levelBelow;
         a["merOn"] = alarmSt.merOn; a["merBelow"] = alarmSt.merBelow; a["crcOn"] = alarmSt.crcOn; a["crcAbove"] = alarmSt.crcAbove;
         a["syncOn"] = alarmSt.syncOn; a["ulOn"] = alarmSt.ulOn; a["ulAbove"] = alarmSt.ulAbove;
-        a["holdS"] = alarmSt.holdS; a["beep"] = alarmSt.beep; a["autoLog"] = alarmSt.autoLog;
+        a["holdS"] = alarmSt.holdS; a["beep"] = alarmSt.beep; a["autoLog"] = alarmSt.autoLog; a["lossOn"] = alarmSt.lossOn;
         config.release(true);
     }
 
@@ -2750,7 +2952,7 @@ private:
     // ---------------- Subscribers (amateur radio mode) ----------------
 
     void drawSubscribers(float menuWidth) {
-        if (!ImGui::CollapsingHeader(CONCAT("Stations & Traffic##_tetra_subs_", name), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
+        if (!sectionHeader(S_SUBS, CONCAT("Stations & Traffic##_tetra_subs_", name), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
         if (ImGui::Checkbox(CONCAT("Separate window##_tetra_sdet_", name), &subsDetached)) {
             config.acquire();
             config.conf[name]["subsDetached"] = subsDetached;
@@ -3141,6 +3343,13 @@ private:
     std::string gainStatus;
     std::chrono::steady_clock::time_point gainLastStep;
     int gainLastSet = -1;
+    SourceGainInterface* ovIf = nullptr;
+    long long ovLast = -1;
+    bool lossThisSecond = false;               // overflow or timing slip since the last alarm check
+    uint32_t slipLast = 0;
+    std::vector<int> secOrder;                 // menu sections in display order
+    int secMoveSrc = -1, secMoveDst = -1;
+    bool secMoveAfter = false, secResetReq = false;
     // auto RF gain by SNR: state of the last step and an upper limit found
     bool agcLastUp = false;
     double agcPrevSnr = NAN, agcPrevGainDb = NAN, agcCeilDb = NAN;

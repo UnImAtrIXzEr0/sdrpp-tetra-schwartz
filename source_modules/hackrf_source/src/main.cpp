@@ -409,6 +409,7 @@ private:
             config.release(true);
         }
 
+        _this->gainLockBegin();
         SmGui::LeftLabel("LNA Gain");
         SmGui::FillWidth();
         if (SmGui::SliderFloatWithSteps(CONCAT("##_hackrf_lna_", _this->name), &_this->lna, 0, 40, 8, SmGui::FMT_STR_FLOAT_DB_NO_DECIMAL)) {
@@ -430,6 +431,7 @@ private:
             config.conf["devices"][_this->selectedSerial]["vgaGain"] = (int)_this->vga;
             config.release(true);
         }
+        _this->gainLockEnd(_this->name);
 
         if (SmGui::Checkbox(CONCAT("Bias-T##_hackrf_bt_", _this->name), &_this->biasT)) {
             if (_this->running) {

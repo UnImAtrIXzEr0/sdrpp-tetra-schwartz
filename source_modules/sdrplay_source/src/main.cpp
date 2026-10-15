@@ -811,6 +811,7 @@ private:
                 config.release(true);
             }
 
+            _this->gainLockBegin();
             if (_this->agc > 0) { SmGui::BeginDisabled(); }
             SmGui::LeftLabel("IF Gain");
             SmGui::FillWidth();
@@ -824,6 +825,7 @@ private:
                 config.release(true);
             }
             if (_this->agc > 0) { SmGui::EndDisabled(); }
+            _this->gainLockEnd(_this->name);
 
 
             if (_this->agcParamEdit) {

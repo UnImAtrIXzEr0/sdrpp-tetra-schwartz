@@ -588,6 +588,7 @@ private:
         if (_this->selectedSerial != "") {
             if (_this->gainModes[_this->gainMode].mode != BLADERF_GAIN_MANUAL) { SmGui::BeginDisabled(); }
         }
+        _this->gainLockBegin();
         SmGui::LeftLabel("Gain");
         SmGui::FillWidth();
         if (SmGui::SliderInt("##_balderf_oag_sel_", &_this->overallGain, (_this->gainRange != NULL) ? _this->gainRange->min : 0, (_this->gainRange != NULL) ? _this->gainRange->max : 60)) {
@@ -601,6 +602,7 @@ private:
                 config.release(true);
             }
         }
+        _this->gainLockEnd(_this->name);
         if (_this->selectedSerial != "") {
             if (_this->gainModes[_this->gainMode].mode != BLADERF_GAIN_MANUAL) { SmGui::EndDisabled(); }
         }

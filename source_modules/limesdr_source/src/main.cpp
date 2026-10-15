@@ -513,6 +513,7 @@ private:
             }
         }
 
+        _this->gainLockBegin();
         SmGui::LeftLabel("Gain");
         SmGui::FillWidth();
         if (SmGui::SliderInt("##limesdr_gain_sel", &_this->gain, 0, 73, SmGui::FMT_STR_INT_DB)) {
@@ -525,6 +526,7 @@ private:
                 config.release(true);
             }
         }
+        _this->gainLockEnd(_this->name);
 
         // reference correction in ppb (1 ppb = 0.001 ppm), as for the PlutoSDR
         SmGui::LeftLabel("Freq. corr. (ppb)");

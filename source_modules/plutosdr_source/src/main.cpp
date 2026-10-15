@@ -57,6 +57,7 @@ public:
             config.release(true);
         }
     }
+    long long overflowCount() override { return running ? (long long)overflows.load() : -1; }
     std::string corrSourceName() override { return "PlutoSDR"; }
     bool corrAvailable() override { return !devDesc.empty(); }
     double corrPpm() override { return xoPpm; }
@@ -108,6 +109,13 @@ public:
         gainModes.define("fast_attack", "Fast Attack", "fast_attack");
         gainModes.define("slow_attack", "Slow Attack", "slow_attack");
         gainModes.define("hybrid", "Hybrid", "hybrid");
+
+        // Address entered by hand (e.g. ip:192.168.2.1), see menu
+        config.acquire();
+        if (config.conf.contains("manualUri") && config.conf["manualUri"].is_string()) {
+            snprintf(manualUri, sizeof(manualUri), "%s", config.conf["manualUri"].get<std::string>().c_str());
+        }
+        config.release();
 
         // Enumerate devices
         refresh();
@@ -243,6 +251,13 @@ private:
         
         // Destroy scan context
         iio_scan_context_destroy(sctx);
+
+        // device at an address entered by hand (network Pluto, no discovery needed)
+        if (manualUri[0]) {
+            std::string mu = manualUri;
+            std::string key = "manual:" + mu;
+            if (!devices.keyExists(key) && !devices.valueExists(mu)) { devices.define(key, "(address) " + mu, mu); }
+        }
 
 #ifdef __ANDROID__
         // On Android, a default IP entry must be made (TODO: This is not ideal since the IP cannot be changed)
@@ -462,6 +477,30 @@ private:
             _this->select(_this->devDesc);
             core::setInputSampleRate(_this->samplerate);
         }
+        // fixed address, e.g. ip:192.168.2.1 or ip:pluto.local (no search needed)
+        SmGui::LeftLabel("Address");
+        SmGui::FillWidth();
+        SmGui::InputText(CONCAT("##_pluto_uri_", _this->name), _this->manualUri, sizeof(_this->manualUri));
+        SmGui::FillWidth();
+        SmGui::ForceSync();
+        if (SmGui::Button(CONCAT("Use address##_pluto_uri_use_", _this->name))) {
+            config.acquire();
+            config.conf["manualUri"] = std::string(_this->manualUri);
+            config.release(true);
+            _this->refresh();
+            std::string key = std::string("manual:") + _this->manualUri;
+            if (_this->manualUri[0] && _this->devices.keyExists(key)) {
+                _this->select(key);
+                _this->devId = _this->devices.keyId(key);
+                config.acquire();
+                config.conf["device"] = key;
+                config.release(true);
+            }
+            else {
+                _this->select(_this->devDesc);
+            }
+            core::setInputSampleRate(_this->samplerate);
+        }
         if (_this->running) { SmGui::EndDisabled(); }
 
         SmGui::LeftLabel("Bandwidth");
@@ -492,6 +531,7 @@ private:
             }
         }
 
+        _this->gainLockBegin();
         SmGui::LeftLabel("Gain");
         if (_this->gmId) { SmGui::BeginDisabled(); }
         SmGui::FillWidth();
@@ -506,6 +546,7 @@ private:
             }
         }
         if (_this->gmId) { SmGui::EndDisabled(); }
+        _this->gainLockEnd(_this->name);
 
         // reference correction in ppb (1 ppb = 0.001 ppm; 100 ppb = 44 Hz at 440 MHz)
         SmGui::LeftLabel("XO corr. (ppb)");
@@ -644,6 +685,7 @@ private:
     int gmId = 0;
 
     OptionList<std::string, std::string> devices;
+    char manualUri[256] = "";
     OptionList<int, double> samplerates;
     OptionList<int, double> bandwidths;
     OptionList<std::string, std::string> gainModes;

@@ -30,6 +30,7 @@
   <div class="l1"><a href="#s16">16 GPS, coverage measurement and maps</a></div>
   <div class="l1"><a href="#s17">17 Measurement scenarios</a></div>
   <div class="l1"><a href="#s18">18 Troubleshooting</a></div>
+  <div class="l2"><a href="#s18-1">Checking USB and lost samples</a></div>
   <div class="l1"><a href="#s19">19 Appendix</a></div>
   <div class="l2"><a href="#s19-1">Files and folders</a> · <a href="#s19-2">CSV columns</a></div>
   <div class="l2"><a href="#s19-3">Glossary</a> · <a href="#s19-4">Origin and licences</a></div>
@@ -115,12 +116,24 @@ sudo apt install libfuse2t64          # once, for AppImages
 <table>
 <tr><th>SDR</th><th>Windows</th><th>Linux</th></tr>
 <tr><td>RTL-SDR, Airspy, HackRF</td><td>install the WinUSB driver with Zadig</td><td>udev rules (packages <code>rtl-sdr</code>, <code>airspy</code>, <code>hackrf</code>)</td></tr>
-<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR USB driver (Analog Devices)</td><td>no driver; access via USB or network (<code>ip:192.168.2.1</code>)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR USB driver (Analog Devices)</td><td>udev rule needed (see below); or via network (<code>ip:192.168.2.1</code>)</td></tr>
 <tr><td>USRP (B2xx)</td><td>included; FPGA images with <code>uhd_images_downloader</code></td><td><code>sudo apt install uhd-host &amp;&amp; sudo uhd_images_downloader</code></td></tr>
 <tr><td>BladeRF, LimeSDR</td><td>included</td><td>udev rules from the manufacturers' packages</td></tr>
 <tr><td>SDRplay</td><td>install the SDRplay API (the service must be running)</td><td>install the SDRplay API; deliberately not bundled</td></tr>
 <tr><td>Spectran (HTTP)</td><td colspan="2">Spectran software with the HTTP server enabled; connect via host name and port</td></tr>
 </table>
+
+<h3>Enabling the PlutoSDR on Linux</h3>
+<p>Without a rule only root may access the Pluto: it shows up as a drive, but not in SDR++. Create the rule once and plug the Pluto in again:</p>
+<pre>sudo tee /etc/udev/rules.d/53-adi-plutosdr-usb.rules &gt;/dev/null &lt;&lt;'EOF'
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ATTRS{idProduct}=="b673", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ATTRS{idProduct}=="b674", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2fa2", ATTRS{idProduct}=="5a02", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2fa2", ATTRS{idProduct}=="5a32", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ENV{ID_MM_DEVICE_IGNORE}="1"
+EOF
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
+<p>The user must be in the <code>plugdev</code> group (<code>groups</code>). Clones with another USB ID (<code>lsusb</code>) get a line of their own. For a Pluto on the network, enter its address under <span class="ui">Source</span> → <span class="ui">Address</span> (e.g. <code>ip:192.168.2.1</code>) and choose <span class="ui">Use address</span>.</p>
 
 <h2 id="s2-4">Settings at the first start</h2>
 <ul>
@@ -148,6 +161,7 @@ sudo apt install libfuse2t64          # once, for AppImages
   <li>Almost every measured value has a <b>tooltip</b>: hold the mouse over it for a moment.</li>
   <li>The width of the menu column can be changed; contents wrap instead of disappearing on the right.</li>
   <li>Tables: move columns and change their width with the mouse; a right-click on the header shows or hides columns. The arrangement is saved.</li>
+  <li><b>Reordering sections in the TETRA demodulator:</b> drag the grip (six dots on the right of the header); a line shows where the section lands. A right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The order is saved.</li>
 </ul>
 </div>
 </div>
@@ -164,7 +178,8 @@ sudo apt install libfuse2t64          # once, for AppImages
 <ul>
   <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For burst timing (uplink and downlink at the same time) and additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
   <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
-  <li><b>Level:</b> TETRA channel between −35 and −20 dBFS, peaks below −6 dBFS. <span class="ui">Auto RF gain</span> takes care of this if the SDR supports it.</li>
+  <li><b>Level:</b> as much gain as needed, as little as possible. <span class="ui">Auto RF gain</span> looks for the best signal-to-noise ratio: it steps up by 3 dB while the ratio still improves and steps back once the noise floor only rises with the gain. It goes down at once when any signal in the whole SDR band (not only TETRA) reaches the ADC limit. The <span class="ui">Band</span> line shows this peak and the ratio.</li>
+  <li><b>Gain control locked:</b> while Auto RF gain is active, the gain control in the source menu is locked ("Locked by TETRA Auto RF gain"). <span class="ui">Release</span> switches the automatic gain off and frees the control.</li>
   <li><b>Warm-up:</b> wait 10–15 minutes after switching on before calibrating the frequency or measuring stability.</li>
 </ul>
 
@@ -172,7 +187,7 @@ sudo apt install libfuse2t64          # once, for AppImages
 <table>
 <tr><th style="width:19%">SDR</th><th>Settings</th><th style="width:26%">Auto RF gain / calibration</th></tr>
 <tr><td>RTL-SDR</td><td>2.4 MS/s; <span class="ui">Tuner AGC</span> off; bias-T only for active antennas. Cheap sticks drift a lot – prefer TCXO models.</td><td>tuner gain steps; PPM correction (1 ppm steps)</td></tr>
-<tr><td>PlutoSDR / Zynq AD9363</td><td>2–4 MS/s (for duplex measurements up to 20 MS/s if USB/network keep up); gain mode <span class="ui">Manual</span>. A Pluto+ with an external 10 MHz reference is the best choice for frequency measurements.</td><td>gain in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>3–5 MS/s (up to about 7 MS/s over USB 2.0 if the computer keeps up); gain mode <span class="ui">Manual</span>. <span class="ui">Overflows</span> counts lost samples and must stay at 0. A Pluto+ with an external 10 MHz reference is the best choice for frequency measurements.</td><td>gain in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
 <tr><td>Airspy</td><td>mode <span class="ui">Sensitive</span> or <span class="ui">Linear</span>; sample rate 3 or 10 MS/s.</td><td>steps 0–21; no frequency correction in the GUI</td></tr>
 <tr><td>USRP B2xx</td><td>sample rate 2–20 MS/s, choose antenna port RX2 or TX/RX accordingly; external reference possible.</td><td>gain in dB</td></tr>
 <tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> only for weak signals (overload!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
@@ -181,6 +196,7 @@ sudo apt install libfuse2t64          # once, for AppImages
 <tr><td>SDRplay</td><td><span class="ui">IF AGC</span> off; set the LNA state manually according to the signal strength.</td><td>IF gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>Spectran (HTTP)</td><td>set level (reference level) and frequency correction in the Spectran software.</td><td>not from this program</td></tr>
 </table>
+<div class="box info"><b class="t">New in v0.20: dBFS for PlutoSDR and BladeRF</b>Both deliver 12-bit samples. Since v0.20, 0 dBFS refers to the real ADC limit, so all levels appear 24 dB higher than in older versions. Please redo a level calibration (<span class="ui">Level cal.</span>).</div>
 <div class="box"><b class="t">Tip for Pluto/Zynq on Windows</b>If there are dropouts (“Re-locks … with timing slip”), lower the sample rate and connect the device directly to a USB 3 port without a hub. The buffers are already set to 20 ms × 8.</div>
 
 <h2 id="s4-3">Calibration</h2>
@@ -227,7 +243,8 @@ sudo apt install libfuse2t64          # once, for AppImages
 <tr><td>Input rate</td><td>actually arriving sample rate (60 s regression); negative deviation = lost samples.</td><td>±(uncertainty)</td></tr>
 <tr><td>Audio drops</td><td>discarded speech data because the audio output cannot keep up.</td><td>none</td></tr>
 <tr><td>Carrier vs. SYSINFO</td><td>received carrier minus announced frequency – basis for <span class="ui">Calibrate SDR</span>.</td><td>±0.2 ppm (ETSI, base station)</td></tr>
-<tr><td>AFC, Auto RF gain</td><td>VFO follows the carrier (max. ±6 kHz); gain is adjusted every 4 s.</td><td></td></tr>
+<tr><td>AFC, Auto RF gain</td><td>VFO follows the carrier (max. ±6 kHz around the frequency the cell announces). The gain is adjusted every 4 s by signal-to-noise ratio and ADC peak; every step is logged with its reason.</td><td></td></tr>
+<tr><td>Band</td><td>ADC peak over the whole SDR bandwidth (any signal, not only TETRA) and signal-to-noise ratio of the channel against the noise floor 30–400 kHz around it.</td><td>peak &lt; −10 dBFS; SNR &gt; 30 dB</td></tr>
 <tr><td>Raw BER</td><td>bit errors in known bits (training sequences) before channel decoding.</td><td>&lt; 1·10⁻³</td></tr>
 <tr><td>Bursts/s, re-locks</td><td>decoded bursts; resynchronisation <i>with</i> timing slip = lost samples (USB/CPU), <i>without</i> = disturbed burst (signal).</td><td>no re-locks</td></tr>
 <tr><td>CRC table</td><td>error rate per channel (BSCH, SB2, half slot, SCH/F) in the last second and in total.</td><td>&lt; 1 %</td></tr>
@@ -272,6 +289,7 @@ sudo apt install libfuse2t64          # once, for AppImages
   <li><b>Shoulders</b> and <b>edge slope</b> – shoulders point to non-linearity of the power amplifier.</li>
   <li><b>Carrier line</b> – carrier leakage as a spectral line.</li>
 </ul>
+<p>With a large I/Q offset, a <b>diagnosis line</b> names the likely cause: if carrier line and I/Q offset agree and the receiver's DC is far enough away, it is carrier leakage of the transmitter (check its LO/DC calibration).</p>
 <p><span class="ui">RBW</span> and <span class="ui">Avg</span> set resolution and averaging. <span class="ui">Store floor</span> stores the noise of the receiver (transmitter off or input terminated with 50 Ω); values close to this limit are marked grey.</p>
 <div class="box warn"><b class="t">Limits of the measurement</b>The adjacent channel measurement is limited by the dynamic range and phase noise of the SDR – typically −60 to −70 dBc. For values close to the limit, use a strong, clean signal and a low gain.</div>
 </div>
@@ -382,6 +400,7 @@ sudo apt install libfuse2t64          # once, for AppImages
 <tr><td>CRC errors above</td><td>5 %</td></tr>
 <tr><td>Lock / sync lost</td><td>immediately</td></tr>
 <tr><td>Uplink noise above</td><td>−100 dBFS (the burst analysis must run on the uplink)</td></tr>
+<tr><td>Samples lost</td><td>immediately (SDR overflow or timing slip)</td></tr>
 </table>
 <p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. Optionally an alarm starts the CSV log, on Windows also with a sound. Active alarms appear in red at the top of the TETRA menu.</p>
 
@@ -527,7 +546,7 @@ sudo apt install libfuse2t64          # once, for AppImages
 <table>
 <tr><th style="width:30%">Problem</th><th>Cause and remedy</th></tr>
 <tr><td>Decoder does not lock</td><td>VFO exactly on the carrier; check the level (RF status); ETSI/Amateur mode correct; band centre not on the carrier.</td></tr>
-<tr><td>“Re-locks with timing slip”</td><td>Samples are lost (USB, CPU). Lower the sample rate, another USB port, no hubs, close other programs; watch <span class="ui">Input rate</span>.</td></tr>
+<tr><td>“Re-locks with timing slip”, <span class="ui">Overflows</span> &gt; 0</td><td>Samples are lost (USB or computer too slow). See <a href="#s18-1">Checking USB and lost samples</a>.</td></tr>
 <tr><td>“reduce gain”, peaks close to 0 dBFS</td><td>Overload – lower the gain; watch for strong signals elsewhere in the band (waterfall).</td></tr>
 <tr><td>Auto RF gain does nothing</td><td>SDR without interface or hardware AGC on (RTL: Tuner AGC off, Pluto/BladeRF: Manual, SDRplay: IF AGC off).</td></tr>
 <tr><td>Frequency deviates</td><td>Calibrate the SDR (chapter 4.3) or use an external reference.</td></tr>
@@ -537,7 +556,19 @@ sudo apt install libfuse2t64          # once, for AppImages
 <tr><td>Windows blocks the download</td><td>Choose “Keep” in the browser's download list; then confirm the SmartScreen notice.</td></tr>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
+<tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
 </table>
+
+<h2 id="s18-1">Checking USB and lost samples</h2>
+<p>Poor MER with a clean spectrum and a rising <span class="ui">Re-locks with timing slip</span> count means samples are missing. Narrow it down like this (PlutoSDR on Linux; quit SDR++ first):</p>
+<ol class="steps">
+  <li><b>Device and USB alone:</b> set the rate and read a fixed number of samples while timing it. 40 million samples at 4 MS/s must take 10.0 s:
+<pre>iio_attr -u usb: -c ad9361-phy voltage0 sampling_frequency 4000000
+time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &gt; /dev/null</pre>
+  Clearly more than 10 s means the Pluto drops data (USB, cable, power). Test the limit with 7 MS/s and <code>-s 70000000</code>.</li>
+  <li><b>Connection:</b> keep <code>sudo dmesg -w</code> running. <code>disconnect</code> or <code>error -71</code> point to the cable, a contact or too little power (connect the Pluto's second USB port to a power supply). <code>lsusb -t</code> shows which devices share the bus (webcam, card reader).</li>
+  <li><b>In SDR++:</b> press <span class="ui">Reset totals</span> and let it run for two minutes. <span class="ui">Overflows</span> in the source menu must stay at 0. If it rises only here, the computer cannot keep up: close screen recording and other programs, lower the sample rate.</li>
+</ol>
 
 <!-- ============================================================ -->
 <h1 id="s19" class="pb"><span class="num">19</span>Appendix</h1>

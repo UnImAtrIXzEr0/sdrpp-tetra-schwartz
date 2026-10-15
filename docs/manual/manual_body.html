@@ -30,6 +30,7 @@
   <div class="l1"><a href="#s16">16 GPS, Versorgungsmessung und Karten</a></div>
   <div class="l1"><a href="#s17">17 Messszenarien</a></div>
   <div class="l1"><a href="#s18">18 Fehlersuche</a></div>
+  <div class="l2"><a href="#s18-1">USB und Datenverlust prüfen</a></div>
   <div class="l1"><a href="#s19">19 Anhang</a></div>
   <div class="l2"><a href="#s19-1">Dateien und Ordner</a> · <a href="#s19-2">CSV-Spalten</a></div>
   <div class="l2"><a href="#s19-3">Glossar</a> · <a href="#s19-4">Herkunft und Lizenzen</a></div>
@@ -115,12 +116,24 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <table>
 <tr><th>SDR</th><th>Windows</th><th>Linux</th></tr>
 <tr><td>RTL-SDR, Airspy, HackRF</td><td>WinUSB-Treiber mit Zadig installieren</td><td>udev-Regeln (Pakete <code>rtl-sdr</code>, <code>airspy</code>, <code>hackrf</code>)</td></tr>
-<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR-USB-Treiber (Analog Devices)</td><td>ohne Treiber; Zugriff per USB oder Netzwerk (<code>ip:192.168.2.1</code>)</td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>PlutoSDR-USB-Treiber (Analog Devices)</td><td>udev-Regel nötig (siehe unten); alternativ per Netzwerk (<code>ip:192.168.2.1</code>)</td></tr>
 <tr><td>USRP (B2xx)</td><td>im Paket enthalten; FPGA-Images mit <code>uhd_images_downloader</code></td><td><code>sudo apt install uhd-host &amp;&amp; sudo uhd_images_downloader</code></td></tr>
 <tr><td>BladeRF, LimeSDR</td><td>im Paket enthalten</td><td>udev-Regeln der Hersteller-Pakete</td></tr>
 <tr><td>SDRplay</td><td>SDRplay-API installieren (Dienst muss laufen)</td><td>SDRplay-API installieren; wird bewusst nicht mitgeliefert</td></tr>
 <tr><td>Spectran (HTTP)</td><td colspan="2">Spectran-Software mit aktiviertem HTTP-Server; Verbindung über Hostname und Port</td></tr>
 </table>
+
+<h3>PlutoSDR unter Linux freischalten</h3>
+<p>Ohne Regel darf nur root auf den Pluto zugreifen: Er erscheint dann als Laufwerk, aber nicht in SDR++. Einmalig anlegen und den Pluto neu einstecken:</p>
+<pre>sudo tee /etc/udev/rules.d/53-adi-plutosdr-usb.rules &gt;/dev/null &lt;&lt;'EOF'
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ATTRS{idProduct}=="b673", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ATTRS{idProduct}=="b674", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2fa2", ATTRS{idProduct}=="5a02", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="2fa2", ATTRS{idProduct}=="5a32", MODE="0664", GROUP="plugdev"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ENV{ID_MM_DEVICE_IGNORE}="1"
+EOF
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
+<p>Der Benutzer muss in der Gruppe <code>plugdev</code> sein (<code>groups</code>). Nachbauten mit anderer USB-Kennung (<code>lsusb</code>) bekommen eine eigene Zeile. Einen Pluto im Netzwerk trägst du unter <span class="ui">Source</span> → <span class="ui">Address</span> ein (z. B. <code>ip:192.168.2.1</code>) und wählst <span class="ui">Use address</span>.</p>
 
 <h2 id="s2-4">Was beim ersten Start eingestellt ist</h2>
 <ul>
@@ -148,6 +161,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
   <li>Fast jeder Messwert hat einen <b>Tooltip</b>: Maus kurz darüber halten.</li>
   <li>Die Menüspalte ist in der Breite veränderbar; Inhalte brechen um, statt rechts zu verschwinden.</li>
   <li>Tabellen: Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Die Anordnung wird gespeichert.</li>
+  <li><b>Bereiche im TETRA Demodulator verschieben:</b> am Griff (sechs Punkte rechts in der Kopfzeile) ziehen; eine Linie zeigt das Ziel. Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Die Reihenfolge wird gespeichert.</li>
 </ul>
 </div>
 </div>
@@ -164,7 +178,8 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <ul>
   <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Burst-Zeitlage (Uplink und Downlink gleichzeitig) und weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
   <li><b>Mitte nicht auf den Träger legen:</b> Der Gleichanteil des SDR liegt in der Bandmitte. Den TETRA-Träger mindestens ~100 kHz daneben einstellen, sonst verfälscht er I/Q-Offset und Trägerrest.</li>
-  <li><b>Pegel:</b> TETRA-Kanal zwischen −35 und −20 dBFS, Spitzen unter −6 dBFS. Das erledigt <span class="ui">Auto RF gain</span>, sofern das SDR es unterstützt.</li>
+  <li><b>Pegel:</b> So viel Verstärkung wie nötig, so wenig wie möglich. <span class="ui">Auto RF gain</span> sucht den besten Signal-Rausch-Abstand: Es regelt in 3-dB-Schritten hoch, solange der Abstand noch steigt, und geht zurück, sobald der Rauschboden nur noch mitwächst. Sofort herunter geht es, wenn irgendein Signal im ganzen SDR-Band (nicht nur TETRA) die Wandlergrenze erreicht. Die Zeile <span class="ui">Band</span> zeigt diese Spitze und den Abstand.</li>
+  <li><b>Gain-Regler gesperrt:</b> Solange Auto RF gain aktiv ist, ist der Gain-Regler unter Source gesperrt („Locked by TETRA Auto RF gain“). <span class="ui">Release</span> schaltet die Automatik ab und gibt den Regler frei.</li>
   <li><b>Aufwärmen:</b> Nach dem Einschalten 10–15 Minuten warten, bevor Frequenz kalibriert oder Stabilität gemessen wird.</li>
 </ul>
 
@@ -172,7 +187,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <table>
 <tr><th style="width:19%">SDR</th><th>Einstellungen</th><th style="width:26%">Auto RF gain / Kalibrierung</th></tr>
 <tr><td>RTL-SDR</td><td>2,4 MS/s; <span class="ui">Tuner AGC</span> aus; Bias-T nur für aktive Antennen. Günstige Sticks driften stark – TCXO-Modelle bevorzugen.</td><td>Stufen des Tuners; PPM-Korrektur (1-ppm-Schritte)</td></tr>
-<tr><td>PlutoSDR / Zynq AD9363</td><td>2–4 MS/s (für Duplexmessungen bis 20 MS/s, wenn USB/Netz mithalten); Verstärkungsmodus <span class="ui">Manual</span>. Pluto+ mit externer 10-MHz-Referenz ist die beste Wahl für Frequenzmessungen.</td><td>Verstärkung in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
+<tr><td>PlutoSDR / Zynq AD9363</td><td>3–5 MS/s (bis etwa 7 MS/s über USB 2.0, wenn der Rechner mithält); Verstärkungsmodus <span class="ui">Manual</span>. <span class="ui">Overflows</span> zeigt verlorene Abtastwerte und muss 0 bleiben. Pluto+ mit externer 10-MHz-Referenz ist die beste Wahl für Frequenzmessungen.</td><td>Verstärkung in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
 <tr><td>Airspy</td><td>Modus <span class="ui">Sensitive</span> oder <span class="ui">Linear</span>; Abtastrate 3 oder 10 MS/s.</td><td>Stufen 0–21; keine Frequenzkorrektur über die Oberfläche</td></tr>
 <tr><td>USRP B2xx</td><td>Abtastrate 2–20 MS/s, Antennenanschluss RX2 oder TX/RX passend wählen; externe Referenz möglich.</td><td>Verstärkung in dB</td></tr>
 <tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> nur bei schwachen Signalen (Übersteuerung!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
@@ -181,6 +196,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <tr><td>SDRplay</td><td><span class="ui">IF AGC</span> aus; LNA-Stufe von Hand je nach Signalstärke.</td><td>ZF-Verstärkung; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>Spectran (HTTP)</td><td>Pegel (Referenzpegel) und Frequenzkorrektur in der Spectran-Software einstellen.</td><td>nicht über dieses Programm</td></tr>
 </table>
+<div class="box info"><b class="t">Neu in v0.20: dBFS bei PlutoSDR und BladeRF</b>Beide liefern 12-Bit-Werte. Seit v0.20 bezieht sich 0 dBFS auf die echte Wandlergrenze; alle Pegel erscheinen dadurch 24 dB höher als in älteren Versionen. Eine Pegelkalibrierung (<span class="ui">Level cal.</span>) bitte neu machen.</div>
 <div class="box"><b class="t">Tipp für Pluto/Zynq unter Windows</b>Bei Aussetzern („Re-locks … with timing slip“) die Abtastrate senken und das Gerät direkt an einen USB-3-Port ohne Hub hängen. Die Puffer sind bereits auf 20 ms × 8 eingestellt.</div>
 
 <h2 id="s4-3">Kalibrieren</h2>
@@ -227,7 +243,8 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <tr><td>Input rate</td><td>tatsächlich ankommende Abtastrate (60-s-Regression); negative Abweichung = verlorene Abtastwerte.</td><td>±(Unsicherheit)</td></tr>
 <tr><td>Audio drops</td><td>verworfene Sprachdaten, weil die Audioausgabe nicht mitkommt.</td><td>none</td></tr>
 <tr><td>Carrier vs. SYSINFO</td><td>Empfangener Träger minus angekündigte Frequenz – Grundlage für <span class="ui">Calibrate SDR</span>.</td><td>±0,2 ppm (ETSI, Basisstation)</td></tr>
-<tr><td>AFC, Auto RF gain</td><td>VFO folgt dem Träger (max. ±6 kHz); Verstärkung wird alle 4 s angepasst.</td><td></td></tr>
+<tr><td>AFC, Auto RF gain</td><td>VFO folgt dem Träger (max. ±6 kHz um die von der Zelle angekündigte Frequenz). Die Verstärkung wird alle 4 s nach Signal-Rausch-Abstand und ADC-Spitze angepasst; jeder Schritt steht mit Grund im Ereignisprotokoll.</td><td></td></tr>
+<tr><td>Band</td><td>ADC-Spitze über die ganze SDR-Bandbreite (jedes Signal, nicht nur TETRA) und Signal-Rausch-Abstand des Kanals gegen den Rauschboden 30–400 kHz daneben.</td><td>Spitze &lt; −10 dBFS; SNR &gt; 30 dB</td></tr>
 <tr><td>Raw BER</td><td>Bitfehler in bekannten Bits (Trainingssequenzen) vor der Kanaldekodierung.</td><td>&lt; 1·10⁻³</td></tr>
 <tr><td>Bursts/s, Re-locks</td><td>dekodierte Bursts; Neusynchronisation <i>mit</i> Taktsprung = verlorene Abtastwerte (USB/CPU), <i>ohne</i> = gestörter Burst (Signal).</td><td>keine Re-locks</td></tr>
 <tr><td>CRC-Tabelle</td><td>Fehlerquote je Kanal (BSCH, SB2, Halbslot, SCH/F) in der letzten Sekunde und gesamt.</td><td>&lt; 1 %</td></tr>
@@ -272,6 +289,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
   <li><b>Shoulders</b> und <b>Edge slope</b> – Schultern deuten auf Nichtlinearität der Endstufe.</li>
   <li><b>Carrier line</b> – Trägerrest als Spektrallinie.</li>
 </ul>
+<p>Ist der I/Q-Offset groß, nennt eine <b>Diagnosezeile</b> die wahrscheinliche Ursache: Stimmen Trägerlinie und I/Q-Offset überein und liegt der Gleichanteil des Empfängers weit genug weg, ist es ein Trägerrest des Senders (LO-/DC-Kalibrierung prüfen).</p>
 <p><span class="ui">RBW</span> und <span class="ui">Avg</span> stellen Auflösung und Mittelung ein. Mit <span class="ui">Store floor</span> wird das Rauschen des Empfängers gespeichert (Sender aus oder Eingang mit 50 Ω abgeschlossen); Werte nahe dieser Grenze werden grau markiert.</p>
 <div class="box warn"><b class="t">Grenzen der Messung</b>Die Nachbarkanalmessung ist durch Dynamik und Phasenrauschen des SDR begrenzt – typischerweise −60 bis −70 dBc. Für Werte am Grenzwert ein starkes, sauberes Signal und eine niedrige Verstärkung verwenden.</div>
 </div>
@@ -382,6 +400,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <tr><td>CRC-Fehler über</td><td>5 %</td></tr>
 <tr><td>Lock / Sync verloren</td><td>sofort</td></tr>
 <tr><td>Uplink-Rauschen über</td><td>−100 dBFS (Burst-Analyse muss auf dem Uplink laufen)</td></tr>
+<tr><td>Abtastwerte verloren</td><td>sofort (Überlauf im SDR oder Taktsprung)</td></tr>
 </table>
 <p>Eine Bedingung muss die <span class="ui">Hold time</span> lang anhalten, bevor ein Alarm ausgelöst wird (und ebenso lange, bevor er endet). Alarme und ihr Ende stehen im Ereignislog und – bei laufendem Log – in <code>…_events.csv</code>. Optional startet ein Alarm den CSV-Log, unter Windows auch mit Ton. Aktive Alarme erscheinen rot oben im TETRA-Menü.</p>
 
@@ -527,7 +546,7 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <table>
 <tr><th style="width:30%">Problem</th><th>Ursache und Abhilfe</th></tr>
 <tr><td>Decoder rastet nicht ein</td><td>VFO genau auf den Träger; Pegel prüfen (RF status); Betriebsart ETSI/Amateur passend; Bandmitte nicht auf dem Träger.</td></tr>
-<tr><td>„Re-locks with timing slip“</td><td>Abtastwerte gehen verloren (USB, CPU). Abtastrate senken, anderen USB-Port, keine Hubs, andere Programme schließen; <span class="ui">Input rate</span> beobachten.</td></tr>
+<tr><td>„Re-locks with timing slip“, <span class="ui">Overflows</span> &gt; 0</td><td>Abtastwerte gehen verloren (USB oder Rechner zu langsam). Siehe <a href="#s18-1">USB und Datenverlust prüfen</a>.</td></tr>
 <tr><td>„reduce gain“, Spitzen nahe 0 dBFS</td><td>Übersteuerung – Verstärkung senken; starke Signale anderswo im Band beachten (Wasserfall).</td></tr>
 <tr><td>Auto RF gain tut nichts</td><td>SDR ohne Schnittstelle oder Hardware-AGC an (RTL: Tuner AGC aus, Pluto/BladeRF: Manual, SDRplay: IF AGC aus).</td></tr>
 <tr><td>Frequenz weicht ab</td><td>SDR kalibrieren (Kapitel 4.3) oder externe Referenz verwenden.</td></tr>
@@ -537,7 +556,19 @@ sudo apt install libfuse2t64          # einmalig, für AppImages
 <tr><td>Windows blockiert den Download</td><td>In der Download-Liste des Browsers „Behalten“ wählen; danach SmartScreen-Hinweis bestätigen.</td></tr>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
 <tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
+<tr><td>Pluto als Laufwerk sichtbar, aber nicht in SDR++</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span>.</td></tr>
 </table>
+
+<h2 id="s18-1">USB und Datenverlust prüfen</h2>
+<p>MER schlecht, Spektrum aber sauber, und <span class="ui">Re-locks with timing slip</span> steigt: Dann fehlen Abtastwerte. So grenzt du die Ursache ein (PlutoSDR unter Linux; SDR++ dabei beenden):</p>
+<ol class="steps">
+  <li><b>Gerät und USB allein:</b> Rate setzen und eine feste Anzahl Abtastwerte zeitgemessen lesen. 40 Mio. Werte bei 4 MS/s müssen 10,0 s dauern:
+<pre>iio_attr -u usb: -c ad9361-phy voltage0 sampling_frequency 4000000
+time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &gt; /dev/null</pre>
+  Deutlich länger als 10 s heißt: Der Pluto verwirft Daten (USB, Kabel, Stromversorgung). Mit 7 MS/s und <code>-s 70000000</code> die Grenze testen.</li>
+  <li><b>Verbindung:</b> <code>sudo dmesg -w</code> mitlaufen lassen. <code>disconnect</code> oder <code>error -71</code> deuten auf Kabel, Kontakt oder zu wenig Strom (zweiten USB-Anschluss des Pluto an ein Netzteil). <code>lsusb -t</code> zeigt, welche Geräte sich den Bus teilen (Webcam, Kartenleser).</li>
+  <li><b>In SDR++:</b> <span class="ui">Reset totals</span> drücken und zwei Minuten laufen lassen. <span class="ui">Overflows</span> unter Source muss 0 bleiben. Steigt er nur hier, kommt der Rechner nicht mit: Bildschirmaufnahme und andere Programme schließen, Abtastrate senken.</li>
+</ol>
 
 <!-- ============================================================ -->
 <h1 id="s19" class="pb"><span class="num">19</span>Anhang</h1>

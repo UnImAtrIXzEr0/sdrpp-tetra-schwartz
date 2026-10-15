@@ -477,6 +477,7 @@ private:
         // Gain menus
 
         if (_this->gainMode == 0) {
+            _this->gainLockBegin();
             SmGui::LeftLabel("Gain");
             SmGui::FillWidth();
             if (SmGui::SliderInt(CONCAT("##_airspy_sens_gain_", _this->name), &_this->sensitiveGain, 0, 21)) {
@@ -489,8 +490,10 @@ private:
                     config.release(true);
                 }
             }
+            _this->gainLockEnd(_this->name);
         }
         else if (_this->gainMode == 1) {
+            _this->gainLockBegin();
             SmGui::LeftLabel("Gain");
             SmGui::FillWidth();
             if (SmGui::SliderInt(CONCAT("##_airspy_lin_gain_", _this->name), &_this->linearGain, 0, 21)) {
@@ -503,6 +506,7 @@ private:
                     config.release(true);
                 }
             }
+            _this->gainLockEnd(_this->name);
         }
         else if (_this->gainMode == 2) {
             // TODO: Switch to a table for alignment

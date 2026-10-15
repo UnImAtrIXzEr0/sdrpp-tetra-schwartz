@@ -198,6 +198,12 @@ def test_tetra_chain():
             problems.append(f"second carrier not running ({best.get('carriers')} carriers)")
         if best and locked and best.get("aach_count", 0) <= 0:
             problems.append("no timeslot occupancy counted (AACH)")
+        if best and not best.get("band_valid"):
+            problems.append("band monitor (ADC peak / SNR) produced no value")
+        elif best and not (-60.0 < best.get("band_peak_dbfs", -999) < 3.5):
+            problems.append(f"band ADC peak implausible ({best.get('band_peak_dbfs')})")
+        if best and best.get("sections", 0) != 12:
+            problems.append(f"menu sections {best.get('sections')} (expected 12)")
         if best and best.get("burst_state", 0) < 1:
             problems.append(f"burst analysis not running ({best.get('burst_status')})")
         if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 3.5):

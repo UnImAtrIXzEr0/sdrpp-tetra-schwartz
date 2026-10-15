@@ -26,6 +26,7 @@ struct TetraAlarmSettings {
     bool crcOn = true;    float crcAbove = 5.0f;         // %
     bool syncOn = true;                                   // any sync loss / lock lost
     bool ulOn = false;    float ulAbove = -100.0f;       // uplink noise between bursts
+    bool lossOn = true;                                   // samples lost (SDR overflow, timing slip)
     int holdS = 5;
     bool beep = true;
     bool autoLog = true;
@@ -33,7 +34,7 @@ struct TetraAlarmSettings {
 
 class TetraAlarms {
 public:
-    enum Kind { A_LEVEL, A_MER, A_CRC, A_SYNC, A_UL, A_COUNT };
+    enum Kind { A_LEVEL, A_MER, A_CRC, A_SYNC, A_UL, A_LOSS, A_COUNT };
 
     struct Input {
         bool valid = false;
@@ -42,6 +43,7 @@ public:
         float crcFail = NAN;    // % in the last second
         bool lockLost = false;  // no lock or sync loss in the last second
         float ulNoise = NAN;
+        bool dataLoss = false;  // the SDR reported lost samples / timing slip in the last second
     };
 
     // once per second; returns texts for the event log
@@ -57,12 +59,13 @@ public:
             st.merOn && !std::isnan(in.mer) && in.mer < st.merBelow,
             st.crcOn && !std::isnan(in.crcFail) && in.crcFail > st.crcAbove,
             st.syncOn && in.lockLost,
-            st.ulOn && !std::isnan(in.ulNoise) && in.ulNoise > st.ulAbove
+            st.ulOn && !std::isnan(in.ulNoise) && in.ulNoise > st.ulAbove,
+            st.lossOn && in.dataLoss
         };
         char b[160];
         for (int k = 0; k < A_COUNT; k++) {
             if (cond[k] != active[k]) { cnt[k]++; } else { cnt[k] = 0; }
-            int need = (k == A_SYNC && cond[k]) ? 1 : (std::max)(1, st.holdS);   // sync losses count at once
+            int need = ((k == A_SYNC || k == A_LOSS) && cond[k]) ? 1 : (std::max)(1, st.holdS);   // sync and sample losses count at once
             if (cnt[k] >= need) {
                 active[k] = cond[k];
                 cnt[k] = 0;
@@ -72,13 +75,14 @@ public:
                     case A_MER: snprintf(b, sizeof(b), "ALARM MER %.1f dB below %.1f dB", in.mer, st.merBelow); break;
                     case A_CRC: snprintf(b, sizeof(b), "ALARM CRC errors %.1f %% above %.1f %%", in.crcFail, st.crcAbove); break;
                     case A_SYNC: snprintf(b, sizeof(b), "ALARM lock / sync lost"); break;
+                    case A_LOSS: snprintf(b, sizeof(b), "ALARM samples lost (SDR overflow / timing slip)"); break;
                     default: snprintf(b, sizeof(b), "ALARM uplink noise %.1f above %.1f", in.ulNoise, st.ulAbove); break;
                     }
                     raised = true;
                     count++;
                 }
                 else {
-                    static const char* names[A_COUNT] = { "level", "MER", "CRC errors", "lock / sync", "uplink noise" };
+                    static const char* names[A_COUNT] = { "level", "MER", "CRC errors", "lock / sync", "uplink noise", "lost samples" };
                     snprintf(b, sizeof(b), "alarm cleared: %s", names[k]);
                 }
                 ev.push_back(b);
@@ -97,7 +101,7 @@ public:
         return false;
     }
     std::string activeText() const {
-        static const char* names[A_COUNT] = { "level", "MER", "CRC", "sync", "UL noise" };
+        static const char* names[A_COUNT] = { "level", "MER", "CRC", "sync", "UL noise", "lost samples" };
         std::string s;
         for (int k = 0; k < A_COUNT; k++) {
             if (!active[k]) { continue; }
@@ -133,6 +137,7 @@ public:
         row("Lock / sync lost", &st.syncOn, nullptr, 0, nullptr);
         row(calibrated ? "UL noise above (dBm)" : "UL noise above (dBFS)", &st.ulOn, &st.ulAbove, 1.0f, "%.0f");
         if (st.ulOn) { tw::TextDisabled("UL noise needs the burst analysis on the uplink."); }
+        row("Samples lost (overflow / slip)", &st.lossOn, nullptr, 0, nullptr);
         ImGui::SetNextItemWidth(w);
         if (ImGui::InputInt(("Hold time (s)##_al_hold_" + id).c_str(), &st.holdS, 1, 5)) { st.holdS = std::clamp(st.holdS, 1, 600); ch = true; }
         ch |= ImGui::Checkbox(("Start CSV log on alarm##_al_log_" + id).c_str(), &st.autoLog);

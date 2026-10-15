@@ -693,6 +693,7 @@ private:
 
         if (_this->running) { SmGui::EndDisabled(); }
 
+        _this->gainLockBegin();
         SmGui::LeftLabel("Gain");
         SmGui::FillWidth();
         if (SmGui::SliderFloat(CONCAT("##_usrp_gain_slid_", _this->name), &_this->gain, _this->gainRange.start(), _this->gainRange.stop(), SmGui::FMT_STR_FLOAT_ONE_DECIMAL)) {
@@ -703,6 +704,7 @@ private:
                 config.release(true);
             }
         }
+        _this->gainLockEnd(_this->name);
 
         if (_this->antennas.size() > 1) {
             SmGui::LeftLabel("Antenna");
