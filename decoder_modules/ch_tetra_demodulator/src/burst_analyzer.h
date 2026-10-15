@@ -325,7 +325,7 @@ private:
     }
 
     void drawTiming(const std::string& id, float width, const TetraConstellationView::Palette& pal, const TetraBurstResult& r) {
-        if (!ImGui::TreeNode(("Burst timing vs. downlink##_ba_tn_" + id).c_str())) { return; }
+        if (!ImGui::TreeNodeEx(("Burst timing vs. downlink##_ba_tn_" + id).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
         if (!hasDlTap()) {
             tw::TextDisabled("Needs the TETRA VFO on the downlink of the same cell\n(inside the SDR span, more than 50 kHz from the burst frequency).");
             ImGui::TreePop();
@@ -385,7 +385,7 @@ private:
     }
 
     void drawTransients(const std::string& id, float width, const TetraBurstResult& r) {
-        if (!ImGui::TreeNode(("Ramp spectrum (switching transients)##_ba_trn_" + id).c_str())) { return; }
+        if (!ImGui::TreeNodeEx(("Ramp spectrum (switching transients)##_ba_trn_" + id).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
         if (!r.transValid) { tw::TextDisabled("needs full-slot bursts"); ImGui::TreePop(); return; }
         tw::TextDisabled("Channel power (TETRA filter) in 1.8 ms windows, dBc\nrelative to the own channel in the middle of the burst.");
         ImGuiTableFlags tf = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX;

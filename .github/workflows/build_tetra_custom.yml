@@ -99,6 +99,30 @@ jobs:
               exit 1
             fi
 
+        - name: Documentation screenshots (branch doc-shots)
+          if: github.ref == 'refs/heads/main'
+          continue-on-error: true
+          run: |
+            export E2E_ROOT_DEV="$PWD/e2eroot" E2E_BUILD_DIR="$PWD/build" E2E_BINARY="$PWD/AppDir/usr/bin/sdrpp"
+            export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib" SDRPP_APPDIR="$PWD/AppDir" LIBGL_ALWAYS_SOFTWARE=1
+            sudo apt-get install -y imagemagick > /dev/null
+            mkdir -p docshots
+            timeout 600 xvfb-run -a -s "-screen 0 1600x1000x24" python3 e2e/doc/doc_screenshots.py "$PWD/docshots" || true
+            # example coverage maps (synthetic drive) rendered with the browser of the runner
+            g++ -O1 -std=c++17 -Idecoder_modules/ch_tetra_demodulator/src e2e/doc/doc_map.cpp -o doc_map
+            (cd docshots && ../doc_map drive.csv)
+            for m in level quality; do
+              timeout 120 google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1400,900 \
+                --virtual-time-budget=20000 --screenshot="docshots/map_$m.png" "file://$PWD/docshots/drive_${m}_map.html" || true
+            done
+            ls -la docshots
+            cd docshots
+            git init -q
+            git checkout -q -b doc-shots
+            git add -A
+            git -c user.name=UnImAtrIXzEr0 -c user.email=UnImAtrIXzEr0@users.noreply.github.com commit -qm "Screenshots for the manual"
+            git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" doc-shots
+
     build_windows:
         if: ${{ !contains(github.ref_name, 'macos') }}
         runs-on: windows-2022
