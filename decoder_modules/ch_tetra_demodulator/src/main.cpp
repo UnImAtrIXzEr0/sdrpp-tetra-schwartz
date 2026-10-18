@@ -78,7 +78,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 5,
+    /* Version:         */ 0, 21, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -113,6 +113,10 @@ public:
         if (config.conf[name].contains("levelCalDb")) {
             levelCalDb = config.conf[name]["levelCalDb"];
         }
+        if (config.conf[name].contains("levelCalGainDb") && config.conf[name]["levelCalGainDb"].is_number()) {
+            levelCalGainDb = config.conf[name]["levelCalGainDb"];
+        }
+        levelCalEff = levelCalDb;
         if (config.conf[name].contains("freqRef") && config.conf[name]["freqRef"].is_number_integer()) {
             freqRef = std::clamp((int)config.conf[name]["freqRef"], 0, 2);
         }
@@ -167,6 +171,9 @@ public:
             if (b.contains("ramp")) { burstSt.maskRampSym = b["ramp"]; }
         }
         if (config.conf[name].contains("vemRun")) { vemRun = config.conf[name]["vemRun"]; }
+        if (config.conf[name].contains("chanRaster")) { chanRaster = config.conf[name]["chanRaster"]; }
+        if (config.conf[name].contains("vfoLocked")) { vfoLocked = config.conf[name]["vfoLocked"]; }
+        startViewDone = config.conf[name].contains("startViewV21");
         if (config.conf[name].contains("mp") && config.conf[name]["mp"].is_object()) {
             json& mp = config.conf[name]["mp"];
             if (mp.contains("run")) { mpRun = mp["run"]; }
@@ -242,6 +249,9 @@ public:
             burstAn.setName(name + " bursts");
             chanAn.setName(name + " channel");
             vemAn.setName(name + " modulation accuracy");
+            fftRedrawHandler.handler = fftRedraw;
+            fftRedrawHandler.ctx = this;
+            gui::waterfall.onFFTRedraw.bindHandler(&fftRedrawHandler);
         }
         constDiagSplitter.init(&mainDemodulator.out);
         constDiagSplitter.bindStream(&constDiagStream);
@@ -299,6 +309,7 @@ public:
     }
 
     ~TetraDemodulatorModule() {
+        gui::waterfall.onFFTRedraw.unbindHandler(&fftRedrawHandler);
         meas.stop();
         txa.stop();
         carrierMon.stopAll();
@@ -589,7 +600,7 @@ private:
 
     void startMeasurements() {
         meas.setGps(&gps);
-        meas.setLevelCal(levelCalDb);
+        meas.setLevelCal(levelCalEff);
         meas.setStationSource(&subscribers,
             [this](uint32_t ssi) -> std::string {
                 RadioIdEntry e;
@@ -618,7 +629,14 @@ private:
         tw::Text("Level:"); tw::SameNext();
         if (m.valid) {
             if (_this->levelCalDb != 0.0f) {
-                tw::TextColored(val, "%6.1f dBm", m.levelDbfs + _this->levelCalDb); tw::SameTextDisabled("(%.1f dBFS)", m.levelDbfs);
+                tw::TextColored(val, "%6.1f dBm", m.levelDbfs + _this->levelCalEff); tw::SameTextDisabled("(%.1f dBFS)", m.levelDbfs);
+                if (std::fabs(_this->levelCalEff - _this->levelCalDb) > 0.05f) {
+                    tw::SameTextDisabled("gain-corrected %+.1f dB", _this->levelCalEff - _this->levelCalDb);
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("The RF gain differs from the gain at calibration; the level is\n"
+                                          "corrected by the difference from the SDR's gain table (about +-1 dB).");
+                    }
+                }
             } else {
                 tw::TextColored(val, "%6.1f dBFS", m.levelDbfs);
             }
@@ -870,12 +888,22 @@ private:
         ImGui::SetNextItemWidth(menuWidth - ImGui::GetCursorPosX());
         if (ImGui::InputFloat(CONCAT("##_tetra_lcal_", _this->name), &_this->levelCalDb, 0.0f, 0.0f, "%.1f")) {
             config.acquire();
-            config.conf[_this->name]["levelCalDb"] = _this->levelCalDb;
+            // remember the gain the calibration is made at (correction later)
+            SourceGainInterface* cg = _this->findGainInterface();
+            _this->levelCalGainDb = (cg && cg->gainControllable()) ? (float)cg->gainStepDb(cg->gainStep()) : NAN;
+            if (std::isnan(_this->levelCalGainDb)) { config.conf[_this->name].erase("levelCalGainDb"); }
+            else { config.conf[_this->name]["levelCalGainDb"] = _this->levelCalGainDb; }
             config.release(true);
+            _this->levelCalEff = _this->levelCalDb;
             _this->meas.setLevelCal(_this->levelCalDb);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("dBm = dBFS + offset. Determine with a signal generator\nfor your SDR, gain setting and frequency. 0 = show dBFS.");
+            ImGui::SetTooltip("dBm = dBFS + offset. Determine with a signal generator for your SDR\n"
+                              "and frequency. The RF gain at the time of entry is remembered: later gain\n"
+                              "changes are corrected from the SDR's gain table (about +-1 dB). 0 = dBFS.");
+        }
+        if (_this->levelCalDb != 0.0f && std::isnan(_this->levelCalGainDb) && _this->findGainInterface()) {
+            tw::TextColored(tc::warn(), "Please enter the calibration again (gain at calibration unknown)");
         }
 
         // CSV logging
@@ -901,7 +929,7 @@ private:
                     _this->logError.clear();
                     std::string lp = _this->meas.getLogPath();
                     if (_this->carrierMon.count() > 0 && lp.size() > 4) {
-                        _this->carrierMon.startLog(lp.substr(0, lp.size() - 4) + "_carriers.csv", _this->levelCalDb);
+                        _this->carrierMon.startLog(lp.substr(0, lp.size() - 4) + "_carriers.csv", _this->levelCalEff);
                     }
                 }
             }
@@ -985,56 +1013,6 @@ private:
             config.conf[_this->name]["hamMode"] = true;
             config.release(true);
         }
-        tw::Text("Signal constellation: ");
-        if (tw::SameCheckbox(CONCAT("8 points (pi/4)##_tetra_c8_", _this->name), &_this->constellation8)) {
-            config.acquire();
-            config.conf[_this->name]["constellation8"] = _this->constellation8;
-            config.release(true);
-        }
-        _this->drawOffsetCompCheckbox();
-        {
-            // one line if it fits, otherwise two columns under the label
-            std::string l0 = std::string("Constellation##_tetra_cdet_") + _this->name;
-            std::string l1 = std::string("Stations##_tetra_sdet_top_") + _this->name;
-            std::string l2 = std::string("Network##_tetra_ndet_top_") + _this->name;
-            std::string l3 = std::string("TX analysis##_tetra_tdet_top_") + _this->name;
-            tw::CheckRow row;
-            row.add(l0.c_str(), &_this->constDetached);
-            row.add(l1.c_str(), &_this->subsDetached, _this->hamMode);   // stations: amateur radio mode only
-            row.add(l2.c_str(), &_this->netDetached);
-            row.add(l3.c_str(), &_this->txaDetached);
-            std::string l4 = std::string("Trends##_tetra_trdet_top_") + _this->name;
-            std::string l5 = std::string("Carriers##_tetra_crdet_top_") + _this->name;
-            std::string l6 = std::string("Bursts##_tetra_bdet_top_") + _this->name;
-            row.add(l4.c_str(), &_this->trendDetached);
-            row.add(l5.c_str(), &_this->carrDetached);
-            row.add(l6.c_str(), &_this->burstDetached);
-            std::string l7 = std::string("Multipath##_tetra_mpdet_top_") + _this->name;
-            row.add(l7.c_str(), &_this->mpDetached);
-            int ch = row.draw("Own window:");
-            if (ch >= 0) {
-                config.acquire();
-                config.conf[_this->name]["constDetached"] = _this->constDetached;
-                config.conf[_this->name]["subsDetached"] = _this->subsDetached;
-                config.conf[_this->name]["netDetached"] = _this->netDetached;
-                config.conf[_this->name]["txaDetached"] = _this->txaDetached;
-                config.conf[_this->name]["trendDetached"] = _this->trendDetached;
-                config.conf[_this->name]["carrDetached"] = _this->carrDetached;
-                config.conf[_this->name]["burstDetached"] = _this->burstDetached;
-                config.release(true);
-                if (ch == 4 && _this->trendDetached) { _this->focusTrendWin = true; }
-                if (ch == 5 && _this->carrDetached) { _this->focusCarrWin = true; }
-                if (ch == 6 && _this->burstDetached) { _this->focusBurstWin = true; }
-                if (ch == 7) { _this->saveMpConfig(); if (_this->mpDetached) { _this->focusMpWin = true; } }
-                if (ch == 1 && _this->subsDetached) { _this->focusSubsWin = true; }
-                if (ch == 2 && _this->netDetached) { _this->focusNetWin = true; }
-                if (ch == 3 && _this->txaDetached) { _this->focusTxaWin = true; }
-            }
-        }
-        if (!_this->constDetached) {
-            _this->drawConstellation(menuWidth);
-        }
-
         if (_this->decoder_mode != 0) {
             tw::TextColored(tc::warn(), "NETSYMS mode: built-in decoder and decoder-based\nmeasurements are off (see NETSYMS at the bottom).");
         }
@@ -1345,6 +1323,18 @@ private:
             if (!afcStatus.empty()) { tw::SameTextColored(warn, "(limit)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", afcStatus.c_str()); } }
         }
 
+        drawSdrAdvice(menuWidth);
+        if (ImGui::Checkbox(CONCAT("Lock VFO##_tetra_vfolock_", name), &vfoLocked)) {
+            config.acquire();
+            config.conf[name]["vfoLocked"] = vfoLocked;
+            config.release(true);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("The mouse no longer tunes the TETRA VFO: clicking or dragging in the\n"
+                              "spectrum / waterfall moves the view instead, the wheel does nothing.\n"
+                              "AFC and frequency entry still work.");
+        }
+
         SourceGainInterface* g = findGainInterface();
         if (ImGui::Checkbox(CONCAT("Auto RF gain##_tetra_agc_", name), &autoGain)) {
             config.acquire();
@@ -1412,8 +1402,8 @@ private:
             else if (gainHolding) { tw::TextColored(good, "held"); tw::SameTextDisabled("(levelled %s)", gainHeldAt.c_str()); }
             else { tw::TextColored(warn, "levelling..."); }
             if (!gainHoldWarn.empty()) { tw::TextColored(tc::bad(), "%s", gainHoldWarn.c_str()); }
-            if (levelCalDb != 0.0f && gainMode == 1) { tw::TextColored(warn, "Level calibration is only valid at the calibration gain."); }
-            if (levelCalDb != 0.0f && gainMode == 2 && gainMoving) { tw::TextDisabled("moving, but held: level calibration active"); }
+            if (!calAllowsFollow() && gainMode == 1) { tw::TextColored(warn, "Level calibration without known gain: dBm wrong after gain steps."); }
+            if (!calAllowsFollow() && gainMode == 2 && gainMoving) { tw::TextDisabled("moving, but held: calibration gain unknown"); }
         }
         // whole-band view: ADC peak over the full SDR bandwidth and channel SNR
         tw::Text("Band:"); tw::SameNext();
@@ -1434,7 +1424,26 @@ private:
 
     // Called every frame from the GUI thread
     void controlLoops() {
+        if (vfo && vfo->wtfVFO) { vfo->wtfVFO->positionLocked = enabled && vfoLocked; }
         if (!enabled) { return; }
+        {
+            // dBm calibration follows the RF gain (difference from the gain table)
+            float eff = levelCalDb;
+            SourceGainInterface* cg = findGainInterface();
+            if (levelCalDb != 0.0f && !std::isnan(levelCalGainDb) && cg && cg->gainControllable()) {
+                eff = levelCalDb - ((float)cg->gainStepDb(cg->gainStep()) - levelCalGainDb);
+            }
+            if (eff != levelCalEff) { levelCalEff = eff; meas.setLevelCal(levelCalEff); }
+        }
+        // first start (centre still at the edition default 439 MHz): put the
+        // top of the SDR band at 440 MHz, where the amateur TETRA cells are
+        if (!startViewDone && gui::mainWindow.sdrIsRunning() && sigpath::iqFrontEnd.getSampleRate() > 0) {
+            startViewDone = true;
+            if (std::fabs(gui::waterfall.getCenterFrequency() - 439000000.0) < 1.0) { applyStartView(); }
+            config.acquire();
+            config.conf[name]["startViewV21"] = true;
+            config.release(true);
+        }
         auto now = std::chrono::steady_clock::now();
         if (bandMon.isRunning() && std::chrono::duration<double>(now - bandLast).count() >= 1.0) {
             bandLast = now;
@@ -1525,12 +1534,12 @@ private:
                 gainStillS = 0;
                 if (!gainMoving) {
                     gainMoving = true;
-                    if (autoGain && gainMode == 2 && levelCalDb == 0.0f) { meas.addEvent("Moving: auto RF gain follows the level"); gainHoldWarn.clear(); }
+                    if (autoGain && gainMode == 2 && calAllowsFollow()) { meas.addEvent("Moving: auto RF gain follows the level"); gainHoldWarn.clear(); }
                 }
             }
             else if (gainMoving && ++gainStillS >= 30) {
                 gainMoving = false;
-                if (autoGain && gainMode == 2 && levelCalDb == 0.0f) {
+                if (autoGain && gainMode == 2 && calAllowsFollow()) {
                     // standing: keep the gain found while moving
                     fixGain("standing still");
                 }
@@ -1643,7 +1652,51 @@ private:
 
     // a level calibration (dBm) is only valid at the gain it was made with:
     // automatic mode then holds even while moving
-    bool gainFollowNow() const { return gainMode == 1 || (gainMode == 2 && gainMoving && levelCalDb == 0.0f); }
+    // centre = 440 MHz - 0.45 x sample rate: the band ends just above 440 MHz
+    void applyStartView() {
+        double sr = sigpath::iqFrontEnd.getSampleRate();
+        if (!(sr > 0)) { return; }
+        double f = std::round((440000000.0 - 0.45 * sr) / 1000.0) * 1000.0;
+        gui::waterfall.setCenterFrequency(f);
+        gui::waterfall.centerFreqMoved = true;
+        meas.addEvent("Start view: centre " + std::to_string((long long)std::llround(f / 1000.0)) + " kHz (band up to 440 MHz)");
+    }
+
+    // recommended sample rates of the common SDRs (TETRA downlink; duplex needs more)
+    struct SdrAdvice { const char* match; double minSr, maxSr; const char* note; };
+    static const SdrAdvice* sdrAdvice(const std::string& src) {
+        static const SdrAdvice tbl[] = {
+            { "PlutoSDR", 3e6, 7e6, "3-5 MS/s (USB 2.0 up to about 7 MS/s), gain mode Manual" },
+            { "RTL", 1e6, 2.4e6, "up to 2.4 MS/s, tuner AGC off" },
+            { "USRP", 4e6, 16e6, "4 MS/s for the downlink; 12 MS/s or more for downlink + uplink at 9.4 MHz duplex" },
+            { "Airspy", 2.5e6, 10e6, "2.5-10 MS/s, Linear or Sensitive mode" },
+            { "SDRplay", 2e6, 10e6, "2-8 MS/s, IF AGC off" },
+            { "HackRF", 2e6, 20e6, "2-10 MS/s (8 bit: little dynamic range)" },
+            { "BladeRF", 2e6, 20e6, "2-10 MS/s, gain mode Manual" },
+            { "LimeSDR", 2e6, 20e6, "2-10 MS/s" },
+        };
+        for (auto& a : tbl) { if (src.find(a.match) != std::string::npos) { return &a; } }
+        return nullptr;
+    }
+    void drawSdrAdvice(float menuWidth) {
+        const std::string& src = sigpath::sourceManager.getSelectedName();
+        double sr = sigpath::iqFrontEnd.getSampleRate();
+        tw::Text("SDR:"); tw::SameNext();
+        const SdrAdvice* a = sdrAdvice(src);
+        bool ok = !a || (sr >= a->minSr - 1.0 && sr <= a->maxSr + 1.0);
+        tw::TextColored(ok ? tc::val() : tc::warn(), "%s %.2f MS/s", src.c_str(), sr / 1e6);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Recommended: %s", a ? a->note : "a few MS/s around the TETRA channel");
+        }
+        if (!ok) { tw::SameTextColored(tc::warn(), "(see tooltip)"); }
+        if (tw::SameSmallButton(CONCAT("Recommended view##_tetra_startview_", name))) { applyStartView(); }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Centre the SDR so that its band ends just above 440 MHz\n(centre = 440 MHz - 0.45 x sample rate)."); }
+        (void)menuWidth;
+    }
+
+    bool gainFollowNow() const { return gainMode == 1 || (gainMode == 2 && gainMoving && calAllowsFollow()); }
+    // dBm stays right while following only if the gain at calibration is known
+    bool calAllowsFollow() const { return levelCalDb == 0.0f || !std::isnan(levelCalGainDb); }
 
     void restartLevelling() {
         gainHolding = false;
@@ -1676,14 +1729,15 @@ private:
 
     // ---------------- Menu sections in a user-defined order ----------------
 
-    enum SectionId { S_MEAS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_ALARM, S_REPORT, S_GPS, S_NET, S_SUBS, S_DUP, S_COUNT };
+    enum SectionId { S_MEAS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_ALARM, S_REPORT, S_GPS, S_NET, S_SUBS, S_DUP, S_CONST, S_COUNT };
     static const char* sectionKey(int id) {
-        static const char* k[S_COUNT] = { "meas", "txa", "trend", "carriers", "bursts", "multipath", "alarms", "report", "gps", "network", "stations", "duplex" };
+        static const char* k[S_COUNT] = { "meas", "txa", "trend", "carriers", "bursts", "multipath", "alarms", "report", "gps", "network", "stations", "duplex", "constellation" };
         return (id >= 0 && id < S_COUNT) ? k[id] : "";
     }
     void defaultSectionOrder() {
         secOrder.clear();
-        for (int i = 0; i < S_COUNT; i++) { secOrder.push_back(i); }
+        secOrder.push_back(S_CONST);   // constellation first (v0.21: own section)
+        for (int i = 0; i < S_COUNT; i++) { if (i != S_CONST) { secOrder.push_back(i); } }
     }
     void loadSectionOrder() {
         defaultSectionOrder();
@@ -1696,7 +1750,12 @@ private:
                 if (k == sectionKey(i) && std::find(o.begin(), o.end(), i) == o.end()) { o.push_back(i); }
             }
         }
-        for (int i = 0; i < S_COUNT; i++) { if (std::find(o.begin(), o.end(), i) == o.end()) { o.push_back(i); } }   // new sections
+        // new sections: the constellation goes above the measurements, others to the end
+        if (std::find(o.begin(), o.end(), (int)S_CONST) == o.end()) {
+            auto it = std::find(o.begin(), o.end(), (int)S_MEAS);
+            o.insert(it, (int)S_CONST);
+        }
+        for (int i = 0; i < S_COUNT; i++) { if (std::find(o.begin(), o.end(), i) == o.end()) { o.push_back(i); } }
         secOrder = o;
     }
     void saveSectionOrder() {
@@ -1787,6 +1846,27 @@ private:
             }
         }
         if (gh && !ImGui::IsItemActive()) { ImGui::SetTooltip("Drag to move this section, right-click the header for more"); }
+        // own window: icon left of the grip (blue while the window is open)
+        if (bool* df = detachFlag(id)) {
+            float iw = ImGui::GetFontSize() * 1.25f;
+            ImVec2 keep = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(ImVec2(hMax.x - gw - iw - 2.0f * ImGui::GetStyle().FramePadding.x, hMin.y));
+            if (ImGui::InvisibleButton((std::string("##_tetra_secwin_") + sectionKey(id) + name).c_str(), ImVec2(iw, hMax.y - hMin.y))) { setDetached(id, !*df); }
+            bool wh = ImGui::IsItemHovered();
+            ImVec2 bmin = ImGui::GetItemRectMin(), bmax = ImGui::GetItemRectMax();
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImU32 c = *df ? ImGui::GetColorU32(ImGuiCol_CheckMark) : ImGui::GetColorU32(wh ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+            float sz = ImGui::GetFontSize() * 0.62f, th = (std::max)(1.0f, ImGui::GetFontSize() * 0.08f);
+            float cx = (bmin.x + bmax.x) * 0.5f, cy = (bmin.y + bmax.y) * 0.5f;
+            ImVec2 a(cx - sz * 0.5f, cy - sz * 0.35f), b(cx + sz * 0.3f, cy + sz * 0.5f);
+            dl->AddRect(a, b, c, 0.0f, 0, th);
+            ImVec2 t0(cx - sz * 0.05f, cy + sz * 0.05f), t1(cx + sz * 0.55f, cy - sz * 0.55f);
+            dl->AddLine(t0, t1, c, th);
+            dl->AddLine(t1, ImVec2(t1.x - sz * 0.35f, t1.y), c, th);
+            dl->AddLine(t1, ImVec2(t1.x, t1.y + sz * 0.35f), c, th);
+            if (wh) { ImGui::SetTooltip(*df ? "Own window is open - click to put it back into the menu" : "Show this section in its own window"); }
+            ImGui::SetCursorScreenPos(keep);
+        }
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
             ImGui::SetDragDropPayload("TETRA_SECTION", &id, sizeof(int));
             const char* hash = strstr(label, "##");
@@ -1803,14 +1883,19 @@ private:
         switch (id) {
         case S_MEAS:
             if (sectionHeader(id, CONCAT("Measurements##_tetra_meas_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (_this->constDetached) {
-                    // shown below the constellation in its own window, not twice
-                    tw::TextDisabled("Shown in the constellation window.");
-                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusConstWin = true; }
-                } else {
-                    drawMeasurements(_this, menuWidth);
-                }
+                drawMeasurements(_this, menuWidth);
                 _this->drawVem(menuWidth);
+            }
+            break;
+        case S_CONST:
+            if (sectionHeader(id, CONCAT("Constellation##_tetra_const_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (_this->constDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_cfront_", _this->name))) { _this->focusConstWin = true; }
+                } else {
+                    _this->drawConstellationOptions("");
+                    _this->drawConstellation(menuWidth);
+                }
             }
             break;
         case S_TXA:
@@ -1875,12 +1960,6 @@ private:
         case S_NET:
             //OSMO-TETRA: network & cell information (optionally in its own window)
             if (sectionHeader(id, CONCAT("Network & cell##_tetra_net_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (ImGui::Checkbox(CONCAT("Separate window##_tetra_ndet_", _this->name), &_this->netDetached)) {
-                    config.acquire();
-                    config.conf[_this->name]["netDetached"] = _this->netDetached;
-                    config.release(true);
-                    if (_this->netDetached) { _this->focusNetWin = true; }
-                }
                 if (_this->netDetached) {
                     tw::TextDisabled("Shown in its own window.");
                     if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_nfront_", _this->name))) { _this->focusNetWin = true; }
@@ -2031,6 +2110,59 @@ private:
 
     // ---------------- Constellation & floating windows ----------------
 
+    void drawConstellationOptions(const char* suffix) {
+        if (ImGui::Checkbox(CONCAT(std::string("8 points (pi/4)##_tetra_c8") + suffix + "_", name), &constellation8)) {
+            config.acquire();
+            config.conf[name]["constellation8"] = constellation8;
+            config.release(true);
+        }
+        tw::SameLineFor(tw::checkboxWidth("Remove I/Q offset"));
+        drawOffsetCompCheckbox(suffix);
+    }
+
+    // own window per section (icon in the section header)
+    bool* detachFlag(int id) {
+        switch (id) {
+        case S_CONST: return &constDetached;
+        case S_TXA: return &txaDetached;
+        case S_TREND: return &trendDetached;
+        case S_CARR: return &carrDetached;
+        case S_BURST: return &burstDetached;
+        case S_MP: return &mpDetached;
+        case S_NET: return &netDetached;
+        case S_SUBS: return &subsDetached;
+        default: return nullptr;
+        }
+    }
+    void setDetached(int id, bool on) {
+        bool* f = detachFlag(id);
+        if (!f) { return; }
+        *f = on;
+        if (id == S_MP) { saveMpConfig(); }
+        else {
+            static const struct { int id; const char* key; } keys[] = { { S_CONST, "constDetached" }, { S_TXA, "txaDetached" }, { S_TREND, "trendDetached" },
+                                                                       { S_CARR, "carrDetached" }, { S_BURST, "burstDetached" }, { S_NET, "netDetached" }, { S_SUBS, "subsDetached" } };
+            for (auto& k : keys) {
+                if (k.id != id) { continue; }
+                config.acquire();
+                config.conf[name][k.key] = on;
+                config.release(true);
+            }
+        }
+        if (!on) { return; }
+        switch (id) {
+        case S_CONST: focusConstWin = true; break;
+        case S_TXA: focusTxaWin = true; break;
+        case S_TREND: focusTrendWin = true; break;
+        case S_CARR: focusCarrWin = true; break;
+        case S_BURST: focusBurstWin = true; break;
+        case S_MP: focusMpWin = true; break;
+        case S_NET: focusNetWin = true; break;
+        case S_SUBS: focusSubsWin = true; break;
+        default: break;
+        }
+    }
+
     void drawConstellation(float width) {
         TetraMeasSnapshot m = meas.get();
         // with the offset removed from the display, judge the colour by the
@@ -2039,7 +2171,7 @@ private:
         bool good = m.valid && m.symSync && evm <= TetraConstellationView::RMS_LIMIT * 100.0f;
         constView.legendEvm = m.valid ? evm : NAN;
         constView.legendWhat = compOriginOffset ? "EVM w/o I/Q offset" : "EVM";
-        // Colours follow the theme if it defines "Constellation*" keys (e.g. "RoSc 2")
+        // Colours follow the theme if it defines "Constellation*" keys (e.g. "RoSc light", "RoSc dark")
         {
             TetraConstellationView::Palette p;
             ImVec4 c;
@@ -2424,6 +2556,16 @@ private:
     }
 
     void drawTxAnalysis(float menuWidth) {
+        if (ImGui::Checkbox(CONCAT("25 kHz channel raster in the spectrum##_tetra_raster_", name), &chanRaster)) {
+            config.acquire();
+            config.conf[name]["chanRaster"] = chanRaster;
+            config.release(true);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Dashed lines at +-12.5 kHz and +-37.5 kHz around the TETRA channel:\n"
+                              "the own channel and the adjacent channels (ACP measurement).\n"
+                              "Smoothing of the spectrum: Display menu -> FFT Smoothing.");
+        }
         if (ImGui::Checkbox(CONCAT("Run analysis (250 kHz tap)##_tetra_txarun_", name), &txaRun)) { saveTxaConfig(); }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Separate 250 kHz wide tap around the TETRA channel (not shown on the waterfall).\n"
@@ -2831,14 +2973,14 @@ private:
         TetraMeasSnapshot m = meas.get();
         bool ok = m.valid;
         carrierMon.draw(name, width, constView.pal, mainVfoFreq(), ok ? m.levelDbfs : NAN, ok ? m.merDb : NAN,
-                        ok && m.symSync, levelCalDb, neighbourCarriers());
+                        ok && m.symSync, levelCalEff, neighbourCarriers());
         if (carrierMon.takeChanged()) { saveCarriers(); }
     }
 
     void drawBursts(float width) {
         TetraMeasSnapshot m = meas.get();
         bool run = burstRun;
-        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalDb, run)) {
+        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalEff, run)) {
             burstRun = run;
             saveBurstConfig();
         }
@@ -2892,6 +3034,28 @@ private:
         mp["mem"] = mpMem;
         mp["detached"] = mpDetached;
         config.release(true);
+    }
+
+    // channel raster: dashed boundaries of the TETRA channel and its neighbours
+    // (+-12.5 kHz, +-37.5 kHz) in the spectrum
+    static void fftRedraw(ImGui::WaterFall::FFTRedrawArgs args, void* ctx) {
+        TetraDemodulatorModule* _this = (TetraDemodulatorModule*)ctx;
+        if (!_this->enabled || !_this->chanRaster || !_this->vfo) { return; }
+        if (args.freqToPixelRatio * 25000.0 < 8.0) { return; }   // zoomed out too far
+        double fc = _this->mainVfoFreq();
+        ImDrawList* dl = args.window->DrawList;
+        ImVec4 tc4 = ImGui::GetStyleColorVec4(ImGuiCol_Text);
+        tc4.w *= 0.45f;
+        ImU32 col = ImGui::ColorConvertFloat4ToU32(tc4);
+        float dash = 4.0f * style::uiScale;
+        for (int k = -3; k <= 3; k += 2) {
+            double f = fc + k * 12500.0;
+            if (f < args.lowFreq || f > args.highFreq) { continue; }
+            float x = (float)std::round(args.min.x + (f - args.lowFreq) * args.freqToPixelRatio) + 0.5f;
+            for (float y = args.min.y; y < args.max.y; y += 2.0f * dash) {
+                dl->AddLine(ImVec2(x, y), ImVec2(x, (std::min)(y + dash, args.max.y)), col, 1.0f);
+            }
+        }
     }
 
     // modulation accuracy per EN 300 394-1 10.1.3 (own measurement path)
@@ -2969,11 +3133,11 @@ private:
             d.mp = c.mp;
             d.mpSlots = c.slots;
         }
-        d.mainLevel = m.valid ? m.levelDbfs + levelCalDb : NAN;
+        d.mainLevel = m.valid ? m.levelDbfs + levelCalEff : NAN;
         for (int i = 0; i < carrierMon.count(); i++) {
             const auto& c = carrierMon.at(i);
             if (!c.valid) { continue; }
-            d.carriers.push_back({ c.label, c.freqHz / 1e6, c.level + levelCalDb, c.sync ? c.mer : NAN, c.sync });
+            d.carriers.push_back({ c.label, c.freqHz / 1e6, c.level + levelCalEff, c.sync ? c.mer : NAN, c.sync });
         }
         auto subs = subscribers.snapshot();
         for (auto& sub : subs) { if (sub.kind == TetraSubscriber::KIND_GROUP) { d.groups++; } else { d.stations++; } }
@@ -3105,11 +3269,8 @@ private:
             if (focusConstWin) { ImGui::SetNextWindowFocus(); focusConstWin = false; }
             if (ImGui::Begin(title.c_str(), &open)) {
                 float w = ImGui::GetContentRegionAvail().x;
-                ImGui::Checkbox(CONCAT("8 points (pi/4)##_tetra_c8w_", name), &constellation8);
-                tw::SameLineFor(tw::checkboxWidth("Remove I/Q offset"));
-                drawOffsetCompCheckbox("w");
+                drawConstellationOptions("w");
                 drawConstellation(w);
-                drawMeasurements(this, w);
             }
             ImGui::End();
             if (!open) {
@@ -3162,11 +3323,6 @@ private:
 
     void drawSubscribers(float menuWidth) {
         if (!sectionHeader(S_SUBS, CONCAT("Stations & Traffic##_tetra_subs_", name), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
-        if (ImGui::Checkbox(CONCAT("Separate window##_tetra_sdet_", name), &subsDetached)) {
-            config.acquire();
-            config.conf[name]["subsDetached"] = subsDetached;
-            config.release(true);
-        }
         if (subsDetached) {
             tw::TextDisabled("Shown in its own window.");
             if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_sfront_", name))) { focusSubsWin = true; }
@@ -3611,6 +3767,10 @@ private:
     TetraChannelAnalyzer chanAn;
     TetraVemAnalyzer vemAn;
     bool vemRun = true;
+    bool chanRaster = true;   // 25 kHz channel boundaries around the TETRA channel in the spectrum
+    bool vfoLocked = false;   // no mouse tuning of the TETRA VFO (drag pans the view)
+    bool startViewDone = false;
+    EventHandler<ImGui::WaterFall::FFTRedrawArgs> fftRedrawHandler;
     bool mpRun = false, mpDetached = false, focusMpWin = false;
     int mpMem = 1;
     TetraEvalView evalView;
@@ -3664,6 +3824,8 @@ private:
     int mapMetric = 0;
     RadioIdDb radioid;
     float levelCalDb = 0.0f;
+    float levelCalGainDb = NAN;   // RF gain (dB) when the calibration was entered
+    float levelCalEff = 0.0f;     // calibration corrected by the gain change since then
     FolderSelect logFolder;
     ExternalOpener opener;
     std::string logError;

@@ -1172,7 +1172,7 @@ void MainWindow::updateWaterfallZoomBandwidth(float bw) {
 void MainWindow::handleWaterfallInput(ImGui::WaterfallVFO* vfo) {
     if (!lockWaterfallControls && ImGui::GetTopMostPopupModal() == NULL) {
         // Handle arrow keys
-        if (vfo != NULL && (gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall)) {
+        if (vfo != NULL && !vfo->positionLocked && (gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall)) {
             bool freqChanged = false;
             if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) && !gui::freqSelect.digitHovered) {
                 double nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset - vfo->snapInterval;
@@ -1200,7 +1200,8 @@ void MainWindow::handleWaterfallInput(ImGui::WaterfallVFO* vfo) {
         int wheel = ImGui::GetIO().MouseWheel;
         // ignore the wheel while the mouse is over a floating window above the waterfall
         if (wheel != 0 && (gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall) &&
-            ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows)) {
+            ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows) &&
+            !(vfo != NULL && vfo->positionLocked)) {
             double nfreq;
             if (vfo != NULL) {
                 // Select factor depending on modifier keys

@@ -137,7 +137,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 
 <h2 id="s2-4">Was beim ersten Start eingestellt ist</h2>
 <ul>
-  <li>Startfrequenz <b>439 MHz</b> (70-cm-TETRA), Farbschema <b>RoSc 2</b>.</li>
+  <li>Startfrequenz <b>439 MHz</b> (70-cm-TETRA), Farbschema <b>RoSc light</b> (dunkle Variante: <b>RoSc dark</b>; passende Wasserfall-Farbskalen „RoSc light (paper)“, „RoSc dark (night)“, „KeSi (signal)“).</li>
   <li>TETRA-Demodulator im Modus <span class="ui">Amateur radio</span>, 8-Punkte-Konstellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> und <span class="ui">Auto RF gain</span> an, Audio auf <span class="ui">Audio</span>.</li>
   <li>Für TETRA nicht benötigte Module sind ausgeblendet oder aus: Radio, Frequency Manager, Band Plan, FT8/FT4, Rauschminderung, WebSDR, Rigctl, VFO Color, Debug. Alles lässt sich im <a href="#s3-2">Module Manager</a> wieder einblenden.</li>
   <li>In der Quellenliste stehen nur die unterstützten SDRs (siehe <a href="#s4-2">Kapitel 4</a>).</li>
@@ -162,6 +162,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li>Die Menüspalte ist in der Breite veränderbar; Inhalte brechen um, statt rechts zu verschwinden.</li>
   <li>Tabellen: Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Die Anordnung wird gespeichert.</li>
   <li><b>Bereiche im TETRA Demodulator verschieben:</b> am Griff (sechs Punkte rechts in der Kopfzeile) ziehen; eine Linie zeigt das Ziel. Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Die Reihenfolge wird gespeichert.</li>
+  <li><b>Eigenes Fenster:</b> Das Fenster-Symbol links vom Griff zeigt den Bereich in einem eigenen Fenster (Symbol blau = Fenster offen); ein zweiter Klick holt ihn zurück ins Menü. Die Konstellation ist ein eigener Bereich. Ganz oben stehen nur noch Audio und ETSI/Amateur radio.</li>
+  <li><b>Kanalraster:</b> Unter <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> zeigt das Spektrum gestrichelte Kanalgrenzen bei ±12,5 und ±37,5 kHz um den TETRA-Kanal. Eine Glättung des Spektrums gibt es unter <span class="ui">Display</span> → <span class="ui">FFT Smoothing</span>.</li>
 </ul>
 </div>
 </div>
@@ -170,7 +172,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>Unter <span class="ui">Module Manager</span> steht jedes Modul mit zwei Schaltern: <span class="ui">Menu</span> zeigt es in der Menüspalte, <span class="ui">On</span> schaltet es ein. Darunter lassen sich die eingebauten Menüs (VFO Color, Debug, Band Plan, Display, Theme) einblenden und unter <span class="ui">Sources in the source list</span> weitere SDR-Typen in die Quellenliste aufnehmen. Das gerade benutzte SDR bleibt immer sichtbar.</p>
 
 <h2 id="s3-3">Eigene Fenster</h2>
-<p>Unter <span class="ui">Own window</span> im TETRA-Demodulator lassen sich Konstellation (mit Messwerten), Stationen, Netz, TX-Analyse, Trends, Träger, Bursts und Mehrwege in eigene, frei verschiebbare Fenster auslagern – praktisch auf einem zweiten Bildschirm. Im Menü erscheint dann <span class="ui">Bring to front</span>. Position und Größe merkt sich das Programm.</p>
+<p>Mit dem Fenster-Symbol in der Kopfzeile eines Bereichs lassen sich Konstellation, Stationen, Netz, TX-Analyse, Trends, Träger, Bursts und Mehrwege in eigene, frei verschiebbare Fenster auslagern – praktisch auf einem zweiten Bildschirm. Im Menü erscheint dann <span class="ui">Bring to front</span>. Position und Größe merkt sich das Programm.</p>
 
 <!-- ============================================================ -->
 <h1 id="s4" class="pb"><span class="num">4</span>SDR einrichten</h1>
@@ -179,7 +181,9 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Burst-Zeitlage (Uplink und Downlink gleichzeitig) und weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
   <li><b>Mitte nicht auf den Träger legen:</b> Der Gleichanteil des SDR liegt in der Bandmitte. Den TETRA-Träger mindestens ~100 kHz daneben einstellen, sonst verfälscht er I/Q-Offset und Trägerrest.</li>
   <li><b>Pegel:</b> So viel Verstärkung wie nötig, so wenig wie möglich. <span class="ui">Auto RF gain</span> sucht den besten Signal-Rausch-Abstand: Es regelt in 3-dB-Schritten hoch, solange der Abstand noch steigt, und geht zurück, sobald der Rauschboden nur noch mitwächst. Sofort herunter geht es, wenn irgendein Signal im ganzen SDR-Band (nicht nur TETRA) die Wandlergrenze erreicht. Die Zeile <span class="ui">Band</span> zeigt diese Spitze und den Abstand.</li>
-  <li><b>Betriebsart der Verstärkung</b> (ab v0.20.4): <span class="ui">Level and hold</span> sucht die beste Stufe einmal und hält sie dann fest – alle Messwerte einer Messreihe entstehen mit denselben Empfängereinstellungen. Nähert sich der Wandler der Begrenzung oder fällt der Abstand um mehr als 6 dB, erscheint ein Hinweis; <span class="ui">Re-level</span> pegelt neu ein. <span class="ui">Follow</span> regelt laufend nach. <span class="ui">Automatic (GPS)</span> (Standard) folgt bei Fahrt (GPS über 5 km/h, gemittelt über 10 s) und hält nach 30 s Stillstand oder ohne GPS. Mit Pegelkalibrierung (dBm) hält es immer, weil die Kalibrierung nur bei ihrer Verstärkung gilt.</li>
+  <li><b>Betriebsart der Verstärkung</b> (ab v0.20.4): <span class="ui">Level and hold</span> sucht die beste Stufe einmal und hält sie dann fest – alle Messwerte einer Messreihe entstehen mit denselben Empfängereinstellungen. Nähert sich der Wandler der Begrenzung oder fällt der Abstand um mehr als 6 dB, erscheint ein Hinweis; <span class="ui">Re-level</span> pegelt neu ein. <span class="ui">Follow</span> regelt laufend nach. <span class="ui">Automatic (GPS)</span> (Standard) folgt bei Fahrt (GPS über 5 km/h, gemittelt über 10 s) und hält nach 30 s Stillstand oder ohne GPS. Mit Pegelkalibrierung (dBm) darf es ebenfalls folgen: Das Programm merkt sich die Verstärkung beim Eintragen der Kalibrierung und korrigiert den Pegel um die Differenz laut Gain-Tabelle des SDR (etwa ±1 dB, Anzeige „gain-corrected“). Bei älteren Kalibrierungen ohne gemerkte Verstärkung erscheint der Hinweis, sie neu einzutragen; bis dahin hält es.</li>
+  <li><b>Lock VFO:</b> Die Maus verstellt den TETRA-VFO nicht mehr – Klicken oder Ziehen im Spektrum und Wasserfall verschiebt nur die Ansicht, das Mausrad und die Pfeiltasten tun nichts. AFC und Frequenzeingabe wirken weiter.</li>
+  <li><b>SDR-Zeile:</b> zeigt Quelle und Abtastrate und empfiehlt einen Bereich (Tooltip). <span class="ui">Recommended view</span> stellt die Mitte auf 440 MHz − 0,45 × Abtastrate, sodass das Band knapp über 440 MHz endet; das geschieht auch automatisch beim allerersten Start.</li>
   <li><b>Gain-Regler gesperrt:</b> Solange Auto RF gain aktiv ist, ist der Gain-Regler unter Source gesperrt („Locked by TETRA Auto RF gain“). <span class="ui">Release</span> schaltet die Automatik ab und gibt den Regler frei.</li>
   <li><b>Aufwärmen:</b> Nach dem Einschalten 10–15 Minuten warten, bevor Frequenz kalibriert oder Stabilität gemessen wird.</li>
 </ul>

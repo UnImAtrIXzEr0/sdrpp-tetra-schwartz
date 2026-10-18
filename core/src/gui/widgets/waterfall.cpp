@@ -472,8 +472,8 @@ namespace ImGui {
                 return;
             }
 
-            // Now, check frequency scale
-            if (!targetFound && mouseInFreq) {
+            // Now, check frequency scale (a locked VFO: a drag anywhere pans the view)
+            if (!targetFound && (mouseInFreq || (selVfo != NULL && selVfo->positionLocked && (mouseInFFT || mouseInWaterfall)))) {
                 freqScaleSelect = true;
             }
         }
@@ -596,7 +596,7 @@ namespace ImGui {
 
         // Finally, if nothing else was selected, just move the VFO
         if ((VFOMoveSingleClick ? ImGui::IsMouseClicked(ImGuiMouseButton_Left) : ImGui::IsMouseDown(ImGuiMouseButton_Left)) && (mouseInFFT | mouseInWaterfall) && (mouseMoved || hoveredVFOName == "")) {
-            if (selVfo != NULL) {
+            if (selVfo != NULL && !selVfo->positionLocked) {
                 int refCenter = mousePos.x - fftAreaMin.x;
                 if (refCenter >= 0 && refCenter < dataWidth) {
                     double off = ((((double)refCenter / ((double)dataWidth / 2.0)) - 1.0) * (viewBandwidth / 2.0)) + viewOffset;

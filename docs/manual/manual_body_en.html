@@ -137,7 +137,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 
 <h2 id="s2-4">Settings at the first start</h2>
 <ul>
-  <li>Start frequency <b>439 MHz</b> (70 cm TETRA), colour theme <b>RoSc 2</b>.</li>
+  <li>Start frequency <b>439 MHz</b> (70 cm TETRA), colour theme <b>RoSc light</b> (dark variant: <b>RoSc dark</b>; matching waterfall colour maps "RoSc light (paper)", "RoSc dark (night)", "KeSi (signal)").</li>
   <li>TETRA demodulator in <span class="ui">Amateur radio</span> mode, 8-point constellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> and <span class="ui">Auto RF gain</span> on, audio to <span class="ui">Audio</span>.</li>
   <li>Modules not needed for TETRA are hidden or off: Radio, Frequency Manager, Band Plan, FT8/FT4, noise reduction, WebSDR, Rigctl, VFO Color, Debug. Everything can be shown again in the <a href="#s3-2">Module Manager</a>.</li>
   <li>The source list only contains the supported SDRs (see <a href="#s4-2">chapter 4</a>).</li>
@@ -162,6 +162,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li>The width of the menu column can be changed; contents wrap instead of disappearing on the right.</li>
   <li>Tables: move columns and change their width with the mouse; a right-click on the header shows or hides columns. The arrangement is saved.</li>
   <li><b>Reordering sections in the TETRA demodulator:</b> drag the grip (six dots on the right of the header); a line shows where the section lands. A right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The order is saved.</li>
+  <li><b>Own window:</b> the window icon left of the grip shows the section in its own window (icon blue = window open); a second click puts it back into the menu. The constellation is a section of its own. At the very top only audio and ETSI/Amateur radio remain.</li>
+  <li><b>Channel raster:</b> <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> draws dashed channel boundaries at ±12.5 and ±37.5 kHz around the TETRA channel in the spectrum. Smoothing of the spectrum: <span class="ui">Display</span> → <span class="ui">FFT Smoothing</span>.</li>
 </ul>
 </div>
 </div>
@@ -170,7 +172,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>In the <span class="ui">Module Manager</span> every module has two switches: <span class="ui">Menu</span> shows it in the menu column, <span class="ui">On</span> enables it. Below, the built-in menus (VFO Color, Debug, Band Plan, Display, Theme) can be shown, and further SDR types can be added to the source list under <span class="ui">Sources in the source list</span>. The SDR currently in use always stays visible.</p>
 
 <h2 id="s3-3">Own windows</h2>
-<p>Under <span class="ui">Own window</span> in the TETRA demodulator, the constellation (with measurements), stations, network, TX analysis, trends, carriers, bursts and multipath can be moved into separate, freely movable windows – handy on a second screen. The menu then shows <span class="ui">Bring to front</span>. Position and size are remembered.</p>
+<p>With the window icon in the header of a section, the constellation, stations, network, TX analysis, trends, carriers, bursts and multipath can be moved into separate, freely movable windows – handy on a second screen. The menu then shows <span class="ui">Bring to front</span>. Position and size are remembered.</p>
 
 <!-- ============================================================ -->
 <h1 id="s4" class="pb"><span class="num">4</span>Setting up the SDR</h1>
@@ -179,7 +181,9 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For burst timing (uplink and downlink at the same time) and additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
   <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
   <li><b>Level:</b> as much gain as needed, as little as possible. <span class="ui">Auto RF gain</span> looks for the best signal-to-noise ratio: it steps up by 3 dB while the ratio still improves and steps back once the noise floor only rises with the gain. It goes down at once when any signal in the whole SDR band (not only TETRA) reaches the ADC limit. The <span class="ui">Band</span> line shows this peak and the ratio.</li>
-  <li><b>Gain mode</b> (from v0.20.4): <span class="ui">Level and hold</span> finds the best step once and then keeps it fixed – all results of a measurement series are taken with the same receiver settings. If the ADC nears clipping or the ratio drops by more than 6 dB, a note appears; <span class="ui">Re-level</span> levels again. <span class="ui">Follow</span> adjusts continuously. <span class="ui">Automatic (GPS)</span> (default) follows while moving (GPS above 5 km/h, averaged over 10 s) and holds after 30 s standing still or without GPS. With a level calibration (dBm) it always holds, because the calibration is only valid at its gain.</li>
+  <li><b>Gain mode</b> (from v0.20.4): <span class="ui">Level and hold</span> finds the best step once and then keeps it fixed – all results of a measurement series are taken with the same receiver settings. If the ADC nears clipping or the ratio drops by more than 6 dB, a note appears; <span class="ui">Re-level</span> levels again. <span class="ui">Follow</span> adjusts continuously. <span class="ui">Automatic (GPS)</span> (default) follows while moving (GPS above 5 km/h, averaged over 10 s) and holds after 30 s standing still or without GPS. With a level calibration (dBm) it may follow as well: the program remembers the gain when the calibration is entered and corrects the level by the difference from the SDR's gain table (about ±1 dB, shown as "gain-corrected"). Older calibrations without a remembered gain ask to be entered again; until then it holds.</li>
+  <li><b>Lock VFO:</b> the mouse no longer tunes the TETRA VFO – clicking or dragging in the spectrum and waterfall only moves the view, the wheel and the arrow keys do nothing. AFC and frequency entry still work.</li>
+  <li><b>SDR line:</b> shows source and sample rate and recommends a range (tooltip). <span class="ui">Recommended view</span> sets the centre to 440 MHz − 0.45 × sample rate so the band ends just above 440 MHz; this also happens automatically at the very first start.</li>
   <li><b>Gain control locked:</b> while Auto RF gain is active, the gain control in the source menu is locked ("Locked by TETRA Auto RF gain"). <span class="ui">Release</span> switches the automatic gain off and frees the control.</li>
   <li><b>Warm-up:</b> wait 10–15 minutes after switching on before calibrating the frequency or measuring stability.</li>
 </ul>

@@ -42,6 +42,9 @@ namespace ImGui {
         double bandwidth;
         double snapInterval = 5000;
         int reference = REF_CENTER;
+        // TETRA-SCHWARTZ: no mouse tuning of this VFO (click / drag / wheel);
+        // a drag in the spectrum then moves the view instead
+        bool positionLocked = false;
 
         double notchOffset = 0;
         bool notchVisible = false;

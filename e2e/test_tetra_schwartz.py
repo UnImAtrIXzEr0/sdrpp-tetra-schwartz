@@ -128,7 +128,7 @@ def test_tetra_chain():
     cfg["source"] = "File"
     cfg["File Source"] = {"path": rec, "filename": rec}
     cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
-    cfg["theme"] = "RoSc 2"
+    cfg["theme"] = "RoSc light"
 
     with SDRPPTestContext() as ctx:
         ctx.write_configs(cfg)
@@ -202,8 +202,8 @@ def test_tetra_chain():
             problems.append("band monitor (ADC peak / SNR) produced no value")
         elif best and not (-60.0 < best.get("band_peak_dbfs", -999) < 3.5):
             problems.append(f"band ADC peak implausible ({best.get('band_peak_dbfs')})")
-        if best and best.get("sections", 0) != 12:
-            problems.append(f"menu sections {best.get('sections')} (expected 12)")
+        if best and best.get("sections", 0) != 13:
+            problems.append(f"menu sections {best.get('sections')} (expected 13)")
         if best and best.get("burst_state", 0) < 1:
             problems.append(f"burst analysis not running ({best.get('burst_status')})")
         if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 3.5):

@@ -566,7 +566,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["max"] = -40.0;
     defConfig["maximized"] = false;
     defConfig["fullscreen"] = false;
-    defConfig["theme"] = "RoSc 2"; // HAM-TETRA edition default
+    defConfig["theme"] = "RoSc light"; // HAM-TETRA edition default
     // Built-in menus hidden by default (can be shown again in the Module Manager)
     // Sources not supported by this edition: hidden from the source list (Module Manager)
     defConfig["hiddenSources"] = json::array({ "Airspy HF+", "Audio", "Dragon Labs", "FobosSDR", "Harogic", "Hermes Lite 2", "Hermes", "HydraSDR", "KCSDR", "KiwiSDR", "Network", "Perseus", "RFNM", "RFspace", "SDDC", "SoapySDR" });
@@ -853,7 +853,7 @@ int sdrpp_main(int argc, char* argv[]) {
     }
     // v0.13: "RoSc 2" (with themed constellation) becomes the start theme, once
     if (!core::configManager.conf.contains("hamTetraDefaults3")) {
-        core::configManager.conf["theme"] = "RoSc 2";
+        core::configManager.conf["theme"] = "RoSc light";
         core::configManager.conf["hamTetraDefaults3"] = 1;
     }
     // v0.16.3: modules without relevance for TETRA are hidden from the menu bar
@@ -925,7 +925,12 @@ int sdrpp_main(int argc, char* argv[]) {
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&
         core::configManager.conf["theme"] == "Professional 2") {
-        core::configManager.conf["theme"] = "RoSc";
+        core::configManager.conf["theme"] = "RoSc light";
+    }
+    // v0.21: "RoSc" was removed, "RoSc 2" is now "RoSc light" (new: "RoSc dark")
+    if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&
+        (core::configManager.conf["theme"] == "RoSc" || core::configManager.conf["theme"] == "RoSc 2")) {
+        core::configManager.conf["theme"] = "RoSc light";
     }
 
     // Android can't load just any .so file. This means we have to hardcode the name of the modules
