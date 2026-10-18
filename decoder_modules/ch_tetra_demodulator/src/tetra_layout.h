@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <cstring>
+#include <unordered_map>
 
 namespace tw {
     // right edge of the usable content area of the current window
@@ -35,6 +36,32 @@ namespace tw {
     }
 
     inline float textWidth(const char* s) { return ImGui::CalcTextSize(s, nullptr, true).x; }
+
+    // Stable layout: whether a value stays on the line of its label is decided
+    // with the widest text this place has shown since the window last changed
+    // its width - a value that gets longer (9.8 -> 10.2 dB) or a message that
+    // comes and goes does not flip the line break back and forth, so the
+    // controls below stay where they are. Only resizing the window re-lays out.
+    struct Sticky {
+        struct E { float w; float winW; };
+        std::unordered_map<ImGuiID, E> m;
+        std::unordered_map<ImGuiID, int> occ;
+        int frame = -1;
+    };
+    inline Sticky& sticky() { static Sticky s; return s; }
+    inline float stickyWidth(const void* key, float w) {
+        Sticky& s = sticky();
+        int f = ImGui::GetFrameCount();
+        if (f != s.frame) { s.frame = f; s.occ.clear(); }
+        ImGuiID base = ImGui::GetID(key);
+        int n = s.occ[base]++;   // the same format string used several times in a window
+        ImGuiID id = base ^ (ImGuiID)(n * 2654435761u);
+        float winW = ImGui::GetWindowWidth();
+        auto it = s.m.find(id);
+        if (it == s.m.end() || it->second.winW != winW) { s.m[id] = { w, winW }; return w; }
+        if (w > it->second.w) { it->second.w = w; }
+        return it->second.w;
+    }
     inline float checkboxWidth(const char* label) {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + textWidth(label);
     }
@@ -60,7 +87,9 @@ namespace tw {
         FitText(char* buf, size_t n) {
             float avail = ImGui::GetContentRegionAvail().x;
             if (textWidth(buf) <= avail || avail <= 0) { return; }
-            if (!cellMode()) { ImGui::PushTextWrapPos(0.0f); wrap = true; return; }
+            // multi-line (static explanations) wrap; single lines are clipped with
+            // "..." and the full text as tooltip, so nothing below them moves
+            if (!cellMode() && strchr(buf, '\n')) { ImGui::PushTextWrapPos(0.0f); wrap = true; return; }
             snprintf(full, sizeof(full), "%s", buf);
             size_t total = strlen(buf);
             float dots = textWidth("...");
@@ -84,15 +113,15 @@ namespace tw {
         }
     };
 
-    inline void flushPending(float w) {
-        if (pendingSame()) { pendingSame() = false; SameLineFor(w); }
+    inline void flushPending(const void* key, float w) {
+        if (pendingSame()) { pendingSame() = false; SameLineFor(stickyWidth(key, w)); }
     }
     // drop-in replacements for ImGui::Text*: behave identically unless a
     // SameNext() is pending; too long texts wrap (cells: clip with "...")
     inline void TextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(textWidth(buf));
+        flushPending(fmt, textWidth(buf));
         FitText f(buf, sizeof(buf));
         ImGui::TextColored(col, "%s", buf);
         f.done();
@@ -100,7 +129,7 @@ namespace tw {
     inline void Text(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(textWidth(buf));
+        flushPending(fmt, textWidth(buf));
         FitText f(buf, sizeof(buf));
         ImGui::TextUnformatted(buf);
         f.done();
@@ -109,7 +138,7 @@ namespace tw {
     inline void TextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(textWidth(buf));
+        flushPending(fmt, textWidth(buf));
         FitText f(buf, sizeof(buf));
         ImGui::TextDisabled("%s", buf);
         f.done();
@@ -118,20 +147,26 @@ namespace tw {
     inline void SameTextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(textWidth(buf));
+        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        FitText f(buf, sizeof(buf));
         ImGui::TextColored(col, "%s", buf);
+        f.done();
     }
     inline void SameText(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(textWidth(buf));
+        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        FitText f(buf, sizeof(buf));
         ImGui::TextUnformatted(buf);
+        f.done();
     }
     inline void SameTextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(textWidth(buf));
+        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        FitText f(buf, sizeof(buf));
         ImGui::TextDisabled("%s", buf);
+        f.done();
     }
     inline bool SameCheckbox(const char* label, bool* v) {
         SameLineFor(checkboxWidth(label));
