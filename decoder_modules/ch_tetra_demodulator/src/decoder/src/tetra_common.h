@@ -326,6 +326,11 @@ struct tetra_display_state {
 	int subscr_class;
 	int option_field;
 	uint32_t option_value;
+	/* extended services broadcast (option field 3): the cell sends it only in some
+	 * SYSINFOs (the option field rotates), so it is kept until the next one */
+	int ext_valid;
+	uint32_t ext_services;		/* 20 bits, security information in bits 19..12 */
+	int64_t ext_rx_time;
 	/* algorithm seen in D-LOCATION UPDATE COMMAND (ciphering parameters,
 	 * EN 300 392-7 A.8.12 / A.8.41): display only, nothing is decrypted */
 	int ksg_valid;

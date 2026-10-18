@@ -3168,10 +3168,17 @@ private:
             }
             // Security information in the extended services broadcast of SYSINFO
             // (EN 300 392-2 table 21.67, EN 300 392-7 V3.5.1 A.8.77 table A.104)
-            if (ds && ds->option_field == 3) {
-                uint32_t si = (ds->option_value >> 12) & 0xff;
+            // The option field of SYSINFO rotates (multiframe definitions, access code,
+            // extended services), so the value is kept and the line is always there:
+            // a line that comes and goes moves everything below it.
+            tw::Text("Security:");
+            if (!ds || !ds->ext_valid) {
+                tw::SameTextDisabled("not broadcast yet");
+                if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Sent in the extended services broadcast of D-MLE-SYSINFO,\nwhich the cell transmits only in some SYSINFO PDUs."); }
+            }
+            else {
+                uint32_t si = (ds->ext_services >> 12) & 0xff;
                 bool auth = si & 0x80, sc1 = si & 0x40, sc3 = si & 0x20;
-                tw::Text("Security:");
                 tw::SameTextColored(tc::val(), "authentication %s", auth ? "required" : "not required");
                 if (air) {
                     tw::SameTextColored(tc::val(), ", class 1 MS %s, class %d MS", sc1 ? "supported" : "not supported", sc3 ? 3 : 2);
@@ -3180,7 +3187,8 @@ private:
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Security information element of the cell (EN 300 392-7 A.8.77):\n"
                                       "authentication, security class 1 support, class 2 (static cipher key)\n"
-                                      "or class 3 (dynamic / common cipher keys)%s.", sc3 ? "" : ", SCK number");
+                                      "or class 3 (dynamic / common cipher keys)%s.\nLast received %lds ago.", sc3 ? "" : ", SCK number",
+                                      (long)(time(nullptr) - ds->ext_rx_time));
                 }
             }
             // algorithm: only sent on the downlink in D-LOCATION UPDATE COMMAND
@@ -4231,7 +4239,8 @@ private:
         };
         auto cmpNum = [](double x, double y) { return x < y ? -1 : (x > y ? 1 : 0); };
         auto cmpStr = [](const std::string& x, const std::string& y) { return x.compare(y) < 0 ? -1 : (x == y ? 0 : 1); };
-        auto colW = [](const char* sample) { return ImGui::CalcTextSize(sample).x + ImGui::GetStyle().CellPadding.x * 2.0f; };
+        // + room for the sort arrow of the header, otherwise short headers are cut ("Attach...")
+        auto colW = [](const char* sample) { return ImGui::CalcTextSize(sample).x + ImGui::GetStyle().CellPadding.x * 2.0f + ImGui::GetFontSize() * 0.9f; };
         auto innerW = [&](float minTotal) { return (std::max)(menuWidth, minTotal); };
         tw::CellScope cells;
         ImVec4 green = tc::good(), yellow = tc::val(), grey = tc::grey();

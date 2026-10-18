@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 // #include <unistd.h>
 
 // #include <osmocom/core/utils.h>
@@ -106,6 +107,11 @@ static int rx_bcast(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 
 	// printf("BNCH SYSINFO (DL %u Hz, UL %u Hz), service_details 0x%04x ",
 		// dl_freq, ul_freq, sid.mle_si.bs_service_details);
+	if (tms->t_display_st->dl_freq && tms->t_display_st->dl_freq != dl_freq) {
+		/* another cell: values kept between broadcasts belong to the old one */
+		tms->t_display_st->ext_valid = 0;
+		tms->t_display_st->ksg_valid = 0;
+	}
 	tms->t_display_st->dl_freq = dl_freq;
 	tms->t_display_st->ul_freq = ul_freq;
 	tms->t_display_st->freq_band = sid.freq_band;
@@ -124,6 +130,11 @@ static int rx_bcast(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 	tms->t_display_st->subscr_class = sid.mle_si.subscr_class;
 	tms->t_display_st->option_field = sid.option_field;
 	tms->t_display_st->option_value = sid.ext_service;
+	if (sid.option_field == TETRA_MAC_OPT_FIELD_EXT_SERVICES) {
+		tms->t_display_st->ext_services = sid.ext_service;
+		tms->t_display_st->ext_rx_time = (int64_t)time(NULL);
+		tms->t_display_st->ext_valid = 1;
+	}
 	tms->t_display_st->sysinfo_valid = 1;
 	if (sid.cck_valid_no_hf) {
 		// printf("CCK ID %u", sid.cck_id);
