@@ -10,6 +10,8 @@
 #include <gui/style.h>
 #include <utils/optionlist.h>
 #include <algorithm>
+#include <cmath>
+#include <backend.h>
 
 namespace displaymenu {
     bool showWaterfall;
@@ -231,10 +233,36 @@ namespace displaymenu {
 
     void draw(void* ctx) {
         float menuWidth = ImGui::GetContentRegionAvail().x;
-        if (ImGui::Checkbox("Small screen / thick fingers##_sdrpp", &phoneLayout)) {
+        if (ImGui::Checkbox("Touch mode (larger controls)##_sdrpp", &phoneLayout)) {
             core::configManager.acquire();
             core::configManager.conf["smallScreen"] = phoneLayout;
             core::configManager.release(true);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("For touch screens and small screens: larger buttons, sliders and scroll bars,\n"
+                              "extra touch margin, drag with the finger to scroll the menu.\n"
+                              "A tap shows the help text of a value (instead of hovering).");
+        }
+        {
+            // scale suggestion from the physical screen size (10-17 inch touch laptops)
+            int pw, ph, mw, mh;
+            if (backend::getScreenInfo(pw, ph, mw, mh)) {
+                double inch = std::sqrt((double)mw * mw + (double)mh * mh) / 25.4;
+                double dpi = pw / (mw / 25.4);
+                // keep controls about the same physical size: 100 % at ~110 dpi
+                float sug = (float)std::clamp(std::round(dpi / 110.0 * 4.0) / 4.0, 1.0, 3.0);
+                ImGui::TextDisabled("Screen %.1f\", %dx%d, %.0f dpi: suggested %d %%", inch, pw, ph, dpi, (int)std::lround(sug * 100.0f));
+                if (std::fabs(sug - style::uiScale) > 0.01f) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Use##_sdrpp_sugscale")) {
+                        core::configManager.acquire();
+                        core::configManager.conf["uiScale"] = sug;
+                        core::configManager.release(true);
+                        if (uiScales.keyExists(sug)) { uiScaleId = uiScales.keyId(sug); }
+                        restartRequired = true;
+                    }
+                }
+            }
         }
         if (ImGui::RadioButton("Layout: default ##_sdrpp", transcieverLayout == TRAL_NONE)) {
             core::configManager.acquire();

@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <map>
 
 #include <dsp/demod/psk.h>
 #include <dsp/buffer/packer.h>
@@ -43,6 +44,8 @@
 #include "burst_analyzer.h"
 #include "channel_analyzer.h"
 #include "vem_analyzer.h"
+#include "tetra_help.h"
+#include <gui/touch.h>
 #include "eval_view.h"
 #include "alarms.h"
 #include "report.h"
@@ -78,7 +81,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 21, 1,
+    /* Version:         */ 0, 22, 0,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -154,6 +157,8 @@ public:
         if (config.conf[name].contains("autoGain")) { autoGain = config.conf[name]["autoGain"]; }
         if (config.conf[name].contains("gainMode") && config.conf[name]["gainMode"].is_number_integer()) { gainMode = std::clamp((int)config.conf[name]["gainMode"], 0, 2); }
         if (config.conf[name].contains("trendDetached")) { trendDetached = config.conf[name]["trendDetached"]; }
+        if (config.conf[name].contains("measDetached")) { measDetached = config.conf[name]["measDetached"]; }
+        if (config.conf[name].contains("gpsDetached")) { gpsDetached = config.conf[name]["gpsDetached"]; }
         if (config.conf[name].contains("carrDetached")) { carrDetached = config.conf[name]["carrDetached"]; }
         if (config.conf[name].contains("burstDetached")) { burstDetached = config.conf[name]["burstDetached"]; }
         if (config.conf[name].contains("trendSpan")) { trendView.spanIdx = std::clamp((int)config.conf[name]["trendSpan"], 0, TetraTrendView::SPAN_N - 1); }
@@ -629,7 +634,7 @@ private:
         ImVec4 val = tc::val();
 
         // Level
-        tw::Text("Level:"); tw::SameNext();
+        tw::Text("Level:"); tetra_help::tip(tetra_help::LEVEL); tw::SameNext();
         if (m.valid) {
             if (_this->levelCalDb != 0.0f) {
                 tw::TextColored(val, "%6.1f dBm", m.levelDbfs + _this->levelCalEff); tw::SameTextDisabled("(%.1f dBFS)", m.levelDbfs);
@@ -645,7 +650,7 @@ private:
             }
         } else { tw::TextDisabled("--"); }
         // fixed row (rows must not appear/disappear, the lines below would jump)
-        tw::Text("RF status:"); tw::SameNext();
+        tw::Text("RF status:"); tetra_help::tip(tetra_help::RF_STATUS); tw::SameNext();
         if (!m.valid) { tw::TextDisabled("--"); }
         else if (m.peakDbfs > -3.0f) { tw::TextColored(bad, "ADC OVERLOAD (peak %.1f dBFS) - reduce gain", m.peakDbfs); }
         else if (_this->bandRes.valid && _this->bandRes.peakDbfs > -3.0f) { tw::TextColored(bad, "ADC OVERLOAD by a signal in the band (%.1f dBFS)", _this->bandRes.peakDbfs); }
@@ -654,7 +659,7 @@ private:
         else { tw::TextColored(good, "OK (peak %.1f dBFS)", m.peakDbfs); }
 
         // MER / EVM
-        tw::Text("MER:"); tw::SameNext();
+        tw::Text("MER:"); tetra_help::tip(tetra_help::MER); tw::SameNext();
         if (m.valid && m.symSync) {
             tw::TextColored(m.merDb >= 20.0f ? good : (m.merDb >= 12.0f ? warn : bad), "%5.1f dB", m.merDb); tw::SameText(" decoder EVM"); tw::SameTextColored(val, "%4.1f %%", m.evmPct); tw::SameText(" peak"); tw::SameTextColored(val, "%4.0f %%", m.evmPeakPct);
         } else { tw::TextDisabled("-- (no symbol sync)"); }
@@ -1015,6 +1020,18 @@ private:
             config.acquire();
             config.conf[_this->name]["hamMode"] = true;
             config.release(true);
+        }
+        if (tw::SameSmallButton(CONCAT("Layout...##_tetra_layout_", _this->name))) { ImGui::OpenPopup(CONCAT("##_tetra_layout_pop_", _this->name)); }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Layout presets: put sections into tiled windows next to the waterfall"); }
+        if (ImGui::BeginPopup(CONCAT("##_tetra_layout_pop_", _this->name))) {
+            if (ImGui::MenuItem("Measuring station")) { _this->applyLayout(1); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Constellation, measurements and stations (or trends) as tiles on the right"); }
+            if (ImGui::MenuItem("Drive test")) { _this->applyLayout(2); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("GPS / coverage map and measurements on the right, trends below"); }
+            if (ImGui::MenuItem("Classic (all in the menu)")) { _this->applyLayout(0); }
+            ImGui::Separator();
+            tw::TextDisabled("Tiles can be moved and resized; choosing a\npreset again puts them back in place.");
+            ImGui::EndPopup();
         }
         if (_this->decoder_mode != 0) {
             tw::TextColored(tc::warn(), "NETSYMS mode: built-in decoder and decoder-based\nmeasurements are off (see NETSYMS at the bottom).");
@@ -1886,8 +1903,12 @@ private:
         switch (id) {
         case S_MEAS:
             if (sectionHeader(id, CONCAT("Measurements##_tetra_meas_", _this->name), ImGuiTreeNodeFlags_DefaultOpen)) {
-                drawMeasurements(_this, menuWidth);
-                _this->drawVem(menuWidth);
+                if (_this->measDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_mfront_", _this->name))) { _this->focusMeasWin = true; }
+                } else {
+                    _this->drawMeasWindow(menuWidth);
+                }
             }
             break;
         case S_CONST:
@@ -1958,7 +1979,14 @@ private:
             if (sectionHeader(id, CONCAT("Report##_tetra_report_", _this->name))) { _this->drawReport(menuWidth); }
             break;
         case S_GPS:
-            if (sectionHeader(id, CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) { _this->drawGpsCoverage(menuWidth); }
+            if (sectionHeader(id, CONCAT("GPS & coverage map##_tetra_gps_", _this->name))) {
+                if (_this->gpsDetached) {
+                    tw::TextDisabled("Shown in its own window.");
+                    if (tw::SameSmallButton(CONCAT("Bring to front##_tetra_gfront_", _this->name))) { _this->focusGpsWin = true; }
+                } else {
+                    _this->drawGpsCoverage(menuWidth);
+                }
+            }
             break;
         case S_NET:
             //OSMO-TETRA: network & cell information (optionally in its own window)
@@ -2127,6 +2155,8 @@ private:
     bool* detachFlag(int id) {
         switch (id) {
         case S_CONST: return &constDetached;
+        case S_MEAS: return &measDetached;
+        case S_GPS: return &gpsDetached;
         case S_TXA: return &txaDetached;
         case S_TREND: return &trendDetached;
         case S_CARR: return &carrDetached;
@@ -2144,7 +2174,8 @@ private:
         if (id == S_MP) { saveMpConfig(); }
         else {
             static const struct { int id; const char* key; } keys[] = { { S_CONST, "constDetached" }, { S_TXA, "txaDetached" }, { S_TREND, "trendDetached" },
-                                                                       { S_CARR, "carrDetached" }, { S_BURST, "burstDetached" }, { S_NET, "netDetached" }, { S_SUBS, "subsDetached" } };
+                                                                       { S_CARR, "carrDetached" }, { S_BURST, "burstDetached" }, { S_NET, "netDetached" }, { S_SUBS, "subsDetached" },
+                                                                       { S_MEAS, "measDetached" }, { S_GPS, "gpsDetached" } };
             for (auto& k : keys) {
                 if (k.id != id) { continue; }
                 config.acquire();
@@ -2162,8 +2193,43 @@ private:
         case S_MP: focusMpWin = true; break;
         case S_NET: focusNetWin = true; break;
         case S_SUBS: focusSubsWin = true; break;
+        case S_MEAS: focusMeasWin = true; break;
+        case S_GPS: focusGpsWin = true; break;
         default: break;
         }
+    }
+
+    void drawMeasWindow(float w) {
+        drawMeasurements(this, w);
+        drawVem(w);
+    }
+
+    // layout presets: which sections get their own window and where (fractions
+    // of the main window's work area); the menu and waterfall stay on the left
+    void applyLayout(int preset) {
+        static const int all[] = { S_CONST, S_MEAS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_NET, S_SUBS, S_GPS };
+        layoutRects.clear();
+        for (int id : all) { if (bool* f = detachFlag(id)) { if (*f) { setDetached(id, false); } } }
+        struct T { int id; const char* key; float x, y, w, h; };
+        std::vector<T> tiles;
+        if (preset == 1) {   // measuring station: constellation, measurements, stations / trends on the right
+            tiles = { { S_CONST, "const", 0.64f, 0.0f, 0.36f, 0.40f }, { S_MEAS, "meas", 0.64f, 0.40f, 0.36f, 0.34f },
+                      { hamMode ? S_SUBS : S_TREND, hamMode ? "subs" : "trend", 0.64f, 0.74f, 0.36f, 0.26f } };
+        }
+        else if (preset == 2) {   // drive test: GPS / map and measurements on the right, trends below
+            tiles = { { S_GPS, "gps", 0.64f, 0.0f, 0.36f, 0.50f }, { S_MEAS, "meas", 0.64f, 0.50f, 0.36f, 0.50f },
+                      { S_TREND, "trend", 0.30f, 0.62f, 0.34f, 0.38f } };
+        }
+        for (auto& t : tiles) {
+            layoutRects[t.key] = { { t.x, t.y, t.w, t.h } };
+            setDetached(t.id, true);
+        }
+        layoutFrames = 3;
+        config.acquire();
+        config.conf[name]["layoutPreset"] = preset;
+        config.release(true);
+        static const char* names[] = { "classic (all in the menu)", "measuring station", "drive test" };
+        meas.addEvent(std::string("Layout: ") + names[std::clamp(preset, 0, 2)]);
     }
 
     void drawConstellation(float width) {
@@ -3211,7 +3277,18 @@ private:
     }
 
     // automation (documentation screenshots): one own window at a fixed place
-    void placeSolo() {
+    void placeSolo(const char* key = nullptr) {
+        // layout preset: place the window at its tile for a few frames
+        if (layoutFrames > 0 && key) {
+            auto it = layoutRects.find(key);
+            if (it != layoutRects.end()) {
+                const ImGuiViewport* vp = ImGui::GetMainViewport();
+                const float* r = it->second.r;
+                ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + r[0] * vp->WorkSize.x, vp->WorkPos.y + r[1] * vp->WorkSize.y), ImGuiCond_Always);
+                ImGui::SetNextWindowSize(ImVec2(r[2] * vp->WorkSize.x, r[3] * vp->WorkSize.y), ImGuiCond_Always);
+                return;
+            }
+        }
         if (soloFrames <= 0) { return; }
         ImGui::SetNextWindowPos(ImVec2(soloRect[0], soloRect[1]), ImGuiCond_Always);
         ImGui::SetNextWindowSize(ImVec2(soloRect[2], soloRect[3]), ImGuiCond_Always);
@@ -3222,12 +3299,13 @@ private:
         if (!detached) { return; }
         ImGui::SetNextWindowSize(size, ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowPos(pos, ImGuiCond_FirstUseEver);
-        placeSolo();
+        placeSolo(key);
         bool open = true;
         std::string t = std::string(title) + " (" + name + ")##_tetra_" + key + "_" + name;
         if (focus) { ImGui::SetNextWindowFocus(); focus = false; }
         if (ImGui::Begin(t.c_str(), &open)) {
             (this->*body)(ImGui::GetContentRegionAvail().x);
+            touch::dragScroll();
         }
         ImGui::End();
         if (!open) {
@@ -3250,6 +3328,9 @@ private:
             }
         }
         if (soloFrames > 0) { soloFrames--; }
+        floatingWindow(measDetached, focusMeasWin, "TETRA measurements", "meas", ImVec2(440, 560), ImVec2(500, 90), &TetraDemodulatorModule::drawMeasWindow);
+        floatingWindow(gpsDetached, focusGpsWin, "TETRA GPS & coverage", "gps", ImVec2(460, 520), ImVec2(520, 120), &TetraDemodulatorModule::drawGpsCoverage);
+        if (layoutFrames > 0) { layoutFrames--; }
         floatingWindow(trendDetached, focusTrendWin, "TETRA trends & timeslots", "trend", ImVec2(620, 640), ImVec2(560, 90), &TetraDemodulatorModule::drawTrends);
         floatingWindow(carrDetached, focusCarrWin, "TETRA carriers", "carr", ImVec2(560, 420), ImVec2(600, 130), &TetraDemodulatorModule::drawCarriers);
         floatingWindow(burstDetached, focusBurstWin, "TETRA burst analysis", "burst", ImVec2(520, 620), ImVec2(640, 110), &TetraDemodulatorModule::drawBursts);
@@ -3261,12 +3342,13 @@ private:
         if (txaDetached) {
             ImGui::SetNextWindowSize(ImVec2(560, 760), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(520, 100), ImGuiCond_FirstUseEver);
-            placeSolo();
+            placeSolo("txa");
             bool open = true;
             std::string title = "TETRA TX analysis (" + name + ")##_tetra_twin_" + name;
             if (focusTxaWin) { ImGui::SetNextWindowFocus(); focusTxaWin = false; }
             if (ImGui::Begin(title.c_str(), &open)) {
                 drawTxAnalysis(ImGui::GetContentRegionAvail().x);
+                touch::dragScroll();
             }
             ImGui::End();
             if (!open) {
@@ -3279,7 +3361,7 @@ private:
         if (constDetached) {
             ImGui::SetNextWindowSize(ImVec2(420, 720), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(470, 80), ImGuiCond_FirstUseEver);
-            placeSolo();
+            placeSolo("const");
             bool open = true;
             std::string title = "TETRA constellation (" + name + ")##_tetra_cwin_" + name;
             if (focusConstWin) { ImGui::SetNextWindowFocus(); focusConstWin = false; }
@@ -3287,6 +3369,7 @@ private:
                 float w = ImGui::GetContentRegionAvail().x;
                 drawConstellationOptions("w");
                 drawConstellation(w);
+                touch::dragScroll();
             }
             ImGui::End();
             if (!open) {
@@ -3299,12 +3382,13 @@ private:
         if (netDetached && decoder_mode == 0) {
             ImGui::SetNextWindowSize(ImVec2(400, 560), ImGuiCond_FirstUseEver);
             ImGui::SetNextWindowPos(ImVec2(470, 120), ImGuiCond_FirstUseEver);
-            placeSolo();
+            placeSolo("net");
             bool open = true;
             std::string title = "TETRA network & cell (" + name + ")##_tetra_nwin_" + name;
             if (focusNetWin) { ImGui::SetNextWindowFocus(); focusNetWin = false; }
             if (ImGui::Begin(title.c_str(), &open)) {
                 drawNetworkBody(ImGui::GetContentRegionAvail().x);
+                touch::dragScroll();
             }
             ImGui::End();
             if (!open) {
@@ -3318,7 +3402,7 @@ private:
             ImGui::SetNextWindowSize(ImVec2(560, 360), ImGuiCond_FirstUseEver);
             // not on top of the constellation window
             ImGui::SetNextWindowPos(ImVec2(900, 80), ImGuiCond_FirstUseEver);
-            placeSolo();
+            placeSolo("subs");
             bool open = true;
             std::string title = "TETRA stations & traffic (" + name + ")##_tetra_swin_" + name;
             if (focusSubsWin) { ImGui::SetNextWindowFocus(); focusSubsWin = false; }
@@ -3773,6 +3857,11 @@ private:
     std::string trendLoadReq;   // debug: open this CSV log in the GUI thread
     int trendTabReq = -1;       // debug: select this trends tab
     bool trendDetached = false, focusTrendWin = false;
+    bool measDetached = false, focusMeasWin = false;
+    bool gpsDetached = false, focusGpsWin = false;
+    struct LayoutRect { float r[4]; };
+    std::map<std::string, LayoutRect> layoutRects;   // tiles of the active layout preset (fractions of the work area)
+    int layoutFrames = 0;
     TetraCarrierMonitor carrierMon;
     bool carrDetached = false, focusCarrWin = false;
     TetraBurstAnalyzer burstAn;

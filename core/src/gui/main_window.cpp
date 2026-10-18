@@ -2,6 +2,7 @@
 #include "imgui.h"
 #include <implot/implot.h>
 #include <gui/main_window.h>
+#include <gui/touch.h>
 #include <gui/gui.h>
 #include "utils/usleep.h"
 #include "utils/cty.h"
@@ -599,7 +600,36 @@ void MainWindow::displayVariousWindows() {
 }
 
 
+// touch mode: larger touch targets, applied every frame on top of the sizes
+// the program started with (themes only change colours)
+static void applyTouchStyle() {
+    static bool haveBase = false, wasOn = false;
+    static ImGuiStyle base;
+    ImGuiStyle& st = ImGui::GetStyle();
+    bool on = displaymenu::phoneLayout;
+    if (!haveBase || (on && !wasOn)) { if (!wasOn) { base = st; haveBase = true; } }
+    if (on) {
+        float k = style::uiScale;
+        st.TouchExtraPadding = ImVec2(6.0f * k, 6.0f * k);
+        st.FramePadding = ImVec2(base.FramePadding.x * 1.6f, base.FramePadding.y * 2.0f);
+        st.ItemSpacing = ImVec2(base.ItemSpacing.x * 1.4f, base.ItemSpacing.y * 1.6f);
+        st.ItemInnerSpacing = ImVec2(base.ItemInnerSpacing.x * 1.4f, base.ItemInnerSpacing.y * 1.4f);
+        st.ScrollbarSize = (std::max)(base.ScrollbarSize, 24.0f * k);
+        st.GrabMinSize = (std::max)(base.GrabMinSize, 22.0f * k);
+    }
+    else if (wasOn) {
+        st.TouchExtraPadding = base.TouchExtraPadding;
+        st.FramePadding = base.FramePadding;
+        st.ItemSpacing = base.ItemSpacing;
+        st.ItemInnerSpacing = base.ItemInnerSpacing;
+        st.ScrollbarSize = base.ScrollbarSize;
+        st.GrabMinSize = base.GrabMinSize;
+    }
+    wasOn = on;
+}
+
 void MainWindow::draw() {
+    applyTouchStyle();
     auto ctm = currentTimeNanos();
     ImGui::WaterfallVFO* vfo;
     this->preDraw(&vfo);
@@ -787,7 +817,9 @@ void MainWindow::draw() {
         ImGui::BeginChild("Left Column");
 
 
-        if (gui::menu.draw(firstMenuRender)) {
+        bool menuChanged = gui::menu.draw(firstMenuRender);
+        touch::dragScroll();
+        if (menuChanged) {
             core::configManager.acquire();
             json arr = json::array();
             for (int i = 0; i < gui::menu.order.size(); i++) {

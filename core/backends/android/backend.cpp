@@ -262,6 +262,7 @@ namespace backend {
     // No screen pos to detect
     void getMouseScreenPos(double& x, double& y) { x = 0; y = 0; }
     void setMouseScreenPos(double x, double y) {}
+    bool getScreenInfo(int& pxW, int& pxH, int& mmW, int& mmH) { pxW = pxH = mmW = mmH = 0; return false; }
 
     int renderLoop() {
         while (true) {

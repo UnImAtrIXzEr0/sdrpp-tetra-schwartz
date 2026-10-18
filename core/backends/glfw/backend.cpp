@@ -247,6 +247,33 @@ namespace backend {
         glfwGetCursorPos(window, &x, &y);
     }
 
+    bool getScreenInfo(int& pxW, int& pxH, int& mmW, int& mmH) {
+        pxW = pxH = mmW = mmH = 0;
+        // the monitor that holds the centre of the window (fallback: primary)
+        GLFWmonitor* mon = glfwGetWindowMonitor(window);
+        if (!mon) {
+            int wx, wy, ww, wh, count = 0;
+            glfwGetWindowPos(window, &wx, &wy);
+            glfwGetWindowSize(window, &ww, &wh);
+            int cx = wx + ww / 2, cy = wy + wh / 2;
+            GLFWmonitor** mons = glfwGetMonitors(&count);
+            for (int i = 0; i < count && !mon; i++) {
+                int mx, my;
+                glfwGetMonitorPos(mons[i], &mx, &my);
+                const GLFWvidmode* m = glfwGetVideoMode(mons[i]);
+                if (m && cx >= mx && cx < mx + m->width && cy >= my && cy < my + m->height) { mon = mons[i]; }
+            }
+            if (!mon) { mon = glfwGetPrimaryMonitor(); }
+        }
+        if (!mon) { return false; }
+        const GLFWvidmode* mode = glfwGetVideoMode(mon);
+        if (!mode) { return false; }
+        pxW = mode->width;
+        pxH = mode->height;
+        glfwGetMonitorPhysicalSize(mon, &mmW, &mmH);
+        return mmW > 0 && mmH > 0;
+    }
+
     void setMouseScreenPos(double x, double y) {
         // Tell GLFW to move the cursor and then manually fire the event
         glfwSetCursorPos(window, x, y);
