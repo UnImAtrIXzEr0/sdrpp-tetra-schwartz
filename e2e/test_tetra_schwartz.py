@@ -153,6 +153,7 @@ def test_tetra_chain():
 
         best = None
         locked = False
+        mp_quality_max = 0.0   # the looped recording restarts the slot fold at the wrap: use the best value seen
         t0 = time.time()
         while time.time() - t0 < 25.0:
             ctx.sleep(1.0)
@@ -164,6 +165,7 @@ def test_tetra_chain():
                 stats.test_fail("test_tetra_chain", f"module not responding: {m['error']}")
                 return False
             best = m
+            mp_quality_max = max(mp_quality_max, m.get("mp_quality", 0) or 0)
             if m.get("rx_state") == 2 and m.get("sync"):
                 locked = True
             if locked and m.get("txa_valid") and m.get("input_rate", 0) > 0 and m.get("trend_points", 0) >= 6 \
@@ -206,8 +208,8 @@ def test_tetra_chain():
             problems.append(f"menu sections {best.get('sections')} (expected 13)")
         if best and best.get("burst_state", 0) < 1:
             problems.append(f"burst analysis not running ({best.get('burst_status')})")
-        if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 3.5):
-            problems.append(f"multipath: training sequences not found in the real signal (slots {best.get('mp_slots')}, quality {best.get('mp_quality')})")
+        if best and locked and (best.get("mp_slots", 0) < 20 or mp_quality_max < 3.5):
+            problems.append(f"multipath: training sequences not found in the real signal (slots {best.get('mp_slots')}, best quality {mp_quality_max})")
         if best:
             # modulation accuracy (EN 300 394-1 10.1.3): informative here, the
             # short looped recording may hold few CRC-checked bursts
