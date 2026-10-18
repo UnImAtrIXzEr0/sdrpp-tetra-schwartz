@@ -55,8 +55,8 @@ public:
     }
 
     bool isRunning() const { return running; }
-    // usable offsets: the tap needs +-FS/2 inside the SDR span
-    static double maxOffset(double sdrRate) { return sdrRate / 2.0 - FS / 2.0; }
+    // At SDR rates below 288 kS/s the tap interpolates; the users only need their
+    // own band (TETRA channel +-20 kHz) inside the SDR span, as with separate taps.
 
 private:
     struct Sub { void* ctx; bool half; Fn fn; };

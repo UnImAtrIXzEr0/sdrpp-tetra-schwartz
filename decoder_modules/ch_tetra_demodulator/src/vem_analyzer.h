@@ -46,7 +46,7 @@ public:
         status.clear();
         if (!enable) { stop(); return; }
         if (!sdr) { status = "SDR stopped"; stop(); return; }
-        if (!(sr > 0) || std::fabs(off) > TetraAnalysisTap::maxOffset(sr)) { status = "TETRA VFO outside the SDR span"; stop(); return; }
+        if (!(sr > 0) || std::fabs(off) > sr / 2.0 - 20000.0) { status = "TETRA VFO outside the SDR span"; stop(); return; }
         scrReq.store((mcc || mnc) ? ::tetra_scramb_get_init(mcc, mnc, cc) : 0u);
         if (!running) { start(off); }
         else if (std::fabs(off - curOffset) > 0.5) {
