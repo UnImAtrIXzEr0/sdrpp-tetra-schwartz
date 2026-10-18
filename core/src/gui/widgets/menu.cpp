@@ -8,6 +8,15 @@
 Menu::Menu() {
 }
 
+// TETRA-SCHWARTZ: no enable checkbox on the TETRA demodulator header - a stray
+// click there switched the whole decoder off. Shown again only if the module
+// is disabled anyway, so it can always be switched back on.
+static bool showEnableBox(const std::string& name, ModuleManager::Instance* inst) {
+    if (inst == NULL) { return false; }
+    if (!inst->isEnabled()) { return true; }
+    return core::moduleManager.getInstanceModuleName(name) != "ch_tetra_demodulator";
+}
+
 void Menu::registerEntry(std::string name, void (*drawHandler)(void* ctx), void* ctx, ModuleManager::Instance* inst) {
     MenuItem_t item;
     item.drawHandler = drawHandler;
@@ -72,7 +81,7 @@ bool Menu::draw(bool updateStates) {
 
             CollapsingHeader((draggedMenuName + "##sdrpp_main_menu_dragging").c_str());
 
-            if (items[draggedOpt.name].inst != NULL) {
+            if (showEnableBox(draggedOpt.name, items[draggedOpt.name].inst)) {
                 window->WorkRect = orignalRect;
                 ImVec2 pos = ImGui::GetCursorPos();
                 ImGui::SetCursorPosX(pos.x + checkboxOffset.x);
@@ -90,7 +99,8 @@ bool Menu::draw(bool updateStates) {
 
 
         ImRect orginalRect = window->WorkRect;
-        if (item.inst != NULL) {
+        bool enableBox = showEnableBox(opt.name, item.inst);
+        if (enableBox) {
             window->WorkRect = ImRect(orginalRect.Min, ImVec2(orginalRect.Max.x - ImGui::GetTextLineHeight() - (6.0f * style::uiScale), orginalRect.Max.y));
         }
 
@@ -119,7 +129,8 @@ bool Menu::draw(bool updateStates) {
         // Draw menu header and menu content. There is a lot of boilerplate because the checkbox has to be drawn before the menu, TODO: fix
         if (updateStates) { ImGui::SetNextItemOpen(opt.open); }
         if (CollapsingHeader((opt.name + "##sdrpp_main_menu").c_str())) {
-            if (item.inst != NULL) {
+            window->WorkRect = orginalRect;
+            if (enableBox) {
                 window->WorkRect = orginalRect;
                 ImVec2 pos = ImGui::GetCursorPos();
                 ImGui::SetCursorPosX(pos.x + checkboxOffset.x);
@@ -147,7 +158,7 @@ bool Menu::draw(bool updateStates) {
             item.drawHandler(item.ctx);
             ImGui::Spacing();
         }
-        else if (item.inst != NULL) {
+        else if (enableBox) {
             window->WorkRect = orginalRect;
             ImVec2 pos = ImGui::GetCursorPos();
             ImGui::SetCursorPosX(pos.x + checkboxOffset.x);
@@ -212,7 +223,7 @@ bool Menu::draw(bool updateStates) {
         style::beginDisabled();
         ImRect orignalRect = window->WorkRect;
         CollapsingHeader((draggedMenuName + "##sdrpp_main_menu_dragging").c_str());
-        if (items[draggedOpt.name].inst != NULL) {
+        if (showEnableBox(draggedOpt.name, items[draggedOpt.name].inst)) {
             window->WorkRect = orignalRect;
             ImVec2 pos = ImGui::GetCursorPos();
             ImGui::SetCursorPosX(pos.x + checkboxOffset.x);

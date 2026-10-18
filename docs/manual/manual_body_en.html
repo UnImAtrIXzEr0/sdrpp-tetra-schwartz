@@ -220,7 +220,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>π/4-DQPSK has eight target points (<span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit.</p>
 <p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display. The measurements still show it.</p>
 <h3>Decoder mode</h3>
-<p><span class="ui">OSMO-TETRA</span> decodes within the program (normal case). <span class="ui">NETSYMS</span> sends the symbols over the network to an external program.</p>
+<p>The program decodes by itself (normal case). At the very bottom of the menu, the closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> sends the symbols over UDP to an external program. While it is active, the built-in decoder and all measurements that need it are off; a note at the top of the menu says so. From v0.20.1 on, the program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
+<p>The TETRA demodulator header no longer has a checkbox to switch it off (a stray click switched the whole decoder off). If the module is switched off anyway, the checkbox appears again.</p>
 </div>
 <div>
 <figure><img src="shots/win_const.png"><figcaption>Fig. 4 – Constellation and measurements in an own window.</figcaption></figure>
@@ -556,6 +557,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>Windows blocks the download</td><td>Choose “Keep” in the browser's download list; then confirm the SmartScreen notice.</td></tr>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
+<tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only (no timing reference to the downlink). The radio must be registered in trunked mode (TMO).</td></tr>
 <tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
 </table>
 

@@ -220,7 +220,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>π/4-DQPSK hat acht Zielpunkte (<span class="ui">8 points (pi/4)</span>) – ausgeschaltet werden sie auf vier gefaltet. Die Ringe zeigen die ETSI-Grenzen (EVM 10 % rms, 30 % Spitze). Die Punkte werden grün, wenn die gemessene EVM innerhalb der Grenze liegt.</p>
 <p><span class="ui">Remove I/Q offset</span> rechnet einen Trägerrest des Senders (oder den Gleichanteil des Empfängers) aus der Anzeige heraus. Die Messwerte zeigen ihn trotzdem an.</p>
 <h3>Decoder-Modus</h3>
-<p><span class="ui">OSMO-TETRA</span> dekodiert im Programm (Normalfall). <span class="ui">NETSYMS</span> schickt die Symbole per Netzwerk an ein externes Programm.</p>
+<p>Das Programm dekodiert selbst (Normalfall). Ganz unten im Menü liegt der zugeklappte Bereich <span class="ui">NETSYMS symbol streaming (advanced)</span>: Er schickt die Symbole per UDP an ein externes Programm. Solange er aktiv ist, sind der eingebaute Decoder und alle Messungen, die ihn brauchen, aus; oben im Menü steht dann ein Hinweis. Ab v0.20.1 startet das Programm mit dem eingebauten Decoder, wenn NETSYMS gewählt war, aber nicht gesendet hat.</p>
+<p>Der Kopf des TETRA-Demodulators hat kein Häkchen mehr zum Abschalten (ein versehentlicher Klick schaltete den ganzen Decoder ab). Ist das Modul doch einmal abgeschaltet, erscheint das Häkchen wieder.</p>
 </div>
 <div>
 <figure><img src="shots/win_const.png"><figcaption>Abb. 4 – Konstellation und Messwerte im eigenen Fenster.</figcaption></figure>
@@ -556,6 +557,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>Windows blockiert den Download</td><td>In der Download-Liste des Browsers „Behalten“ wählen; danach SmartScreen-Hinweis bestätigen.</td></tr>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
 <tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
+<tr><td>Burst-Analyse findet keine Bursts</td><td>Uplink liegt außerhalb der SDR-Spanne (rote Meldung im Burst-Panel). Bei 9,4 MHz Duplexabstand braucht man mindestens 12 MS/s, Mitte zwischen Downlink und Uplink. Sonst Quelle <span class="ui">Manual frequency</span> und das SDR nur auf den Uplink stellen (ohne Zeitbezug zum Downlink). Das Funkgerät muss im Netzbetrieb (TMO) angemeldet sein.</td></tr>
 <tr><td>Pluto als Laufwerk sichtbar, aber nicht in SDR++</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span>.</td></tr>
 </table>
 

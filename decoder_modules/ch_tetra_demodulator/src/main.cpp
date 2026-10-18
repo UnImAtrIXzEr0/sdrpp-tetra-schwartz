@@ -76,7 +76,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 0,
+    /* Version:         */ 0, 20, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -96,6 +96,15 @@ public:
             config.conf[name]["sending"] = false;
         }
         decoder_mode = config.conf[name]["mode"];
+        // v0.20.1: NETSYMS is an advanced option. Left on without sending it
+        // only switched the built-in decoder off - start with the decoder.
+        if (!config.conf[name].contains("netsymsV2001")) {
+            if (decoder_mode != 0 && !(config.conf[name].contains("sending") && config.conf[name]["sending"].get<bool>())) {
+                decoder_mode = 0;
+                config.conf[name]["mode"] = 0;
+            }
+            config.conf[name]["netsymsV2001"] = true;
+        }
         snprintf(hostname, sizeof(hostname), "%s", std::string(config.conf[name]["hostname"]).c_str());
         port = config.conf[name]["port"];
         bool startNow = config.conf[name]["sending"];
@@ -989,26 +998,33 @@ private:
             _this->drawConstellation(menuWidth);
         }
 
-        ImGui::BeginGroup();
-        ImGui::Columns(2, CONCAT("TetraModeColumns##_", _this->name), false);
-        if (ImGui::RadioButton(CONCAT("OSMO-TETRA##_", _this->name), _this->decoder_mode == 0) && _this->decoder_mode != 0) {
-            _this->decoder_mode = 0; //osmo-tetra
-            _this->setMode();
+        if (_this->decoder_mode != 0) {
+            tw::TextColored(tc::warn(), "NETSYMS mode: built-in decoder and decoder-based\nmeasurements are off (see NETSYMS at the bottom).");
         }
-        ImGui::NextColumn();
-        if (ImGui::RadioButton(CONCAT("NETSYMS##_", _this->name), _this->decoder_mode == 1) && _this->decoder_mode != 1) {
-            _this->decoder_mode = 1; //network symbol streaming
-            _this->setMode();
-        }
-        ImGui::Columns(1, CONCAT("EndTetraModeColumns##_", _this->name), false);
-        ImGui::EndGroup();
 
         // sections in the user's order (drag the grip on the right of a header,
         // or right-click it)
         for (int id : _this->secOrder) { _this->drawSection(id, menuWidth); }
         _this->applySectionMove();
 
-        if (_this->decoder_mode != 0) {
+        // NETSYMS (advanced): own header at the end, closed by default
+        std::string nsLabel = std::string(_this->decoder_mode != 0 ? "NETSYMS symbol streaming (active)" : "NETSYMS symbol streaming (advanced)") + "###_tetra_netsyms_hdr_" + _this->name;
+        bool nsOpen = ImGui::CollapsingHeader(nsLabel.c_str());
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Streams the demodulated symbols over UDP to an external decoder.\nWhile active, the built-in decoder and all measurements that need it are off.");
+        }
+        if (nsOpen) {
+            if (ImGui::RadioButton(CONCAT("Built-in decoder##_tetra_mode0_", _this->name), _this->decoder_mode == 0) && _this->decoder_mode != 0) {
+                _this->decoder_mode = 0; //osmo-tetra
+                _this->setMode();
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton(CONCAT("NETSYMS over UDP##_tetra_mode1_", _this->name), _this->decoder_mode == 1) && _this->decoder_mode != 1) {
+                _this->decoder_mode = 1; //network symbol streaming
+                _this->setMode();
+            }
+        }
+        if (nsOpen && _this->decoder_mode != 0) {
             //NETWORK SYM STREAMING
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, _this->symbolExtractor.sync ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
             tw::SameText(" Sync");
@@ -3075,7 +3091,7 @@ private:
         if (!ImGui::BeginTabBar(CONCAT("##_tetra_st_tabs_", name))) { return; }
 
         // ---- Stations ----
-        std::string stTitle = "Stations (" + std::to_string(stations.size()) + ")##_tetra_tab_st_" + name;
+        std::string stTitle = "Stations (" + std::to_string(stations.size()) + ")###_tetra_tab_st_" + name;
         if (ImGui::BeginTabItem(stTitle.c_str())) {
             if (ImGui::SmallButton(CONCAT("Clear all##_tetra_subs_clr_", name))) { subscribers.clear(); stations.clear(); }
             float minSt = colW("16777215") + colW("ISSI") + colW("DB0XXX-12") + colW("4CE") + colW("59m") + 3 * colW("talking in 2620001");
@@ -3145,7 +3161,7 @@ private:
         }
 
         // ---- Groups ----
-        std::string grTitle = "Groups (" + std::to_string(groups.size()) + ")##_tetra_tab_gr_" + name;
+        std::string grTitle = "Groups (" + std::to_string(groups.size()) + ")###_tetra_tab_gr_" + name;
         if (ImGui::BeginTabItem(grTitle.c_str())) {
             float minGr = colW("16777215") + colW("TETRA Oberbayern") + colW("4E") + colW("59m") + 2 * colW("2620001 DB0XXX") + colW("Attached");
             if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 7, flags, ImVec2(menuWidth, tableHeight((int)groups.size())), innerW(minGr))) {
@@ -3210,7 +3226,7 @@ private:
 
         // ---- Traffic ----
         std::vector<TetraTrafficEntry> traffic = subscribers.trafficSnapshot();
-        std::string trTitle = "Traffic (" + std::to_string(traffic.size()) + ")##_tetra_tab_tr_" + name;
+        std::string trTitle = "Traffic (" + std::to_string(traffic.size()) + ")###_tetra_tab_tr_" + name;
         if (ImGui::BeginTabItem(trTitle.c_str())) {
             if (ImGui::SmallButton(CONCAT("Clear##_tetra_tr_clr_", name))) { subscribers.clearTraffic(); traffic.clear(); }
             tw::SameCheckbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
