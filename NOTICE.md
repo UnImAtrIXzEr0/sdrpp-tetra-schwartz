@@ -86,6 +86,10 @@ Their own terms of use apply. The data is only downloaded on request.
 
 ## Trademarks and names
 
+- **About the name:** “TETRA-SCHWARTZ” is a homage to the film comedy
+  *Spaceballs* (Mel Brooks, 1987) and its “Schwartz” (“May the Schwartz be
+  with you”). It has no relation to any company, brand or product with a
+  similar-sounding name.
 - Theme names and the program name are invented names. This project is not
   affiliated with, sponsored or endorsed by any manufacturer or rights holder
   and uses no third-party logos.

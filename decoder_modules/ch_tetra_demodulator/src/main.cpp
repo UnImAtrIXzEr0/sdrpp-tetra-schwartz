@@ -3986,11 +3986,28 @@ private:
                                    : (std::max)(ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() * 1.5f, 60.0f);
         };
         // Tables: one line per row (cells clip with "..."), columns sized to
-        // their content, resizable, movable (drag the header) and hideable
-        // (right-click the header). If the window is narrower than the minimum
-        // widths, the table scrolls sideways; the first column stays in place.
+        // their content, resizable, movable to any place (drag the header),
+        // hideable (right-click the header) and sortable (click the header:
+        // ascending, descending, unsorted). If the window is narrower than the
+        // minimum widths, the table scrolls sideways (header row stays).
         ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY | ImGuiTableFlags_ScrollX |
-                                ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
+                                ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
+                                ImGuiTableFlags_Sortable | ImGuiTableFlags_SortTristate;
+        // sort 'v' (rows with precomputed keys) by the table's sort specs; key(a, b, column user id) < 0 if a before b
+        auto sortRows = [](auto& v, auto key) {
+            ImGuiTableSortSpecs* ss = ImGui::TableGetSortSpecs();
+            if (!ss || ss->SpecsCount == 0) { return; }
+            std::stable_sort(v.begin(), v.end(), [&](const auto& a, const auto& b) {
+                for (int i = 0; i < ss->SpecsCount; i++) {
+                    const ImGuiTableColumnSortSpecs& sp = ss->Specs[i];
+                    int c = key(a, b, (int)sp.ColumnUserID);
+                    if (c != 0) { return sp.SortDirection == ImGuiSortDirection_Ascending ? c < 0 : c > 0; }
+                }
+                return false;
+            });
+        };
+        auto cmpNum = [](double x, double y) { return x < y ? -1 : (x > y ? 1 : 0); };
+        auto cmpStr = [](const std::string& x, const std::string& y) { return x.compare(y) < 0 ? -1 : (x == y ? 0 : 1); };
         auto colW = [](const char* sample) { return ImGui::CalcTextSize(sample).x + ImGui::GetStyle().CellPadding.x * 2.0f; };
         auto innerW = [&](float minTotal) { return (std::max)(menuWidth, minTotal); };
         tw::CellScope cells;
@@ -4004,7 +4021,7 @@ private:
             if (ImGui::SmallButton(CONCAT("Clear all##_tetra_subs_clr_", name))) { subscribers.clear(); stations.clear(); }
             float minSt = colW("16777215") + colW("ISSI") + colW("DB0XXX-12") + colW("4CE") + colW("59m") + 3 * colW("talking in 2620001");
             if (ImGui::BeginTable(CONCAT("##_tetra_subs_tab_", name), 8, flags, ImVec2(menuWidth, tableHeight((int)stations.size())), innerW(minSt))) {
-                ImGui::TableSetupScrollFreeze(1, 1);
+                ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("ISSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"), 0);
                 ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, colW("ISSI"), 1);
                 ImGui::TableSetupColumn("Call", ImGuiTableColumnFlags_WidthFixed, colW("DB0XXX-12"), 2);
@@ -4014,9 +4031,31 @@ private:
                 ImGui::TableSetupColumn("Activity", ImGuiTableColumnFlags_WidthStretch, 1.2f, 5);
                 ImGui::TableSetupColumn("Info", ImGuiTableColumnFlags_WidthStretch, 1.0f, 7);
                 ImGui::TableHeadersRow();
+                struct StRow { const TetraSubscriber* s; std::string call, info, act; };
+                std::vector<StRow> rows;
+                rows.reserve(stations.size());
                 for (auto& sub : stations) {
-                    std::string call, info;
-                    describeSsi(sub.ssi, sub.kind, call, info);
+                    StRow r { &sub, "", "", "" };
+                    describeSsi(sub.ssi, sub.kind, r.call, r.info);
+                    r.act = sub.talkingIn ? "TALKING in " + std::to_string(sub.talkingIn) : sub.lastActivity;
+                    rows.push_back(std::move(r));
+                }
+                sortRows(rows, [&](const StRow& a, const StRow& b, int col) {
+                    switch (col) {
+                    case 0: return cmpNum(a.s->ssi, b.s->ssi);
+                    case 1: return cmpNum(a.s->kind, b.s->kind);
+                    case 2: return cmpStr(a.call, b.call);
+                    case 3: return cmpNum(a.s->lastTn, b.s->lastTn);
+                    case 4: return cmpNum((double)(now - a.s->lastSeen), (double)(now - b.s->lastSeen));
+                    case 5: return cmpStr(a.act, b.act);
+                    case 6: return cmpNum(a.s->groups.empty() ? 0 : a.s->groups[0], b.s->groups.empty() ? 0 : b.s->groups[0]);
+                    default: return cmpStr(a.info, b.info);
+                    }
+                });
+                for (auto& row : rows) {
+                    const TetraSubscriber& sub = *row.s;
+                    const std::string& call = row.call;
+                    const std::string& info = row.info;
                     long ago = (long)(now - sub.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
@@ -4073,18 +4112,39 @@ private:
         if (ImGui::BeginTabItem(grTitle.c_str())) {
             float minGr = colW("16777215") + colW("TETRA Oberbayern") + colW("4E") + colW("59m") + 2 * colW("2620001 DB0XXX") + colW("Attached");
             if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 7, flags, ImVec2(menuWidth, tableHeight((int)groups.size())), innerW(minGr))) {
-                ImGui::TableSetupScrollFreeze(1, 1);
-                ImGui::TableSetupColumn("GSSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"));
-                ImGui::TableSetupColumn("Talkgroup", ImGuiTableColumnFlags_WidthStretch, 1.2f);
-                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("4E"));
-                ImGui::TableSetupColumn("Seen", ImGuiTableColumnFlags_WidthFixed, colW("59m"));
-                ImGui::TableSetupColumn("Talker", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-                ImGui::TableSetupColumn("Last talker", ImGuiTableColumnFlags_WidthStretch, 1.0f);
-                ImGui::TableSetupColumn("Attached", ImGuiTableColumnFlags_WidthFixed, colW("Attached"));
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("GSSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"), 0);
+                ImGui::TableSetupColumn("Talkgroup", ImGuiTableColumnFlags_WidthStretch, 1.2f, 1);
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("4E"), 2);
+                ImGui::TableSetupColumn("Seen", ImGuiTableColumnFlags_WidthFixed, colW("59m"), 3);
+                ImGui::TableSetupColumn("Talker", ImGuiTableColumnFlags_WidthStretch, 1.0f, 4);
+                ImGui::TableSetupColumn("Last talker", ImGuiTableColumnFlags_WidthStretch, 1.0f, 5);
+                ImGui::TableSetupColumn("Attached", ImGuiTableColumnFlags_WidthFixed, colW("Attached"), 6);
                 ImGui::TableHeadersRow();
+                struct GrRow { const TetraSubscriber* g; std::string info; int members; };
+                std::vector<GrRow> grows;
+                grows.reserve(groups.size());
                 for (auto& g : groups) {
-                    std::string call, info;
-                    describeSsi(g.ssi, TetraSubscriber::KIND_GROUP, call, info);
+                    GrRow r { &g, "", 0 };
+                    std::string c;
+                    describeSsi(g.ssi, TetraSubscriber::KIND_GROUP, c, r.info);
+                    for (auto& st : stations) { if (std::find(st.groups.begin(), st.groups.end(), g.ssi) != st.groups.end()) { r.members++; } }
+                    grows.push_back(std::move(r));
+                }
+                sortRows(grows, [&](const GrRow& a, const GrRow& b, int col) {
+                    switch (col) {
+                    case 0: return cmpNum(a.g->ssi, b.g->ssi);
+                    case 1: return cmpStr(a.info, b.info);
+                    case 2: return cmpNum(a.g->lastTn, b.g->lastTn);
+                    case 3: return cmpNum((double)(now - a.g->lastSeen), (double)(now - b.g->lastSeen));
+                    case 4: return cmpNum(a.g->talker, b.g->talker);
+                    case 5: return cmpNum(a.g->lastTalker, b.g->lastTalker);
+                    default: return cmpNum(a.members, b.members);
+                    }
+                });
+                for (auto& grow : grows) {
+                    const TetraSubscriber& g = *grow.g;
+                    const std::string& info = grow.info;
                     long ago = (long)(now - g.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
@@ -4140,13 +4200,13 @@ private:
             tw::SameCheckbox(CONCAT("Hide call control##_tetra_tr_cc_", name), &trafficHideControl);
             float minTr = colW("00:00:00") + colW("TS") + colW("D-TX-GRANTED") + 2 * colW("2620001 DB0XXX") + colW("SDS text: Hello World");
             if (ImGui::BeginTable(CONCAT("##_tetra_tr_tab2_", name), 6, flags, ImVec2(menuWidth, tableHeight((int)traffic.size())), innerW(minTr))) {
-                ImGui::TableSetupScrollFreeze(1, 1);
-                ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("00:00:00"));
-                ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthStretch, 0.8f);
-                ImGui::TableSetupColumn("PDU", ImGuiTableColumnFlags_WidthFixed, colW("D-TX-GRANTED"));
-                ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthStretch, 0.8f);
-                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("TS"));
-                ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+                ImGui::TableSetupScrollFreeze(0, 1);
+                ImGui::TableSetupColumn("Time", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("00:00:00"), 0);
+                ImGui::TableSetupColumn("To", ImGuiTableColumnFlags_WidthStretch, 0.8f, 1);
+                ImGui::TableSetupColumn("PDU", ImGuiTableColumnFlags_WidthFixed, colW("D-TX-GRANTED"), 2);
+                ImGui::TableSetupColumn("From", ImGuiTableColumnFlags_WidthStretch, 0.8f, 3);
+                ImGui::TableSetupColumn("TS", ImGuiTableColumnFlags_WidthFixed, colW("TS"), 4);
+                ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch, 2.0f, 5);
                 ImGui::TableHeadersRow();
                 // newest first; only the visible rows are drawn (up to 1000 entries)
                 std::vector<const TetraTrafficEntry*> rows;
@@ -4156,6 +4216,17 @@ private:
                     if (trafficHideControl && control) { continue; }
                     rows.push_back(&*it);
                 }
+                // unsorted: newest first (as received)
+                sortRows(rows, [&](const TetraTrafficEntry* a, const TetraTrafficEntry* b, int col) {
+                    switch (col) {
+                    case 0: return cmpNum((double)a->t, (double)b->t);
+                    case 1: return cmpNum(a->to, b->to);
+                    case 2: return cmpStr(a->pdu, b->pdu);
+                    case 3: return cmpNum(a->from, b->from);
+                    case 4: return cmpNum(a->tn, b->tn);
+                    default: return cmpStr(a->text, b->text);
+                    }
+                });
                 ImGuiListClipper clipper;
                 clipper.Begin((int)rows.size());
                 while (clipper.Step()) for (int ri = clipper.DisplayStart; ri < clipper.DisplayEnd; ri++) {

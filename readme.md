@@ -103,6 +103,9 @@ answer, a fix or a new function – we decide what gets changed.
 
 ## Legal notes
 
+- **About the name:** “TETRA-SCHWARTZ” is a homage to the film comedy
+  *Spaceballs* (Mel Brooks, 1987) – “May the Schwartz be with you”. It has no
+  relation to any company, brand or product with a similar-sounding name.
 - For **experimental amateur radio purposes**: receive your own or amateur
   radio cells. Listening to other radio services may be prohibited where you
   live (Germany: § 5 TDDDG).
@@ -122,7 +125,11 @@ Amateurfunk (experimentelle Beta). Download für Windows und Linux sowie die
 Fehler bitte als [Issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
 melden, Fragen und Erfahrungen in den
 [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
-Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen.
+Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen. Der Name
+„TETRA-SCHWARTZ“ ist eine Hommage an die Filmkomödie *Spaceballs* (Mel
+Brooks, 1987) – „Möge der Saft mit dir sein“ heißt im Original „May the
+Schwartz be with you“ – und hat nichts mit ähnlich klingenden Firmen oder
+Marken zu tun.
 
 **Kein Support:** Das ist kein Community-Projekt, sondern ein Werkzeug, das
 wir für unsere eigenen Ansprüche gebaut bzw. angepasst haben und so, wie es
