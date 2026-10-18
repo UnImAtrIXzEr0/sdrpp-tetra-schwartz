@@ -76,7 +76,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 2,
+    /* Version:         */ 0, 20, 3,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -110,6 +110,9 @@ public:
         bool startNow = config.conf[name]["sending"];
         if (config.conf[name].contains("levelCalDb")) {
             levelCalDb = config.conf[name]["levelCalDb"];
+        }
+        if (config.conf[name].contains("freqRef") && config.conf[name]["freqRef"].is_number_integer()) {
+            freqRef = std::clamp((int)config.conf[name]["freqRef"], 0, 2);
         }
         {
             // log folder: visible default on Linux (AppImage config is hidden),
@@ -549,7 +552,7 @@ public:
                      "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d, \"freq_ref\": %d}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -566,7 +569,7 @@ public:
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
                      alarmTotal, alarmActive ? "true" : "false",
-                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN);
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN, freqRef);
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -681,12 +684,36 @@ private:
         // Frequency / clock
         tw::Text("Carrier offset:"); tw::SameNext();
         if (m.valid && m.symSync) {
-            tw::TextColored(val, "%+7.1f Hz", m.carrierOffsetHz); tw::SameTextColored(std::fabs(m.carrierPpm) <= 0.2f ? good : (std::fabs(m.carrierPpm) <= 1.0f ? warn : bad), "(%+.3f ppm)", m.carrierPpm);
+            // EN 300 394-1 7.3.2.2: BS +-0.2 ppm up to 520 MHz, +-0.1 ppm above.
+            // Judged only with a reference: B.1.2.1 asks +-0.02 ppm for the test receiver.
+            float lim = m.refFreqHz > 520e6 ? 0.1f : 0.2f;
+            tw::TextColored(val, "%+7.1f Hz", m.carrierOffsetHz);
+            if (_this->freqRef == 0) { tw::SameTextColored(val, "(%+.3f ppm)", m.carrierPpm); tw::SameTextDisabled("indicative"); }
+            else { tw::SameTextColored(std::fabs(m.carrierPpm) <= lim ? good : bad, "(%+.3f ppm)", m.carrierPpm); }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Reference: %s %.4f MHz\nIncludes the SDR's own frequency error.\nETSI: BS +-0.2 ppm, MS +-1 ppm (vs. received).",
-                                  m.refFromSysinfo ? "SYSINFO DL" : "VFO", m.refFreqHz / 1e6);
+                ImGui::SetTooltip("Carrier frequency error of the received cell (downlink).\n"
+                                  "Nominal: %s %.4f MHz. Includes the SDR's own frequency error.\n"
+                                  "EN 300 394-1 7.3.2: BS within +-%.1f ppm (MS +-100 Hz).\n"
+                                  "B.1.2.1: the test receiver itself must be within +-0.02 ppm -\n"
+                                  "only reachable with an external 10 MHz reference or a fresh\n"
+                                  "calibration. Without one the value is indicative only.",
+                                  m.refFromSysinfo ? "SYSINFO DL" : "VFO", m.refFreqHz / 1e6, lim);
             }
         } else { tw::TextDisabled("--"); }
+        tw::Text("Frequency reference:"); tw::SameNext();
+        ImGui::SetNextItemWidth((std::min)(menuWidth - ImGui::GetCursorPosX(), 190.0f * style::uiScale));
+        if (ImGui::Combo(CONCAT("##_tetra_fref_", _this->name), &_this->freqRef, "SDR internal\0External 10 MHz\0Calibrated (XO corr.)\0")) {
+            config.acquire();
+            config.conf[_this->name]["freqRef"] = _this->freqRef;
+            config.release(true);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Which reference the SDR runs on. Only with an external 10 MHz\n"
+                              "reference (or a calibration against one) is the carrier error\n"
+                              "judged against the ETSI limit; otherwise it is marked indicative.\n"
+                              "Set the SDR itself as well: USRP (B2xx) Source -> Clock: external;\n"
+                              "Pluto+: reference input is a firmware setting of the device.");
+        }
         tw::Text("Symbol clock:"); tw::SameNext();
         if (m.valid && m.symSync) {
             tw::TextColored(val, "%+7.1f ppm", m.symbolRatePpm);
@@ -3418,6 +3445,7 @@ private:
     int txaFftIdx = 1;        // 0: 4096, 1: 8192, 2: 16384
     int txaAvg = 20;
     float txaLimit[3] = { -60.0f, -70.0f, -70.0f };   // dBc at 25 / 50 / 75 kHz
+    int freqRef = 0;   // frequency reference of the SDR: 0 internal, 1 external 10 MHz, 2 calibrated
     bool focusConstWin = false;
     // trends, further carriers, burst analysis (v0.18)
     TetraTrendView trendView;

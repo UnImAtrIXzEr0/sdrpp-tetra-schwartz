@@ -239,7 +239,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>I/Q offset</td><td>carrier leakage (transmitter) or DC component (receiver) relative to the signal.</td><td>&lt; −30 dB</td></tr>
 <tr><td>I/Q imbalance (IRR)</td><td>image rejection of the transmitter from an I/Q model.</td><td>&gt; 30 dB</td></tr>
 <tr><td>Error split</td><td>error split into phase and amplitude; much more phase points to phase noise.</td><td></td></tr>
-<tr><td>Carrier offset</td><td>carrier offset to the VFO (small with AFC).</td><td></td></tr>
+<tr><td>Carrier offset</td><td>frequency error of the cell in Hz and ppm against the nominal frequency (SYSINFO). Includes the error of the SDR itself.</td><td>BS ±0.2 ppm up to 520 MHz, ±0.1 ppm above (EN 300 394-1, 7.3.2)</td></tr>
+<tr><td>Frequency reference</td><td>what the SDR runs on: <span class="ui">SDR internal</span>, <span class="ui">External 10 MHz</span> or <span class="ui">Calibrated (XO corr.)</span>. Only with a reference is the frequency error judged against the limit; otherwise it is marked "indicative", because the standard requires ±0.02 ppm for the test receiver (B.1.2.1). Set the reference in the SDR as well: USRP/B2xx under <span class="ui">Source</span> → <span class="ui">Clock</span> = external; on the Pluto+ the reference input is a firmware setting.</td><td></td></tr>
 <tr><td>Symbol clock</td><td>deviation of the symbol clock in ppm (transmitter + SDR clock).</td><td>a few ppm</td></tr>
 <tr><td>Input rate</td><td>actually arriving sample rate (60 s regression); negative deviation = lost samples.</td><td>±(uncertainty)</td></tr>
 <tr><td>Audio drops</td><td>discarded speech data because the audio output cannot keep up.</td><td>none</td></tr>

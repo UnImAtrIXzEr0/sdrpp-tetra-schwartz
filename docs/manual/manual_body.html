@@ -239,7 +239,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>I/Q offset</td><td>Trägerrest (Sender) oder Gleichanteil (Empfänger) relativ zum Signal.</td><td>&lt; −30 dB</td></tr>
 <tr><td>I/Q imbalance (IRR)</td><td>Spiegelfrequenzunterdrückung des Senders aus einem I/Q-Modell.</td><td>&gt; 30 dB</td></tr>
 <tr><td>Error split</td><td>Fehler aufgeteilt in Phase und Amplitude; deutlich mehr Phase deutet auf Phasenrauschen.</td><td></td></tr>
-<tr><td>Carrier offset</td><td>Trägerablage zum VFO (bei AFC klein).</td><td></td></tr>
+<tr><td>Carrier offset</td><td>Frequenzfehler der Zelle in Hz und ppm gegen die Sollfrequenz (SYSINFO). Enthält den Fehler des SDR selbst.</td><td>BS ±0,2 ppm bis 520 MHz, ±0,1 ppm darüber (EN 300 394-1, 7.3.2)</td></tr>
+<tr><td>Frequency reference</td><td>Womit das SDR läuft: <span class="ui">SDR internal</span>, <span class="ui">External 10 MHz</span> oder <span class="ui">Calibrated (XO corr.)</span>. Nur mit Referenz wird der Frequenzfehler gegen die Grenze bewertet; sonst steht „indicative“ (Richtwert), weil die Norm für den Messempfänger ±0,02 ppm verlangt (B.1.2.1). Die Referenz muss auch im SDR eingestellt sein: USRP/B2xx unter <span class="ui">Source</span> → <span class="ui">Clock</span> = external; beim Pluto+ ist der Referenzeingang eine Firmware-Einstellung.</td><td></td></tr>
 <tr><td>Symbol clock</td><td>Abweichung des Symboltakts in ppm (Sender + SDR-Takt).</td><td>einige ppm</td></tr>
 <tr><td>Input rate</td><td>tatsächlich ankommende Abtastrate (60-s-Regression); negative Abweichung = verlorene Abtastwerte.</td><td>±(Unsicherheit)</td></tr>
 <tr><td>Audio drops</td><td>verworfene Sprachdaten, weil die Audioausgabe nicht mitkommt.</td><td>none</td></tr>
