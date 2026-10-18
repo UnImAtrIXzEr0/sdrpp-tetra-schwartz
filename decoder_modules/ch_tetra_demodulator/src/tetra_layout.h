@@ -1,6 +1,7 @@
 #pragma once
-// Width-aware layout helpers: an element that would not fit on the current
-// line any more goes to the next line instead of disappearing to the right.
+// Layout helpers with an instrument-style value column (see valueSameLine):
+// text never wraps or jumps with the values; controls go to the next line only
+// if they do not fit (with hysteresis).
 #include <imgui.h>
 #include <cstdarg>
 #include <cstdio>
@@ -37,30 +38,75 @@ namespace tw {
 
     inline float textWidth(const char* s) { return ImGui::CalcTextSize(s, nullptr, true).x; }
 
-    // Stable layout: whether a value stays on the line of its label is decided
-    // with the widest text this place has shown since the window last changed
-    // its width - a value that gets longer (9.8 -> 10.2 dB) or a message that
-    // comes and goes does not flip the line break back and forth, so the
-    // controls below stay where they are. Only resizing the window re-lays out.
-    struct Sticky {
-        struct E { float w; float winW; };
-        std::unordered_map<ImGuiID, E> m;
-        std::unordered_map<ImGuiID, int> occ;
-        int frame = -1;
-    };
-    inline Sticky& sticky() { static Sticky s; return s; }
-    inline float stickyWidth(const void* key, float w) {
-        Sticky& s = sticky();
-        int f = ImGui::GetFrameCount();
-        if (f != s.frame) { s.frame = f; s.occ.clear(); }
-        ImGuiID base = ImGui::GetID(key);
-        int n = s.occ[base]++;   // the same format string used several times in a window
-        ImGuiID id = base ^ (ImGuiID)(n * 2654435761u);
-        float winW = ImGui::GetWindowWidth();
-        auto it = s.m.find(id);
-        if (it == s.m.end() || it->second.winW != winW) { s.m[id] = { w, winW }; return w; }
-        if (w > it->second.w) { it->second.w = w; }
-        return it->second.w;
+    // ---- Instrument-style layout (v0.23.4) ----
+    // Text lines never wrap: a "Label:" line puts its values into a value
+    // column at a fixed x (the widest label of the window, at most 45 % of the
+    // width), further values follow on the same line, and whatever does not fit
+    // is cut with "..." (full text as tooltip). The layout depends only on the
+    // window width and the (static) labels, never on the values - nothing moves
+    // when a value changes. Only when the window is too narrow for a readable
+    // value column the values go to a fixed line below their label.
+    struct LabelCol { float maxW = 0.0f; };
+    inline std::unordered_map<ImGuiID, LabelCol>& labelCols() { static std::unordered_map<ImGuiID, LabelCol> m; return m; }
+    inline bool& labelPending() { static bool p = false; return p; }
+    inline float& labelStartX() { static float x = 0.0f; return x; }
+    inline float& labelEndX() { static float x = 0.0f; return x; }
+    inline bool isLabel(const char* t) {
+        size_t n = strlen(t);
+        while (n > 0 && t[n - 1] == ' ') { n--; }
+        return n > 1 && t[n - 1] == ':' && !strchr(t, '\n');
+    }
+    // after a label item: remember it (window-scoped key, labels are static)
+    inline void noteLabel(const char* t) {
+        labelPending() = false;
+        if (!isLabel(t)) { return; }
+        LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
+        float w = ImGui::GetItemRectSize().x;
+        if (w > c.maxW) { c.maxW = w; }
+        labelPending() = true;
+        labelStartX() = ImGui::GetItemRectMin().x;
+        labelEndX() = ImGui::GetItemRectMax().x;
+    }
+    // position for a value that follows on the line of the last item
+    inline void valueSameLine() {
+        pendingSame() = false;
+        const float sp = ImGui::GetStyle().ItemSpacing.x;
+        // the label must still be the last item (raw ImGui items in between: no column)
+        bool lastIsLabel = labelPending() && ImGui::GetItemRectMax().x == labelEndX() && ImGui::GetItemRectMin().x == labelStartX();
+        labelPending() = false;
+        if (!lastIsLabel) { ImGui::SameLine(); return; }
+        const LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
+        float x0 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x;
+        float full = rightEdge() - x0;
+        float col = labelStartX() + (std::min)(c.maxW + sp, 0.45f * full);
+        float minVal = ImGui::GetFontSize() * 7.0f;
+        if (rightEdge() - col < minVal) {
+            // too narrow for a value column: values on a fixed line below
+            ImGui::SetCursorScreenPos(ImVec2(labelStartX() + ImGui::GetFontSize(), ImGui::GetCursorScreenPos().y));
+            return;
+        }
+        if (col < labelEndX() + sp) { ImGui::SameLine(); return; }   // longer label than the column
+        ImGui::SameLine(0, 0);
+        ImGui::SetCursorScreenPos(ImVec2(col, ImGui::GetCursorScreenPos().y));
+    }
+
+    // controls after an item: same line if they fit, with a hysteresis of one
+    // character per control (keyed by its unique label) so a changing value in
+    // front of them cannot make them jump back and forth
+    inline std::unordered_map<ImGuiID, bool>& ctrlWrap() { static std::unordered_map<ImGuiID, bool> m; return m; }
+    inline bool SameLineForCtrl(const char* id, float w) {
+        pendingSame() = false;
+        labelPending() = false;
+        float x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
+        bool& wrapped = ctrlWrap()[ImGui::GetID(id)];
+        float margin = wrapped ? ImGui::GetFontSize() * 2.0f : 0.0f;
+        bool fits = x + w + margin <= rightEdge();
+        wrapped = !fits;
+        if (fits) { ImGui::SameLine(); return true; }
+        if (ImGui::GetCursorScreenPos().x + ImGui::GetFontSize() + w <= rightEdge()) {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetFontSize());
+        }
+        return false;
     }
     inline float checkboxWidth(const char* label) {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + textWidth(label);
@@ -114,7 +160,9 @@ namespace tw {
     };
 
     inline void flushPending(const void* key, float w) {
-        if (pendingSame()) { pendingSame() = false; SameLineFor(stickyWidth(key, w)); }
+        (void)key; (void)w;
+        if (pendingSame()) { valueSameLine(); }
+        else { labelPending() = false; }
     }
     // drop-in replacements for ImGui::Text*: behave identically unless a
     // SameNext() is pending; too long texts wrap (cells: clip with "...")
@@ -125,6 +173,7 @@ namespace tw {
         FitText f(buf, sizeof(buf));
         ImGui::TextColored(col, "%s", buf);
         f.done();
+        if (!cellMode()) { noteLabel(buf); }
     }
     inline void Text(const char* fmt, ...) {
         char buf[512];
@@ -133,6 +182,7 @@ namespace tw {
         FitText f(buf, sizeof(buf));
         ImGui::TextUnformatted(buf);
         f.done();
+        if (!cellMode()) { noteLabel(buf); }
     }
     inline void TextU(const char* text) { Text("%s", text); }
     inline void TextDisabled(const char* fmt, ...) {
@@ -142,12 +192,13 @@ namespace tw {
         FitText f(buf, sizeof(buf));
         ImGui::TextDisabled("%s", buf);
         f.done();
+        if (!cellMode()) { noteLabel(buf); }
     }
 
     inline void SameTextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        valueSameLine();
         FitText f(buf, sizeof(buf));
         ImGui::TextColored(col, "%s", buf);
         f.done();
@@ -155,7 +206,7 @@ namespace tw {
     inline void SameText(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        valueSameLine();
         FitText f(buf, sizeof(buf));
         ImGui::TextUnformatted(buf);
         f.done();
@@ -163,21 +214,21 @@ namespace tw {
     inline void SameTextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        SameLineFor(stickyWidth(fmt, textWidth(buf)));
+        valueSameLine();
         FitText f(buf, sizeof(buf));
         ImGui::TextDisabled("%s", buf);
         f.done();
     }
     inline bool SameCheckbox(const char* label, bool* v) {
-        SameLineFor(checkboxWidth(label));
+        SameLineForCtrl(label, checkboxWidth(label));
         return ImGui::Checkbox(label, v);
     }
     inline bool SameSmallButton(const char* label) {
-        SameLineFor(smallButtonWidth(label));
+        SameLineForCtrl(label, smallButtonWidth(label));
         return ImGui::SmallButton(label);
     }
     inline bool SameButton(const char* label, const ImVec2& size = ImVec2(0, 0)) {
-        SameLineFor(size.x > 0 ? size.x : buttonWidth(label));
+        SameLineForCtrl(label, size.x > 0 ? size.x : buttonWidth(label));
         return ImGui::Button(label, size);
     }
     // Button next to the last item if it fits, otherwise a full-width button

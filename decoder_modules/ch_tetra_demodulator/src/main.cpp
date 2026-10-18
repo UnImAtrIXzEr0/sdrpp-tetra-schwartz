@@ -4340,7 +4340,7 @@ private:
         std::string grTitle = "Groups (" + std::to_string(groups.size()) + ")###_tetra_tab_gr_" + name;
         if (ImGui::BeginTabItem(grTitle.c_str())) {
             float minGr = colW("16777215") + colW("TETRA Oberbayern") + colW("4E") + colW("59m") + 2 * colW("2620001 DB0XXX") + colW("Attached");
-            if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 7, flags, ImVec2(menuWidth, tableHeight((int)groups.size())), innerW(minGr))) {
+            if (ImGui::BeginTable(CONCAT("##_tetra_grp_tab_", name), 8, flags, ImVec2(menuWidth, tableHeight((int)groups.size())), innerW(minGr + colW("10000001, 10000002")))) {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("GSSI", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHide, colW("16777215"), 0);
                 ImGui::TableSetupColumn("Talkgroup", ImGuiTableColumnFlags_WidthStretch, 1.2f, 1);
@@ -4349,15 +4349,24 @@ private:
                 ImGui::TableSetupColumn("Talker", ImGuiTableColumnFlags_WidthStretch, 1.0f, 4);
                 ImGui::TableSetupColumn("Last talker", ImGuiTableColumnFlags_WidthStretch, 1.0f, 5);
                 ImGui::TableSetupColumn("Attached", ImGuiTableColumnFlags_WidthFixed, colW("Attached"), 6);
+                ImGui::TableSetupColumn("Attached by", ImGuiTableColumnFlags_WidthStretch, 1.2f, 7);
                 ImGui::TableHeadersRow();
-                struct GrRow { const TetraSubscriber* g; std::string info; int members; };
+                struct GrRow { const TetraSubscriber* g; std::string info; int members; std::string by, byTip; };
                 std::vector<GrRow> grows;
                 grows.reserve(groups.size());
                 for (auto& g : groups) {
-                    GrRow r { &g, "", 0 };
+                    GrRow r { &g, "", 0, "", "" };
                     std::string c;
                     describeSsi(g.ssi, TetraSubscriber::KIND_GROUP, c, r.info);
-                    for (auto& st : stations) { if (std::find(st.groups.begin(), st.groups.end(), g.ssi) != st.groups.end()) { r.members++; } }
+                    for (auto& st : stations) {
+                        if (std::find(st.groups.begin(), st.groups.end(), g.ssi) == st.groups.end()) { continue; }
+                        r.members++;
+                        std::string sc, si;
+                        describeSsi(st.ssi, TetraSubscriber::KIND_INDIVIDUAL, sc, si);
+                        std::string one = std::to_string(st.ssi) + (sc.empty() ? "" : " " + sc);
+                        r.by += (r.by.empty() ? "" : ", ") + one;
+                        r.byTip += (r.byTip.empty() ? "" : "\n") + one + (si.empty() ? "" : "  " + si);
+                    }
                     grows.push_back(std::move(r));
                 }
                 sortRows(grows, [&](const GrRow& a, const GrRow& b, int col) {
@@ -4368,7 +4377,8 @@ private:
                     case 3: return cmpNum((double)(now - a.g->lastSeen), (double)(now - b.g->lastSeen));
                     case 4: return cmpNum(a.g->talker, b.g->talker);
                     case 5: return cmpNum(a.g->lastTalker, b.g->lastTalker);
-                    default: return cmpNum(a.members, b.members);
+                    case 6: return cmpNum(a.members, b.members);
+                    default: return cmpStr(a.by, b.by);
                     }
                 });
                 for (auto& grow : grows) {
@@ -4401,22 +4411,15 @@ private:
                         tw::Text("%u %s", g.lastTalker, tc.c_str());
                     }
                     ImGui::TableSetColumnIndex(6);
-                    {
-                        int members = 0;
-                        std::string who;
-                        for (auto& st : stations) {
-                            if (std::find(st.groups.begin(), st.groups.end(), g.ssi) != st.groups.end()) {
-                                members++;
-                                std::string c, i;
-                                describeSsi(st.ssi, TetraSubscriber::KIND_INDIVIDUAL, c, i);
-                                who += (who.empty() ? "" : "\n") + std::to_string(st.ssi) + " " + c;
-                            }
-                        }
-                        if (members) {
-                            tw::Text("%d", members);
-                            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", who.c_str()); }
-                        } else { tw::TextDisabled("-"); }
-                    }
+                    if (grow.members) {
+                        tw::Text("%d", grow.members);
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", grow.byTip.c_str()); }
+                    } else { tw::TextDisabled("-"); }
+                    ImGui::TableSetColumnIndex(7);
+                    if (grow.members) {
+                        tw::TextU(grow.by.c_str());
+                        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Subscribers with this group in their scan list (group attachment):\n%s", grow.byTip.c_str()); }
+                    } else { tw::TextDisabled("-"); }
                 }
                 ImGui::EndTable();
             }
