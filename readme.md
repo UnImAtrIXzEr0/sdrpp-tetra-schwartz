@@ -62,11 +62,11 @@ SDR++ should work as well but have not been tried with this edition.
 
 | Device | Status | Strengths and limits for the measurements |
 |---|---|---|
-| **LibreSDR B220** (USRP clone, AD9361, used with UHD) | ✅ works | 12 bit, large bandwidth: uplink and downlink of a cell at the same time (≥ 12 MS/s over USB 3). Set *Master Clock* to *Auto*. High sample rates cost a lot of CPU. External reference depending on the board version. |
+| **LibreSDR B220** (USRP clone, AD9361, used with UHD) | ✅ works | 12 bit, large bandwidth: uplink and downlink of a cell at the same time (≥ 12 MS/s over USB 3). Set *Master Clock* to *Auto*. High sample rates cost a lot of CPU. Input for an external 10 MHz reference. |
 | **RTL-SDR V3** and **RTL-SDR V4** | ✅ works | Cheap and good for decoding, coverage drives and trends. 8-bit ADC and at most about 2.4 MS/s: limited dynamic range, so the adjacent channel limits (−60/−70 dBc) and low switching transients usually cannot be verified; MER/EVM are indicative. No external reference (the TCXO is about 1 ppm). Uplink and downlink of a cell do not fit into the bandwidth together. |
 | **PLUTO+** (AD9363, ADC/DAC) | ✅ works | 12 bit, several MS/s over USB 2 or Ethernet. External 10 MHz reference input: the best choice for frequency measurements. Watch the *Overflows* counter (lost samples). |
 | **HamGeek Zynq7010 AD9363 SDR** (XC7Z010CLG400 + AD9363ABCZ, Pluto-Nano clone) | ✅ works | 12 bit like the PLUTO+, compact. Frequency accuracy depends on its oscillator – calibrate it (manual, chapter 4.3). |
-| **HamGeek ADI Pluto+ 70 MHz–6 GHz** (AD9363, via USB) | ❌ not yet | Connects and runs, but shows no carrier. A setting is still wrong; under investigation. |
+| **HamGeek ADI Pluto+ 70 MHz–6 GHz** (AD9363, via USB) | ❌ not yet | Tested via USB only: connects and runs, but shows no carrier. A setting is still wrong; under investigation. |
 
 ## Download
 
