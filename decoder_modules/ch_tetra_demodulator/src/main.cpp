@@ -1957,6 +1957,14 @@ private:
             }
         }
         if (gh && !ImGui::IsItemActive()) { ImGui::SetTooltip("Drag to move this section, right-click the header for more"); }
+        // drag source on the grip itself (must follow the grip button directly:
+        // the window icon below is a later item)
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
+            ImGui::SetDragDropPayload("TETRA_SECTION", &id, sizeof(int));
+            const char* hash = strstr(label, "##");
+            ImGui::TextUnformatted(label, hash ? hash : nullptr);
+            ImGui::EndDragDropSource();
+        }
         // own window: icon left of the grip (blue while the window is open)
         if (bool* df = detachFlag(id)) {
             float iw = ImGui::GetFontSize() * 1.25f;
@@ -1977,12 +1985,6 @@ private:
             dl->AddLine(t1, ImVec2(t1.x, t1.y + sz * 0.35f), c, th);
             if (wh) { ImGui::SetTooltip(*df ? "Own window is open - click to put it back into the menu" : "Show this section in its own window"); }
             ImGui::SetCursorScreenPos(keep);
-        }
-        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceNoHoldToOpenOthers)) {
-            ImGui::SetDragDropPayload("TETRA_SECTION", &id, sizeof(int));
-            const char* hash = strstr(label, "##");
-            ImGui::TextUnformatted(label, hash ? hash : nullptr);
-            ImGui::EndDragDropSource();
         }
         ImGui::SetCursorScreenPos(back);
         return open;
