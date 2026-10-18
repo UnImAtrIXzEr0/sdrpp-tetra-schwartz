@@ -120,6 +120,9 @@ namespace dsp {
         // "Listen to": bit n-1 = timeslot n may be played (set from the GUI thread)
         void setListenMask(int m) { tms->listen_mask = m & 0x0f; }
         int getVoiceTn() { return tms->voice_tn; }
+        // speech bursts decoded so far, without / with CRC error (BFI)
+        uint32_t getVoiceBurstsOk() { return tms->voice_bursts_ok; }
+        uint32_t getVoiceBurstsBad() { return tms->voice_bursts_bad; }
         int getDlUsage() { return tms->t_display_st->dl_usage; }
         // timeslot occupancy counters (ts 0..3), see tetra_display_state
         uint32_t getDlUseCnt(int ts, int cat) { return tms->t_display_st->dl_use_cnt[ts & 3][cat & 3]; }

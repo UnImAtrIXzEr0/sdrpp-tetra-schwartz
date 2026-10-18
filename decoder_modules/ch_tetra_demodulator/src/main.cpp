@@ -499,6 +499,21 @@ public:
             trendDetached = carrDetached = burstDetached = mpDetached = on;
             return "{\"status\": \"ok\"}";
         }
+        if (cmd == "sim_play") {
+            // tests / manual screenshots only: show a transmission in "Playing" without speech
+            // in the recording. "live TS GSSI ISSI OK BAD SECONDS" | "idle ... AGO" | "off"
+            std::lock_guard<std::mutex> lk(simPlayMtx);
+            char mode[8] = { 0 };
+            int ts = 0;
+            unsigned g = 0, tk = 0, ok = 0, bad = 0;
+            double sec = 0;
+            if (sscanf(args.c_str(), "%7s %d %u %u %u %u %lf", mode, &ts, &g, &tk, &ok, &bad, &sec) >= 1) {
+                simPlay.mode = strcmp(mode, "live") == 0 ? 1 : (strcmp(mode, "idle") == 0 ? 2 : 0);
+                simPlay.ts = ts; simPlay.group = g; simPlay.talker = tk; simPlay.ok = ok; simPlay.bad = bad; simPlay.sec = sec;
+                simPlay.fresh = true;
+            }
+            return "{\"status\": \"ok\"}";
+        }
         if (cmd == "set_layout") {
             // layout preset 0 classic, 1 measuring station, 2 drive test (applied in the GUI thread)
             layoutReq.store(std::clamp(atoi(args.c_str()), 0, 3));
@@ -2408,7 +2423,6 @@ private:
     void listenLoop() {
         int mask = 0;
         bool encMuted = false;
-        std::string now;
         auto slotTraffic = [&](int ts) { return osmotetradecoder.getTimeslotContent(ts - 1) == 4; };
         auto owner = [&](int ts) { return subscribers.slotOwner(ts); };
         auto encOf = [&](const TetraSubscriberTable::SlotOwner& o) { return o.ssi && (o.e2ee || o.air); };
@@ -2434,21 +2448,229 @@ private:
             for (int ts = 1; ts <= 4; ts++) { if (allowed(ts)) { mask |= 1 << (ts - 1); } }
         }
         osmotetradecoder.setListenMask(mask);
-        // what is played: timeslot of the last voice frame, if traffic is still there
-        int vt = osmotetradecoder.getVoiceTn();
-        if (vt >= 1 && vt <= 4 && slotTraffic(vt) && ((mask >> (vt - 1)) & 1)) {
+        // What is played: driven by the speech bursts that really went through the
+        // codec (not by the timeslot content of the current frame, which is
+        // signalling now and then). A "Durchgang" (one PTT) starts with the first
+        // speech burst of a new talker and ends 2 s after the last one (hang time).
+        double t = playNow();
+        uint32_t ok = osmotetradecoder.getVoiceBurstsOk(), bad = osmotetradecoder.getVoiceBurstsBad();
+        if (ok + bad != playSeenOk + playSeenBad) {
+            int vt = osmotetradecoder.getVoiceTn();
             auto o = owner(vt);
-            char b[160];
-            if (o.ssi) {
-                std::string c, i;
-                describeSsi(o.ssi, TetraSubscriber::KIND_GROUP, c, i);
-                snprintf(b, sizeof(b), "TS%d, %u%s%s", vt, o.ssi, i.empty() ? "" : (" " + i).c_str(), o.talker ? (", talker " + std::to_string(o.talker)).c_str() : "");
+            bool same = play.valid && play.ts == vt && play.group == o.ssi
+                        && (o.talker == 0 || play.talker == 0 || play.talker == o.talker);
+            if (!same) {
+                if (play.valid) { playLast = play; }
+                if (o.ssi != playCallGroup || t - playLastVoiceAny > 10.0) { playCallStart = t; playCallGroup = o.ssi; }
+                play = PlayInfo();
+                play.valid = true;
+                play.ts = vt;
+                play.group = o.ssi;
+                play.start = t;
+                play.ok0 = playSeenOk;
+                play.bad0 = playSeenBad;
             }
-            else { snprintf(b, sizeof(b), "TS%d", vt); }
-            now = b;
+            if (!play.talker && o.talker) { play.talker = o.talker; }
+            play.lastVoice = t;
+            play.ok = ok;
+            play.bad = bad;
+            playLastVoiceAny = t;
+            playSeenOk = ok;
+            playSeenBad = bad;
         }
-        listenNow = now;
+        {
+            std::lock_guard<std::mutex> lk(simPlayMtx);
+            if (simPlay.mode) {
+                PlayInfo q;
+                q.valid = true; q.ts = simPlay.ts; q.group = simPlay.group; q.talker = simPlay.talker;
+                q.ok0 = 0; q.bad0 = 0; q.ok = simPlay.ok; q.bad = simPlay.bad;
+                if (simPlay.fresh) { simPlayT0 = t; simPlay.fresh = false; }
+                if (simPlay.mode == 1) {
+                    q.start = simPlayT0 - simPlay.sec; q.lastVoice = t;
+                    play = q; playCallStart = q.start; playLastVoiceAny = t;
+                }
+                else {
+                    q.start = simPlayT0 - simPlay.sec - 8.0; q.lastVoice = simPlayT0 - simPlay.sec;
+                    playLast = q; play.valid = false;
+                }
+            }
+        }
+        if (play.valid && t - play.lastVoice > PLAY_HANG_S) { playLast = play; play.valid = false; }
         listenMutedEnc = encMuted;
+        (void)slotTraffic;
+    }
+
+    static double playNow() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+    static std::string playClock(double s) {
+        long v = (long)(std::max)(0.0, s);
+        char b[24];
+        if (v >= 3600) { snprintf(b, sizeof(b), "%ld:%02ld:%02ld", v / 3600, (v / 60) % 60, v % 60); }
+        else { snprintf(b, sizeof(b), "%02ld:%02ld", v / 60, v % 60); }
+        return b;
+    }
+
+    // "Playing" as a fixed instrument block (see the manual):
+    //   wide:    what (timeslot, group) | who (talker) | duration | frames OK
+    //   normal:  what            duration
+    //            who             frames OK
+    //   narrow:  what / who / duration  frames OK
+    // The numbers are right-aligned in their own column, a field wraps only
+    // inside itself, and the block keeps the height of its tallest content at
+    // this width, also when nothing is played (grey "last:").
+    void drawPlaying() {
+        tw::Text("Playing:");
+        float x0 = 0.0f;
+        bool sameLine = tw::takeValueColumn(x0);
+        const float em = ImGui::GetFontSize();
+        const float gap = em * 1.5f;
+        const float spY = ImGui::GetStyle().ItemSpacing.y;
+        const float right = tw::rightEdge();
+        float y0;
+        if (sameLine) { y0 = ImGui::GetItemRectMin().y; ImGui::SameLine(0, 0); }
+        else { y0 = ImGui::GetCursorScreenPos().y; }
+        float A = (std::max)(em * 6.0f, right - x0);
+        float full = tw::fullWidth();
+        bool widthChanged = std::fabs(full - playModeAtW) > 0.5f;
+        if (widthChanged) {
+            // one line from 40 characters of value width (tile, wide menu), two lines
+            // from 13 (the normal menu), below that three
+            int target = A >= 40.0f * em ? 1 : (A >= 13.0f * em ? 2 : 3);
+            // hysteresis: keep the current arrangement within 2 em of its limit
+            bool keep = playModeAtW >= 0.0f && ((playMode == 1 && A >= 38.0f * em) || (playMode == 2 && A >= 11.0f * em && A < 42.0f * em) || (playMode == 3 && A < 15.0f * em));
+            if (!keep) { playMode = target; }
+            playModeAtW = full;
+        }
+
+        // field texts
+        double t = playNow();
+        bool live = play.valid;
+        const PlayInfo& p = live ? play : playLast;
+        std::string what, who, dur, fok;
+        ImVec4 cWhat = tc::val(), cWho = tc::good(), cDur = tc::val(), cFok = tc::val();
+        uint32_t nOk = 0, nBad = 0;
+        if (p.valid) {
+            std::string gc, gi;
+            describeSsi(p.group, TetraSubscriber::KIND_GROUP, gc, gi);
+            char b[200];
+            if (p.group) { snprintf(b, sizeof(b), "TS%d  %u%s", p.ts, p.group, gi.empty() ? "" : ("  " + gi).c_str()); }
+            else { snprintf(b, sizeof(b), "TS%d", p.ts); }
+            what = b;
+            if (p.talker) {
+                std::string tcs, ti;
+                describeSsi(p.talker, TetraSubscriber::KIND_INDIVIDUAL, tcs, ti);
+                who = std::to_string(p.talker) + (tcs.empty() ? "" : "  " + tcs);
+            }
+            else { who = "talker not signalled"; }
+            nOk = p.ok - p.ok0;
+            nBad = p.bad - p.bad0;
+            uint32_t n = nOk + nBad;
+            if (n) {
+                double pct = 100.0 * nOk / n;
+                snprintf(b, sizeof(b), "%.0f %%", pct);
+                fok = b;
+                cFok = pct >= 98.0 ? tc::good() : (pct >= 90.0 ? tc::warn() : tc::bad());
+            }
+            else { fok = "-- %"; }
+            if (live) { dur = playClock(t - p.start); }
+            else {
+                who = "last: " + who;
+                long ago = (long)(t - p.lastVoice);
+                dur = ago < 3600 ? std::to_string(ago) + " s ago" : playClock((double)ago) + " ago";
+                cWhat = cWho = cDur = cFok = tc::grey();
+            }
+        }
+        else { what = "-"; cWhat = tc::grey(); }
+        if (!live && listenMutedEnc) { what = "encrypted call - muted"; cWhat = tc::warn(); }
+
+        // geometry
+        ImFont* font = ImGui::GetFont();
+        const float fs = ImGui::GetFontSize();
+        auto tw_ = [&](const std::string& s) { return ImGui::CalcTextSize(s.c_str()).x; };
+        auto th = [&](const std::string& s, float w) { return (std::max)(ImGui::GetTextLineHeight(), ImGui::CalcTextSize(s.c_str(), nullptr, false, w).y); };
+        float wDur = (std::max)(tw_("00:00"), tw_(dur));
+        float wFok = (std::max)(tw_("100 %"), tw_(fok));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        auto put = [&](float x, float y, const ImVec4& c, const std::string& s, float wrap) {
+            dl->AddText(font, fs, ImVec2(x, y), ImGui::GetColorU32(c), s.c_str(), nullptr, wrap);
+        };
+        auto putR = [&](float xr, float y, const ImVec4& c, const std::string& s) { put(xr - tw_(s), y, c, s, 0.0f); };
+        float H = 0.0f;
+        if (playMode == 1) {
+            float T = (std::max)(em * 4.0f, A - (wDur + gap + wFok) - gap);
+            float wWhat = T * 0.55f, wWho = T - wWhat - em;
+            put(x0, y0, cWhat, what, wWhat);
+            put(x0 + wWhat + em, y0, cWho, who, wWho);
+            putR(right - wFok - gap, y0, cDur, dur);
+            putR(right, y0, cFok, fok);
+            H = (std::max)(th(what, wWhat), th(who, wWho));
+        }
+        else if (playMode == 2) {
+            float T = (std::max)(em * 4.0f, A - (std::max)(wDur, wFok) - gap);
+            float h1 = th(what, T);
+            put(x0, y0, cWhat, what, T);
+            putR(right, y0, cDur, dur);
+            float y1 = y0 + h1 + spY;
+            put(x0, y1, cWho, who, T);
+            putR(right, y1, cFok, fok);
+            H = h1 + spY + th(who, T);
+        }
+        else {
+            float h1 = th(what, A);
+            put(x0, y0, cWhat, what, A);
+            float y1 = y0 + h1 + spY;
+            float h2 = th(who, A);
+            put(x0, y1, cWho, who, A);
+            float y2 = y1 + h2 + spY;
+            put(x0, y2, cDur, dur, 0.0f);
+            put(x0 + wDur + gap, y2, cFok, fok, 0.0f);
+            H = h1 + spY + h2 + spY + ImGui::GetTextLineHeight();
+        }
+        // fixed room: the tallest arrangement seen at this width (also when idle)
+        int lines = playMode == 1 ? 1 : (playMode == 2 ? 2 : 3);
+        float minH = lines * ImGui::GetTextLineHeight() + (lines - 1) * spY;
+        if (widthChanged || std::fabs(full - playMaxHAtW) > 0.5f) { playMaxH = 0.0f; playMaxHAtW = full; }
+        playMaxH = (std::max)(playMaxH, (std::max)(H, minH));
+
+        // the block as one item: room in the layout, tooltip, right-click menu
+        ImGui::SetCursorScreenPos(ImVec2(x0, y0));
+        ImGui::InvisibleButton(CONCAT("##_tetra_playing_", name), ImVec2(A, playMaxH));
+        if (ImGui::IsItemHovered()) {
+            std::string tip;
+            if (p.valid) {
+                char b[512];
+                snprintf(b, sizeof(b),
+                         "%s on timeslot %d\n"
+                         "Group / call: %u\n"
+                         "Talker: %s\n"
+                         "This transmission (PTT): %s\n"
+                         "Call (all transmissions of the group): %s\n"
+                         "Speech bursts: %u OK, %u with CRC error (bad frame indicator of the\n"
+                         "channel decoding, EN 300 395-2); bursts stolen for signalling not counted\n"
+                         "Hang time: %.0f s after the last speech burst\n"
+                         "Right-click: priority list",
+                         live ? "Playing" : "Last played", p.ts, p.group, p.talker ? std::to_string(p.talker).c_str() : "not signalled",
+                         playClock((live ? t : p.lastVoice) - p.start).c_str(),
+                         playClock((live ? t : p.lastVoice) - playCallStart).c_str(), nOk, nBad, PLAY_HANG_S);
+                tip = b;
+            }
+            else { tip = "Nothing played yet. Shows the call on the loudspeaker: timeslot and group,\ntalker, duration of the transmission and the share of speech bursts without errors."; }
+            ImGui::SetTooltip("%s", tip.c_str());
+        }
+        if (ImGui::BeginPopupContextItem(CONCAT("##_tetra_playing_ctx_", name))) {
+            auto entry = [&](uint32_t ssi, bool group) {
+                if (!ssi) { return; }
+                tw::TextDisabled("%s %u", group ? "Group" : "Station", ssi);
+                ImGui::PushID((int)ssi + (group ? 0x40000000 : 0));
+                if (ImGui::MenuItem("Listen to this one (top of the priority list)")) { listenAddTop(ssi, group); }
+                if (!listenHas(ssi, group)) { if (ImGui::MenuItem("Add to the end of the priority list")) { listenAddEnd(ssi, group); } }
+                else if (ImGui::MenuItem("Remove from the priority list")) { listenRemove(ssi, group); }
+                ImGui::PopID();
+            };
+            entry(p.group, true);
+            entry(p.talker, false);
+            if (!p.valid) { tw::TextDisabled("nothing played yet"); }
+            ImGui::EndPopup();
+        }
     }
 
     void drawListen(float menuWidth) {
@@ -2506,10 +2728,7 @@ private:
                               "anyway it is only noise. Applies when the call is marked encrypted\n"
                               "(air interface encryption or end-to-end flag of the call setup).");
         }
-        tw::Text("Playing:");
-        if (!listenNow.empty()) { tw::SameTextColored(tc::good(), "%s", listenNow.c_str()); }
-        else if (listenMutedEnc) { tw::SameTextColored(tc::warn(), "encrypted call - muted"); }
-        else { tw::SameTextDisabled("-"); }
+        drawPlaying();
     }
 
     // ---------------- Tile column / strip below the waterfall ----------------
@@ -4755,7 +4974,24 @@ private:
     bool listenOthers = true;     // priority list: other calls when no listed one is active
     bool listenMuteEnc = true;    // encrypted calls are not played (noise)
     std::vector<ListenEntry> listenList;
-    std::string listenNow;        // what is played now (GUI)
+    // "Playing": current and last transmission (GUI thread)
+    struct PlayInfo {
+        bool valid = false;
+        int ts = 0;
+        uint32_t group = 0, talker = 0;
+        double start = 0.0, lastVoice = 0.0;
+        uint32_t ok0 = 0, bad0 = 0, ok = 0, bad = 0;   // speech burst counters at the start / now
+    };
+    static constexpr double PLAY_HANG_S = 2.0;
+    struct SimPlay { int mode = 0, ts = 0; uint32_t group = 0, talker = 0, ok = 0, bad = 0; double sec = 0; bool fresh = false; };
+    SimPlay simPlay;              // debug command sim_play (tests, manual screenshots)
+    std::mutex simPlayMtx;
+    double simPlayT0 = 0.0;
+    PlayInfo play, playLast;
+    uint32_t playSeenOk = 0, playSeenBad = 0, playCallGroup = 0;
+    double playCallStart = 0.0, playLastVoiceAny = -1e9;
+    int playMode = 2;
+    float playModeAtW = -1.0f, playMaxH = 0.0f, playMaxHAtW = -1.0f;
     bool listenMutedEnc = false;
     uint32_t listenAddSsi = 0;
     bool listenAddGroup = true;

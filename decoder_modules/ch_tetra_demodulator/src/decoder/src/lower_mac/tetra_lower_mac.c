@@ -396,6 +396,7 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, int blk_num, const uint8_t *bi
 			Post_Process(synth_p2, (int16_t)240);	/* Post processing of synthesis  */
 			//USE SYNTH
 			tms->voice_tn = t_phy_state.time.tn;
+			if (corrupted) { tms->voice_bursts_bad++; } else { tms->voice_bursts_ok++; }
 			tms->put_voice_data(tms->put_voice_data_ctx, 480, synth);
 		}
 		break;

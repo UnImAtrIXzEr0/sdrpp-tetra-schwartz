@@ -227,6 +227,22 @@ namespace tw {
         return !drawWrapped;
     }
     inline bool valueSameLine(const void* key, float w) { return placeSegment(key, w); }
+    // For blocks that lay out themselves (e.g. "Playing"): x of the value column
+    // after the last "Label:". Returns false if the window is too narrow for a
+    // value column; the block then starts on the line below the label.
+    inline bool takeValueColumn(float& x) {
+        pendingSame() = false;
+        const float sp = ImGui::GetStyle().ItemSpacing.x;
+        const float em = ImGui::GetFontSize();
+        bool lastIsLabel = labelPending() && ImGui::GetItemRectMax().x == labelEndX() && ImGui::GetItemRectMin().x == labelStartX();
+        labelPending() = false;
+        if (!lastIsLabel) { x = ImGui::GetItemRectMax().x + sp; return true; }
+        const LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
+        float col = labelStartX() + (std::min)(c.maxW + sp, 0.45f * fullWidth());
+        if (rightEdge() - col < em * 7.0f) { x = labelStartX() + em; return false; }
+        x = (std::max)(col, labelEndX() + sp);
+        return true;
+    }
     // a separator "|" is not drawn at the start of a continuation line
     inline const char* dropLeadingBar(const char* t, bool sameLine) {
         if (sameLine) { return t; }
@@ -269,12 +285,14 @@ namespace tw {
         ImGuiID memId = 0;
         float y0 = 0.0f;
         char full[512];
-        FitText(char* buf, size_t n, const void* key = nullptr) {
+        // seg: id of the line segment this text is (0: a line start); the height
+        // memory belongs to the place, not to the text drawn there ("-" or a value)
+        FitText(char* buf, size_t n, const void* key = nullptr, ImGuiID seg = 0) {
             float avail = ImGui::GetContentRegionAvail().x;
             if (!cellMode()) {
                 // wrap only if needed; the height memory keeps the space if a
                 // shorter value later fits on fewer lines
-                memId = ImHashData(&key, sizeof(key), line().key ^ ImGui::GetID("##tw_wrap"));
+                memId = seg ? (seg ^ 0x5eed1234u) : ImHashData(&key, sizeof(key), line().key ^ ImGui::GetID("##tw_wrap"));
                 y0 = ImGui::GetCursorScreenPos().y;
                 if (textWidth(buf) > avail && avail > 0) {
                     ImGui::PushTextWrapPos(0.0f);
@@ -329,7 +347,7 @@ namespace tw {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         bool seg = flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, seg ? line().prevId : 0);
         ImGui::TextColored(col, "%s", buf);
         f.done();
         if (!cellMode() && !seg) { noteLineStart(buf, fmt); }
@@ -338,7 +356,7 @@ namespace tw {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         bool seg = flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, seg ? line().prevId : 0);
         ImGui::TextUnformatted(buf);
         f.done();
         // TextU passes "%s": key the line by its (static) text then
@@ -349,7 +367,7 @@ namespace tw {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         bool seg = flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, seg ? line().prevId : 0);
         ImGui::TextDisabled("%s", buf);
         f.done();
         if (!cellMode() && !seg) { noteLineStart(buf, fmt); }
@@ -359,7 +377,7 @@ namespace tw {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
         if (cellMode()) { ImGui::SameLine(); } else { valueSameLine(fmt, textWidth(buf)); }
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, cellMode() ? 0 : line().prevId);
         ImGui::TextColored(col, "%s", buf);
         f.done();
     }
@@ -369,7 +387,7 @@ namespace tw {
         bool same = true;
         if (cellMode()) { ImGui::SameLine(); } else { nextIsGlue() = true; same = valueSameLine(fmt, textWidth(buf)); }
         if (!same) { memmove(buf, dropLeadingBar(buf, false), strlen(dropLeadingBar(buf, false)) + 1); }
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, cellMode() ? 0 : line().prevId);
         ImGui::TextUnformatted(buf);
         f.done();
     }
@@ -379,7 +397,7 @@ namespace tw {
         bool same = true;
         if (cellMode()) { ImGui::SameLine(); } else { nextIsGlue() = true; same = valueSameLine(fmt, textWidth(buf)); }
         if (!same) { memmove(buf, dropLeadingBar(buf, false), strlen(dropLeadingBar(buf, false)) + 1); }
-        FitText f(buf, sizeof(buf), fmt);
+        FitText f(buf, sizeof(buf), fmt, cellMode() ? 0 : line().prevId);
         ImGui::TextDisabled("%s", buf);
         f.done();
     }
