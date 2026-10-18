@@ -1,0 +1,15 @@
+name: Feature request
+description: An idea for a new function or a better measurement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like and why?
+    validations:
+      required: true
+  - type: input
+    id: standard
+    attributes:
+      label: Standard reference (if a measurement)
+      description: e.g. EN 300 394-1 clause 7.1.3

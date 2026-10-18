@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, tips and experiences
+    url: https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions
+    about: Ask questions about setup, SDRs and measurements in Discussions.

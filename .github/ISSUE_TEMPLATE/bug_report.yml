@@ -1,0 +1,52 @@
+name: Bug report
+description: Something does not work or a value looks wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please do **not** post real network data (ISSIs, talkgroups, names, positions of other users) or callsigns of others in screenshots or logs.
+        Problems with this edition belong here, not to the authors of SDR++ or SDR++Brown.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the window title, e.g. v0.23.1-beta
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows 10, Windows 11, Linux (AppImage), other]
+    validations:
+      required: true
+  - type: input
+    id: sdr
+    attributes:
+      label: SDR and sample rate
+      description: e.g. PlutoSDR 4 MS/s, USRP B2xx 8 MS/s, RTL-SDR 2.4 MS/s
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Start / SDR source, Decoder / audio, Measurements (MER, EVM, frequency), Modulation accuracy, TX analysis / ACP, Burst analysis, Multipath, GPS / maps / propagation, Tiles / layout / touch, Manual, other]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (if it crashes or does not start)
+      description: "Windows: start `sdrpp.exe -c` in a terminal in the program folder. Linux: start the AppImage with `-c` from a terminal. Paste the complete output."
+      render: text

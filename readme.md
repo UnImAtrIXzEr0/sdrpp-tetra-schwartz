@@ -1,74 +1,125 @@
-# SDR++ TETRA-SCHWARTZ (experimental beta)
+# SDR++ TETRA-SCHWARTZ
 
-**SDR++ TETRA-SCHWARTZ** is a modified version (fork) of
-[SDR++](https://github.com/AlexandreRouma/SDRPlusPlus) by Alexandre Rouma (ON5RYZ),
-based on the [SDR++Brown](https://github.com/sannysanoff/SDRPlusPlusBrown) fork
-v1.2.1 by sannysanoff, revised and extended for amateur radio TETRA by
-UnImAtrIXzEr0. It is not an official release of SDR++ or SDR++Brown and
-is not endorsed by their authors. **Please report problems with this edition
-only in the [issues of this repository](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues).**
+**A TETRA receiver and measurement program for amateur radio** – based on
+[SDR++](https://github.com/AlexandreRouma/SDRPlusPlus) and the
+[SDR++Brown](https://github.com/sannysanoff/SDRPlusPlusBrown) fork, extended
+for amateur radio TETRA cells by UnImAtrIXzEr0.
 
-Origin, authors, licences (GPL-3.0, osmo-tetra parts AGPL-3.0), the list of
-modifications and notes on names: see [NOTICE.md](NOTICE.md).
+> **Experimental beta.** Not an official release of SDR++ or SDR++Brown and
+> not endorsed by their authors. Please report problems with this edition
+> only [here](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues).
 
-The original SDR++Brown readme follows.
+[![Download the latest version](https://img.shields.io/github/v/release/UnImAtrIXzEr0/sdrpp-tetra-schwartz?label=download&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/UnImAtrIXzEr0/sdrpp-tetra-schwartz/build_tetra_custom.yml?branch=main&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/actions)
+[![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)](license)
 
----
+![Measuring station layout: spectrum and waterfall, tile column with constellation, measurements and trends, stations below](docs/readme/overview_tiles.png)
 
-# SDR++Brown (fork), is not the original bloat-free SDR software
+*All pictures show the synthetic test cell of this repository (MCC 901, MNC 9999) – no real network.*
 
+## What it does
 
-[Changelog](changelog.md)
+- **Decoding** of TETRA downlinks (TMO): cell, network and neighbour cell
+  information, calls, talkers, SDS, status, group attachments, speech audio.
+  Station names from the RadioID database and talkgroup names, both on request.
+- **Measurements following ETSI EN 300 394-1** (most recent editions):
+  modulation accuracy (vector error, residual carrier, 200 bursts), adjacent
+  channel power with the limit tables, power and time mask of bursts,
+  switching transients, carrier frequency with reference selection, MER and
+  decoder EVM, I/Q offset and imbalance.
+- **TX analysis**: spectrum through the TETRA filter, occupied bandwidth,
+  shoulders, carrier leakage, 25 kHz channel raster.
+- **Burst analysis of handhelds** (uplink alone, linearity check by an
+  attenuator step), **multipath** (echo delay and level from the training
+  sequences), **frequency stability**, **trends**, **alarms**, **HTML report**.
+- **Drive tests**: GPS, CSV log, coverage maps for Google Earth (KML) and
+  OpenStreetMap, propagation diagram around the base station.
+- **Your own layout**: a tile column next to the waterfall, the content of
+  every tile selectable, sizes adjustable, kept across restarts; touch view
+  for tablets.
+- Automatic RF gain that looks for the best signal-to-noise ratio, dBm
+  calibration, snap to carrier, lock VFO.
+- **No decryption.** Encrypted traffic stays encrypted.
 
-**Please do not report bugs in this fork to original author. Use original application, it works better.**
+| Constellation | TX analysis | Burst analysis |
+|---|---|---|
+| ![Constellation](docs/readme/win_const.png) | ![TX analysis](docs/readme/win_txa.png) | ![Burst analysis](docs/readme/win_bursts.png) |
 
-**Report bugs in this fork on this page, in ISSUES.** 
+| Network & cell | Trends | Coverage map |
+|---|---|---|
+| ![Network](docs/readme/win_network.png) | ![Trends](docs/readme/win_trends.png) | ![Map](docs/readme/map_level.png) |
 
-Please see [upstream project page](https://github.com/AlexandreRouma/SDRPlusPlus) for the basic list of its features.
+## Download
 
-Last merge: 2025-06-11
+On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest):
 
-Please see [brown fork page](https://sdrpp-brown.san.systems) for list of fork features.
+| File | For |
+|---|---|
+| `…_windows_x64.zip` | Windows 10 / 11 (64 bit) |
+| `…_x86_64.AppImage` | Linux x86-64 (built on Ubuntu 24.04) |
+| `…_Bedienungsanleitung_….pdf` | Manual, German |
+| `…_User_Manual_….pdf` | Manual, English |
+| `SHA256SUMS.txt` | Checksums of the downloads |
 
-WINDOWS INSTALL TROUBLESHOOTING: https://youtu.be/Q3CV5U-2IIU
+## Quick start
 
-## Thanks / Credits
+1. **Windows:** unpack the zip into a folder of its own and start `sdrpp.exe`.
+   SDR drivers (e.g. for the USRP, PlutoSDR, RTL-SDR) as described in the manual.
+   **Linux:** `chmod +x SDRPP-TETRA-SCHWARTZ_*.AppImage`, then start it.
+2. Choose your SDR under **Source** and a sample rate (2–4 MS/s is enough for
+   one carrier; uplink and downlink together need more than the duplex spacing).
+3. Press **Play**, click on the TETRA carrier in the spectrum (**Snap to
+   carrier** puts the VFO on its centre), switch on **TETRA Demodulator**.
+4. Choose **ETSI** or **Amateur radio** (own duplex tables) at the top of the
+   TETRA menu, **Layout…** for a tile layout (measuring station, drive test).
+5. For comparable values: **Level and hold** for the gain, a dBm calibration
+   and a frequency reference – see the manual, chapter “Setting up the SDR”.
 
-Thanks and due respect to:
- 
-* original author, Alexandre Rouma, for his great [work](https://github.com/AlexandreRouma/SDRPlusPlus). Due credits go to all contributors in the upstream project. 
-* MSHV author, LZ2HV, for his great [work](http://lz2hv.org/mshv).
-* logmmse/python authors for their great [work](https://github.com/wilsonchingg/logmmse).
-* OMLSA authors for their great [idea](https://github.com/yuzhouhe2000/OMLSA-IMCRA) and [implementation](https://github.com/xiaochunxin/OMLSA-MCRA).
-* imgui-notify author for his great [work](https://github.com/patrickcjk/imgui-notify)
-* implot author for his great [work](https://github.com/epezent/implot/)
-* alexander-sholohov (github) for his work on soapy_sdr module.
-* Cropinghigh / Indir for his [work](github.com/cropinghigh/sdrpp-vhfvoiceradio) on extra VHF modes.
-* monolifed for his [pbkdf2 header-only implementation](https://github.com/monolifed/pbkdf2-hmac-sha256)  
-* ruse39 for his contributions on code quality
+Tips:
+- Hover over a value: almost every value explains itself and names its standard.
+- Values marked *indicative* are not a test per the standard (e.g. over the air
+  instead of at the antenna connector); the manual says what is missing.
+- Drag the grip (six dots) of a section header to reorder the menu.
 
 ## Feedback
 
-Found an issue? Fork is worse than original? File an [issue](https://github.com/sannysanoff/SDRPlusPlusBrown/issues).
+- **Bugs:** [open an issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
+  with version, operating system, SDR and sample rate.
+- **Questions, measurement experiences, ideas:** [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
+- Please do not post data of real networks or other people (ISSIs, names,
+  positions) in screenshots or logs.
+- Pull requests are welcome; they are reviewed and merged by the maintainer.
 
-## Debugging reminders
+## Legal notes
 
-* to debug in windows in virtualbox env, download mesa opengl32.dll from https://downloads.fdossena.com/Projects/Mesa3D/Builds/MesaForWindows-x64-20.1.8.7z
-* make sure you put rtaudiod.dll in the build folder's root otherwise audio sink will not load.
-* use system monitor to debug missing dlls while they fail to load.
+- For **experimental amateur radio purposes**: receive your own or amateur
+  radio cells. Listening to other radio services may be prohibited where you
+  live (Germany: § 5 TDDDG).
+- Origin, authors, licences and the list of changes: [NOTICE.md](NOTICE.md).
+  SDR++, SDR++Brown and the TETRA plugin are GPL-3.0, the osmo-tetra decoder
+  parts AGPL-3.0. The TETRA speech codec is ETSI reference code (© ETSI),
+  downloaded from etsi.org during the build.
+- No warranty. Measured values of an SDR are no substitute for a calibrated
+  test system.
 
-## Local Android build:
+## Kurz auf Deutsch
 
-* put into your ~/.gradle/gradle.properties this line: sdrKitRoot=/home/user/SDRPlusPlus/android-sdr-kit/sdr-kit
-  * it can obtained + built from: https://github.com/AlexandreRouma/android-sdr-kit 
-  * docker build --platform linux/amd64 -t android-sdr-kit  .
-  * docker start android-sdr-kit    # it will exit
-  * docker cp be03210da56a:/sdr-kit .    # will create directory with built binary libs, replace be03210da56a with id obtained from 'docker ps -a'
-* use jdk11 for gradle in android studio. Android Studio -> Settings -> ... -> Gradle -> Gradle JDK . This is needed if you have various errors with java.io unaccessible fields.
-* in case of invalid keystore error (should not happen with jdk11): 
-  * you may create new keystore with current jdk version:
-    ~/soft/jdk8/bin/keytool -genkey -v -keystore debug2.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000
-  * use this filename (debug2.keystore) in app/build.gradle along with passwords in the signingConfigs -> debug section.
+SDR++ TETRA-SCHWARTZ ist ein TETRA-Empfangs- und Messprogramm für den
+Amateurfunk (experimentelle Beta). Download für Windows und Linux sowie die
+**deutsche Bedienungsanleitung (PDF)** auf der
+[Releases-Seite](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest).
+Fehler bitte als [Issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
+melden, Fragen und Erfahrungen in den
+[Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
+Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen.
 
-Good luck.
+## Building from source
 
+The CI workflow [`build_tetra_custom.yml`](.github/workflows/build_tetra_custom.yml)
+builds both packages and runs the headless tests; it is the reference for the
+dependencies. Linux in short: the packages listed in [AGENTS.md](AGENTS.md),
+then `cmake -B build -DOPT_BUILD_USRP_SOURCE=ON … && cmake --build build`.
+The test recording `e2e/recordings/tetra_synthetic.wav` is generated by
+[`e2e/gen/tetra_synth.cpp`](e2e/gen/tetra_synth.cpp).
+
+The original readme of SDR++Brown: [docs/README_SDRPPBROWN.md](docs/README_SDRPPBROWN.md).

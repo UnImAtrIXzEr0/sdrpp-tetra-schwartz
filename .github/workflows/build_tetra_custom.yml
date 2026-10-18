@@ -422,3 +422,36 @@ jobs:
               name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_windows_x64
               path: ${{runner.workspace}}/sdrpp_windows_x64.zip
 
+
+    release:
+        # every green build of main is published as a GitHub release (downloads
+        # without a GitHub account and without the 90-day limit of artifacts)
+        if: github.ref == 'refs/heads/main'
+        needs: [build_appimage, build_windows]
+        runs-on: ubuntu-24.04
+        steps:
+        - uses: actions/checkout@v4
+
+        - name: Read plugin version
+          run: echo "TETRA_VERSION=$(sed -n 's/^#define TETRA_PLUGIN_VERSION "\([^"]*\)".*/\1/p' decoder_modules/ch_tetra_demodulator/src/measurements.h)" >> $GITHUB_ENV
+
+        - name: Collect builds and manuals
+          uses: actions/download-artifact@v4
+          with:
+              path: dl
+
+        - name: Publish release
+          run: |
+            V="v${TETRA_VERSION}-beta"
+            mkdir -p rel
+            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-TETRA-SCHWARTZ_${V}_windows_x64.zip"
+            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-TETRA-SCHWARTZ_${V}_x86_64.AppImage"
+            cp dl/*manuals_pdf/*.pdf rel/ 2>/dev/null || echo "::warning::no manuals in this run"
+            (cd rel && sha256sum * > SHA256SUMS.txt)
+            ls -la rel
+            NOTES="Experimental beta for amateur radio TETRA. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. Manuals (German / English) as PDF. Changes: see the commit history. Check the downloads with SHA256SUMS.txt."
+            # a rebuild of the same version replaces its release (tag on the newest commit)
+            if gh release view "$V" > /dev/null 2>&1; then gh release delete "$V" --cleanup-tag -y; fi
+            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V" --notes "$NOTES" --latest
+            # the dependency cache release must not keep old history reachable
+            git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/build-cache" || true
