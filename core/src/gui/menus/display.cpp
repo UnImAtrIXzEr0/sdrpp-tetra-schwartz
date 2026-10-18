@@ -39,6 +39,10 @@ namespace displaymenu {
     int fftHoldSpeed = 60;
     bool fftSmoothing = false;
     int fftSmoothingSpeed = 100;
+    // TETRA-SCHWARTZ: spectrum averaging as a time constant, max hold as a decay rate
+    float fftAvgTau = 1.0f;      // s
+    bool fftAvgPower = true;     // average the power (true) or the dB values
+    float fftHoldDecay = 6.0f;   // dB/s, 0 = hold until switched off
     bool phoneLayout = false;
     bool touchMode() { return phoneLayout; }
 
@@ -100,8 +104,10 @@ namespace displaymenu {
     };
 
     void updateFFTSpeeds() {
-        gui::waterfall.setFFTHoldSpeed((float)fftHoldSpeed / ((float)fftRate * 10.0f));
-        gui::waterfall.setFFTSmoothingSpeed(std::min<float>((float)fftSmoothingSpeed / (float)(fftRate * 10.0f), 1.0f));
+        // per spectrum: decay in dB, averaging weight from the time constant
+        gui::waterfall.setFFTHoldSpeed(fftHoldDecay / (float)fftRate);
+        gui::waterfall.setFFTSmoothingSpeed((float)(1.0 - std::exp(-1.0 / ((double)fftRate * (double)fftAvgTau))));
+        gui::waterfall.setFFTSmoothingPower(fftAvgPower);
         gui::waterfall.setSNRSmoothingSpeed(std::min<float>((float)snrSmoothingSpeed / (float)(fftRate * 10.0f), 1.0f));
     }
 
@@ -186,6 +192,15 @@ namespace displaymenu {
         gui::waterfall.setFFTHold(fftHold);
         fftSmoothing = core::configManager.conf["fftSmoothing"];
         fftSmoothingSpeed = core::configManager.conf["fftSmoothingSpeed"];
+        // new settings; older configs: convert the speed numbers (alpha = speed / (rate * 10) per spectrum,
+        // i.e. a time constant of 10 / speed seconds; hold: speed / 10 dB/s)
+        if (core::configManager.conf.contains("fftAvgTau")) { fftAvgTau = core::configManager.conf["fftAvgTau"]; }
+        else { fftAvgTau = 10.0f / (float)std::max<int>(fftSmoothingSpeed, 1); }
+        if (core::configManager.conf.contains("fftAvgPower")) { fftAvgPower = core::configManager.conf["fftAvgPower"]; }
+        if (core::configManager.conf.contains("fftHoldDecay")) { fftHoldDecay = core::configManager.conf["fftHoldDecay"]; }
+        else { fftHoldDecay = (float)fftHoldSpeed / 10.0f; }
+        fftAvgTau = std::clamp<float>(fftAvgTau, 0.05f, 60.0f);
+        fftHoldDecay = std::clamp<float>(fftHoldDecay, 0.0f, 200.0f);
         gui::waterfall.setFFTSmoothing(fftSmoothing);
         snrSmoothing = core::configManager.conf["snrSmoothing"];
         snrSmoothingSpeed = core::configManager.conf["snrSmoothingSpeed"];
@@ -329,36 +344,63 @@ namespace displaymenu {
             core::configManager.conf["lockMenuOrder"] = gui::menu.locked;
             core::configManager.release(true);
         }
-        if (ImGui::Checkbox("FFT Hold##_sdrpp", &fftHold)) {
-            gui::waterfall.setFFTHold(fftHold);
-            core::configManager.acquire();
-            core::configManager.conf["fftHold"] = fftHold;
-            core::configManager.release(true);
-        }
-        ImGui::SameLine();
-        ImGui::FillWidth();
-        if (ImGui::InputInt("##sdrpp_fft_hold_speed", &fftHoldSpeed)) {
-            updateFFTSpeeds();
-            core::configManager.acquire();
-            core::configManager.conf["fftHoldSpeed"] = fftHoldSpeed;
-            core::configManager.release(true);
-        }
-
-        if (ImGui::Checkbox("FFT Smoothing##_sdrpp", &fftSmoothing)) {
+        // TETRA-SCHWARTZ: spectrum averaging (time constant) and max hold (decay rate)
+        if (ImGui::Checkbox("Spectrum averaging##_sdrpp", &fftSmoothing)) {
             gui::waterfall.setFFTSmoothing(fftSmoothing);
             core::configManager.acquire();
             core::configManager.conf["fftSmoothing"] = fftSmoothing;
             core::configManager.release(true);
         }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Exponential average of the spectrum above the waterfall (the waterfall itself is not averaged).\n"
+                              "Time constant: after this time a step has reached 63 %%, after 5x the time 99 %%.\n"
+                              "Power: averages the power - correct levels, use this for comparisons.\n"
+                              "Log: averages the dB values (as before) - noise reads about 2.5 dB too low.\n"
+                              "For measurements use TX analysis (spectrum), it averages a fixed number of spectra.");
+        }
         ImGui::SameLine();
         ImGui::FillWidth();
-        if (ImGui::InputInt("##sdrpp_fft_smoothing_speed", &fftSmoothingSpeed)) {
-            fftSmoothingSpeed = std::max<int>(fftSmoothingSpeed, 1);
+        if (ImGui::InputFloat("##sdrpp_fft_avg_tau", &fftAvgTau, 0.1f, 1.0f, "%.2f s")) {
+            fftAvgTau = std::clamp<float>(fftAvgTau, 0.05f, 60.0f);
             updateFFTSpeeds();
             core::configManager.acquire();
-            core::configManager.conf["fftSmoothingSpeed"] = fftSmoothingSpeed;
+            core::configManager.conf["fftAvgTau"] = fftAvgTau;
             core::configManager.release(true);
         }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Time constant of the spectrum averaging (0.05 ... 60 s)"); }
+        ImGui::Indent();
+        {
+            bool newPower = fftAvgPower;
+            if (ImGui::RadioButton("Power##_sdrpp_avg_pow", fftAvgPower)) { newPower = true; }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Log (dB)##_sdrpp_avg_log", !fftAvgPower)) { newPower = false; }
+            if (newPower != fftAvgPower) {
+                fftAvgPower = newPower;
+                updateFFTSpeeds();
+                core::configManager.acquire();
+                core::configManager.conf["fftAvgPower"] = fftAvgPower;
+                core::configManager.release(true);
+            }
+        }
+        ImGui::Unindent();
+
+        if (ImGui::Checkbox("Max hold##_sdrpp", &fftHold)) {
+            gui::waterfall.setFFTHold(fftHold);
+            core::configManager.acquire();
+            core::configManager.conf["fftHold"] = fftHold;
+            core::configManager.release(true);
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Second trace with the maximum of the spectrum; it falls back with the decay rate.\nSwitch off and on to clear it."); }
+        ImGui::SameLine();
+        ImGui::FillWidth();
+        if (ImGui::InputFloat("##sdrpp_fft_hold_decay", &fftHoldDecay, 1.0f, 10.0f, "%.1f dB/s")) {
+            fftHoldDecay = std::clamp<float>(fftHoldDecay, 0.0f, 200.0f);
+            updateFFTSpeeds();
+            core::configManager.acquire();
+            core::configManager.conf["fftHoldDecay"] = fftHoldDecay;
+            core::configManager.release(true);
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Decay of the max hold trace in dB per second (0 = hold until switched off)"); }
 
         if (ImGui::Checkbox("SNR Smoothing##_sdrpp", &snrSmoothing)) {
             gui::waterfall.setSNRSmoothing(snrSmoothing);

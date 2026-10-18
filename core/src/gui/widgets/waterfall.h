@@ -157,6 +157,7 @@ namespace ImGui {
 
         void setFFTSmoothing(bool enabled);
         void setFFTSmoothingSpeed(float speed);
+        void setFFTSmoothingPower(bool power);   // true: average the power, false: average the dB values
 
         void setSNRSmoothing(bool enabled);
         void setSNRSmoothingSpeed(float speed);
@@ -371,6 +372,8 @@ namespace ImGui {
         bool fftSmoothing = false;
         float fftSmoothingAlpha = 0.5;
         float fftSmoothingBeta = 0.5;
+        bool fftSmoothingPower = true;
+        bool smoothingPrimed = false;
 
         bool snrSmoothing = false;
         float snrSmoothingAlpha = 0.5;

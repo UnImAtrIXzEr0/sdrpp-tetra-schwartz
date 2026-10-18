@@ -7,6 +7,7 @@
 #include <imgui_internal.h>
 #include <imutils.h>
 #include <algorithm>
+#include <cmath>
 #include <signal_path/signal_path.h>
 #include <volk/volk.h>
 #include <utils/flog.h>
@@ -1084,6 +1085,7 @@ namespace ImGui {
             for (int i = 0; i < dataWidth; i++) {
                 smoothingBuf[i] = -1000.0f;
             }
+            smoothingPrimed = false;   // start from the next spectrum, not from -1000 dB
         }
 
         if (waterfallVisible) {
@@ -1259,9 +1261,25 @@ namespace ImGui {
         // Apply smoothing if enabled
         if (fftSmoothing && latestFFT != NULL && smoothingBuf != NULL && fftLines != 0) {
             std::lock_guard<std::mutex> lck2(smoothingBufMtx);
-            volk_32f_s32f_multiply_32f(latestFFT, latestFFT, fftSmoothingAlpha, dataWidth);
-            volk_32f_s32f_multiply_32f(smoothingBuf, smoothingBuf, fftSmoothingBeta, dataWidth);
-            volk_32f_x2_add_32f(smoothingBuf, latestFFT, smoothingBuf, dataWidth);
+            if (!smoothingPrimed) {
+                memcpy(smoothingBuf, latestFFT, dataWidth * sizeof(float));
+                smoothingPrimed = true;
+            }
+            else if (fftSmoothingPower) {
+                // TETRA-SCHWARTZ: exponential average of the power (linear), shown in dB;
+                // averaging the dB values reads noise about 2.5 dB too low
+                const float toLin = 0.230258509f;   // ln(10) / 10
+                const float toDb = 4.342944819f;    // 10 / ln(10)
+                for (int i = 0; i < dataWidth; i++) {
+                    float lin = fftSmoothingBeta * std::exp(smoothingBuf[i] * toLin) + fftSmoothingAlpha * std::exp(latestFFT[i] * toLin);
+                    smoothingBuf[i] = toDb * std::log(std::max<float>(lin, 1e-30f));
+                }
+            }
+            else {
+                volk_32f_s32f_multiply_32f(latestFFT, latestFFT, fftSmoothingAlpha, dataWidth);
+                volk_32f_s32f_multiply_32f(smoothingBuf, smoothingBuf, fftSmoothingBeta, dataWidth);
+                volk_32f_x2_add_32f(smoothingBuf, latestFFT, smoothingBuf, dataWidth);
+            }
             memcpy(latestFFT, smoothingBuf, dataWidth * sizeof(float));
         }
 
@@ -1580,15 +1598,15 @@ namespace ImGui {
             return;
         }
 
-        // Allocate and copy existing FFT into it
+        // Allocate; filled from the next spectrum
         smoothingBuf = new float[dataWidth];
-        if (latestFFT) {
-            std::lock_guard<std::recursive_mutex> lck2(latestFFTMtx);
-            memcpy(smoothingBuf, latestFFT, dataWidth * sizeof(float));
-        }
-        else {
-            memset(smoothingBuf, 0, dataWidth * sizeof(float));
-        }
+        memset(smoothingBuf, 0, dataWidth * sizeof(float));
+        smoothingPrimed = false;
+    }
+
+    void WaterFall::setFFTSmoothingPower(bool power) {
+        std::lock_guard<std::mutex> lck(smoothingBufMtx);
+        fftSmoothingPower = power;
     }
 
     void WaterFall::setFFTSmoothingSpeed(float speed) {
