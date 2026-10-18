@@ -187,8 +187,8 @@ sdrpp</pre></li>
 <h3>Hints</h3>
 <ul>
   <li>Almost every measured value has a <b>tooltip</b>: hold the mouse over it for a moment.</li>
-  <li>The width of the menu column can be changed; contents wrap instead of disappearing on the right.</li>
-  <li>Tables: move columns and change their width with the mouse; a right-click on the header shows or hides columns. The arrangement is saved.</li>
+  <li><b>Instrument-style display (from v0.23.6):</b> The width of the menu column can be changed; nothing is cut off and nothing jumps. The values of a “label: value” line sit in a common value column. If a value no longer fits on the line, it moves with its unit to a continuation line below the value column. Every value reserves the room of its longest text so far, and at a constant width the layout stays fixed – a value that changes its length no longer pushes the rest of the line. A wrapped value only moves back once the column is about two characters wider than needed. Lines that are not always broadcast (e.g. <span class="ui">Security</span>) keep their place and show “not broadcast yet” until first received.</li>
+  <li><b>Tables:</b> move columns and change their width with the mouse; a right-click on the header shows or hides columns. A click on a column header sorts ascending, a second descending, a third removes the sorting (arrow in the header). Cells stay single-line; text that is too long ends with “…”, the full text is in the tooltip. If the window is narrower than all columns, the table scrolls sideways while the header row stays. The arrangement is saved.</li>
   <li><b>Reordering sections in the TETRA demodulator:</b> drag the grip (six dots on the right of the header); a line shows where the section lands. A right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The order is saved.</li>
   <li><b>Own window:</b> the window icon left of the grip shows the section in its own window (icon blue = window open); a second click puts it back into the menu. The constellation is a section of its own. At the very top only audio, ETSI/Amateur radio and <span class="ui">Layout...</span> remain.</li>
   <li><b>Channel raster:</b> <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> draws dashed channel boundaries at ±12.5 and ±37.5 kHz around the TETRA channel in the spectrum. The spectrum above the waterfall can be averaged under <span class="ui">Display</span> → <span class="ui">Spectrum averaging</span>: time constant in seconds (after this time a step has reached 63 %, after five times the time 99 %). <span class="ui">Power</span> averages the power and shows correct levels. <span class="ui">Log (dB)</span> averages the dB values as before; noise then reads about 2.5 dB too low. <span class="ui">Max hold</span> adds a second trace with the maximum that falls back at the set rate in dB/s (0 = hold until switched off). For measurements use <span class="ui">TX analysis</span> with <span class="ui">Avg</span> (fixed number of averaged spectra).</li>
@@ -292,7 +292,7 @@ sdrpp</pre></li>
 <h3>Encryption (indication only)</h3>
 <p>The program decrypts nothing; the encryption code of osmo-tetra is removed. Under <span class="ui">Network &amp; cell</span>, <span class="ui">Air interface encryption</span> shows whether the cell offers air interface encryption and whether a CCK is in use (security class 3). Encrypted messages appear in <span class="ui">Traffic</span> as <span class="ui">encrypted – not decoded</span>; stations with encrypted traffic carry an “E” in the TS column. If the cell sends the extended services in SYSINFO, <span class="ui">Security</span> shows the security information per EN 300 392-7 V3.5.1 (A.8.77): authentication required or not, support of class 1 MS, class 2 (with SCK number) or class 3. The algorithm (TEA1 … TEA4, “KSG number”, A.8.41) is sent on the downlink only in a D-LOCATION UPDATE COMMAND; if one passes, <span class="ui">Algorithm</span> shows it, otherwise “not seen”. Indication only.</p>
 <h3>Decoder mode</h3>
-<p>The program decodes by itself (normal case). At the very bottom of the menu, the closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> sends the symbols over UDP to an external program. While it is active, the built-in decoder and all measurements that need it are off; a note at the top of the menu says so. From v0.20.1 on, the program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
+<p>The program decodes by itself (normal case). At the very bottom of the menu, the closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> sends the symbols over UDP to an external program. Operation: select <span class="ui">NETSYMS over UDP</span>, enter the target address and port (default <code>localhost</code>, port <code>8355</code>), press <span class="ui">Net start</span>. <span class="ui">Net status</span> shows “Sending” or “Idle”; the indicators <span class="ui">Sync</span> and <span class="ui">Training sequences</span> show whether the demodulator delivers symbols. <span class="ui">Net stop</span> ends sending, <span class="ui">Built-in decoder</span> switches back. While it is active, the built-in decoder and all measurements that need it are off; a note at the top of the menu says so. From v0.20.1 on, the program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
 <p>The TETRA demodulator header no longer has a checkbox to switch it off (a stray click switched the whole decoder off). If the module is switched off anyway, the checkbox appears again.</p>
 </div>
 <div>
@@ -323,7 +323,7 @@ sdrpp</pre></li>
 <tr><td>Raw BER</td><td>bit errors in known bits (training sequences) before channel decoding.</td><td>&lt; 1·10⁻³</td></tr>
 <tr><td>Bursts/s, re-locks</td><td>decoded bursts; resynchronisation <i>with</i> timing slip = lost samples (USB/CPU), <i>without</i> = disturbed burst (signal).</td><td>no re-locks</td></tr>
 <tr><td>CRC table</td><td>error rate per channel (BSCH, SB2, half slot, SCH/F) in the last second and in total.</td><td>&lt; 1 %</td></tr>
-<tr><td>Events</td><td>event list: sync losses, AFC and gain steps, alarms.</td><td></td></tr>
+<tr><td>Events</td><td>event list: sync losses, AFC and gain steps, alarms. <span class="ui">Clear</span> empties the list (not the file <code>…_events.csv</code>).</td><td></td></tr>
 </table>
 <p><span class="ui">Reset totals</span> resets sums and statistics. <span class="ui">Start CSV log</span> writes one line per second into the log folder (see <a href="#s19-2">appendix</a>), plus files for events, stations, traffic and additional carriers.</p>
 
@@ -331,25 +331,129 @@ sdrpp</pre></li>
 <h1 id="s7"><span class="num">7</span>Network, cell and duplex tables</h1>
 <div class="cols">
 <div>
-<p>The <span class="ui">Network &amp; cell</span> section shows what the base station broadcasts about itself: MCC/MNC, colour code, downlink and uplink frequency, services (encryption, voice, data), cell selection parameters, network time and neighbour cells. <span class="ui">Tune</span> moves the VFO to a neighbour cell.</p>
-<h3>Duplex tables</h3>
-<p>The uplink frequency follows from the downlink and the duplex spacing. The spacing is not transmitted directly but as an index into a table. In amateur radio mode these values apply for 70 cm:</p>
-<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
-<tr><td>Spacing (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
-<p>All tables can be edited under <span class="ui">Duplex spacing table</span>; they are saved in <code>tetra_duplex_ham.json</code>. <span class="ui">Table = default</span> restores the defaults.</p>
+<p>The <span class="ui">Network &amp; cell</span> section shows what the base station broadcasts about itself (broadcast per EN 300 392-2: SYNC, SYSINFO, D-NWRK-BROADCAST). It appears only with the built-in decoder. Everything is display only; the only thing set here is the duplex table.</p>
+<p><b>Reading from top to bottom:</b> first the header lines (synchronisation, frame counters, frequencies, identity), then the services as coloured words, then encryption and security, below that two expandable tables with all cell parameters and the neighbour cells. As long as the decoder is not locked the values are grey; likewise after a CRC error of the last message.</p>
 </div>
 <div><figure><img src="shots/win_network.png"><figcaption>Fig. 5 – Network and cell (identities blurred).</figcaption></figure></div>
 </div>
 
+<h3>Header lines</h3>
+<table>
+<tr><th style="width:22%">Display</th><th>Meaning</th></tr>
+<tr><td>Sync</td><td>Green: the demodulator finds the training sequences (symbol clock is stable).</td></tr>
+<tr><td>Decoder</td><td><b>Locked</b> (green): frame structure recognised, messages are decoded. <b>Know next start</b> (yellow): burst start found, frame structure not yet confirmed. <b>Unlocked</b> (red): no cell.</td></tr>
+<tr><td>Hyperframe / Multiframe / Frame</td><td>TDMA counters of the cell: hyperframe number from SYNC, multiframe 1…60, frame 1…18. Counts on evenly while reception is stable.</td></tr>
+<tr><td>Timeslots</td><td>Content of the four timeslots in the current frame: <b>UL</b> (uplink only), <b>DATA</b>, <b>NDB</b> (normal downlink burst with signalling), <b>SYNC</b> (synchronisation burst), <b>VOICE</b> (speech).</td></tr>
+<tr><td>CRC</td><td>PASS/FAIL of the last decoded message.</td></tr>
+<tr><td>DL / UL</td><td>Downlink and uplink frequency of the cell, computed from carrier number, band, offset and duplex table. After it the usage according to the access assignment (AACH): Unalloc, Assigned ctl, Common ctl, Reserved, Traffic.</td></tr>
+<tr><td>Duplex</td><td>Index of the duplex table and frequency band from SYSINFO, “reverse” for reverse duplex (uplink above the downlink).</td></tr>
+<tr><td>Access1 / Access2</td><td>Access code (A…D) and base frame length of the two access fields of the access assignment (AACH) for random access.</td></tr>
+<tr><td>MCC / MNC / CC</td><td>Country code, network code and colour code (0…63) from SYNC. The colour code is part of the scrambling code: if it were wrong, no other channel would pass its checksum.</td></tr>
+</table>
+
+<h3>Services and security</h3>
+<p>The services are shown as words – <b>green = offered or set, red = not</b>: <span class="ui">Adv. link</span> (advanced link), <span class="ui">Encryption</span> (air interface encryption), <span class="ui">SNDCP</span> (packet data), <span class="ui">Circuit data</span>, <span class="ui">Voice</span>, <span class="ui">Normal mode</span>, <span class="ui">Migration</span>, <span class="ui">Never min mode</span>, <span class="ui">Priority cell</span>, <span class="ui">Dereg req.</span> (deregistration required), <span class="ui">Reg req.</span> (registration required).</p>
+<p>Below that <span class="ui">Air interface encryption</span>, <span class="ui">Security</span> and, if seen, <span class="ui">Algorithm</span> (meaning in <a href="#s5">chapter 5</a>, “Encryption”). <span class="ui">Security</span> comes only in part of the SYSINFO messages (extended services, not in every multiframe). The program keeps the last value, the tooltip shows its age; after a cell change it is cleared. <span class="ui">Encrypted PDUs seen</span> counts encrypted messages (not decoded).</p>
+
+<h3>Cell parameters (SYNC / SYSINFO)</h3>
+<p>Expand with the triangle. Every line has a tooltip.</p>
+<table>
+<tr><th style="width:24%">Line</th><th>Meaning</th></tr>
+<tr><td>Main carrier</td><td>Carrier number of the main carrier (MCCH) with band and frequency offset (0, +6.25, −6.25, +12.5 kHz).</td></tr>
+<tr><td>Location area (LA)</td><td>Location area. A radio moving to a cell with another LA registers again.</td></tr>
+<tr><td>Subscriber classes</td><td>16-bit mask of the subscriber classes allowed (decimal).</td></tr>
+<tr><td>MS max TX power</td><td>Highest transmit power a radio may use in this cell (15…45 dBm in 5 dB steps).</td></tr>
+<tr><td>Min RX access level</td><td>Minimum downlink level from which a radio uses the cell (RXLEV_ACCESS_MIN, −125…−50 dBm).</td></tr>
+<tr><td>Access parameter</td><td>Reference for the power control of the radios on access (ACCESS_PARAMETER, −53…−23 dBm).</td></tr>
+<tr><td>Radio DL timeout</td><td>Time without decodable downlink after which a radio gives up the cell (multiples of 144 timeslots, converted to seconds) or “disabled”.</td></tr>
+<tr><td>Secondary control ch.</td><td>Number of additional control channels (CSCH).</td></tr>
+<tr><td>CCK identifier</td><td>Number of the common cipher key, only if sent (security class 3).</td></tr>
+<tr><td>Cell load (SYNC)</td><td>Load of the cell according to SYNC.</td></tr>
+<tr><td>Air interface</td><td>System code: 0 = ETS 300 392-2 edition 1, 1 = from EN 300 392-2 V2.3.2, 2 = from V3.1.1 (Release 2), 10…15 = direct mode (DMO).</td></tr>
+<tr><td>Sharing mode</td><td>Continuous transmission or shared carrier/MCCH (carrier, MCCH, traffic carrier sharing); with MCCH sharing also <span class="ui">Reserved frames</span> per two multiframes.</td></tr>
+<tr><td>U-plane DTX</td><td>Discontinuous transmission allowed on the traffic channel.</td></tr>
+<tr><td>Frame 18 extension</td><td>Radios may use frame 18 for extra signalling.</td></tr>
+<tr><td>Late entry</td><td>Late entry information is sent for ongoing group calls (joining a call in progress).</td></tr>
+<tr><td>Neighbour broadcast</td><td>Whether the cell sends D-NWRK-BROADCAST and whether radios may ask for it (sent / enquiry supported).</td></tr>
+</table>
+
+<h3>Network broadcast &amp; neighbour cells</h3>
+<p>This table only fills once the cell sends a D-NWRK-BROADCAST – depending on the network every few seconds, every few minutes or never (see <span class="ui">Neighbour broadcast</span> above). Until then it shows “no D-NWRK-BROADCAST received yet”. The header line shows count and age; <span class="ui">Clear</span> deletes the stored neighbour list.</p>
+<table>
+<tr><th style="width:24%">Line / column</th><th>Meaning</th></tr>
+<tr><td>Slow / Fast reselect</td><td>Threshold and hysteresis for normal and urgent cell reselection (2 dB steps).</td></tr>
+<tr><td>Cell load</td><td>Load according to D-NWRK-BROADCAST.</td></tr>
+<tr><td>Network time, Local offset, vs. PC clock</td><td>Network time (UTC, 2 s resolution, advanced by the age of the message), announced local time offset and difference to the PC clock.</td></tr>
+<tr><td>Neighbour cells: Cell</td><td>Cell identifier, “(sync)” = synchronised to this cell. Tooltip: carrier number, MCC/MNC, maximum transmit power.</td></tr>
+<tr><td>DL MHz, LA, Load, Min RX</td><td>Downlink frequency, location area, load and minimum level of the neighbour cell (– = not sent).</td></tr>
+<tr><td>Age</td><td>Seconds since the last report of this neighbour cell.</td></tr>
+<tr><td>Tune</td><td>Tunes the TETRA VFO to the neighbour cell. For <a href="#s11">more carriers</a>, <span class="ui">Add neighbour cells</span> takes all of them at once.</td></tr>
+</table>
+
+<h3>Duplex tables</h3>
+<p>The uplink frequency follows from the downlink and the duplex spacing. The spacing is not transmitted directly but as an index (table 0…7) into a table per frequency band. In amateur radio mode these values apply for 70 cm, otherwise the ETSI values (ETSI TS 100 392-15):</p>
+<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
+<tr><td>Spacing (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
+<p><b>Editing</b> in the <span class="ui">Duplex spacing table</span> section:</p>
+<ol class="steps">
+  <li>Select table 0…7 at the top. The line of the band and table the received cell is using is green.</li>
+  <li>In <span class="ui">ETSI</span> mode the values are read-only. In <span class="ui">Amateur radio</span> mode enter the spacing in kHz per band (−1 = undefined). Values differing from the default are shown in orange.</li>
+  <li>Changes are saved immediately to <code>tetra_duplex_ham.json</code> (configuration folder) and apply with the next SYSINFO. <span class="ui">Table = default</span> resets the selected table to the default, <span class="ui">Reload file</span> reads the file again (after editing it by hand), <span class="ui">Save file</span> writes it. The status line below names file and result.</li>
+</ol>
+
 <!-- ============================================================ -->
 <h1 id="s8"><span class="num">8</span>Stations and traffic</h1>
-<p>In amateur radio mode, <span class="ui">Stations &amp; Traffic</span> collects all subscribers and groups:</p>
+<p>In amateur radio mode, <span class="ui">Stations &amp; Traffic</span> collects all subscribers and groups that appear in the unencrypted signalling of the cell. The section has three tabs; the number in the tab is the number of entries. The tables can be sorted, rearranged, shown and hidden as described in <a href="#s3">chapter 3</a>. As a wide strip below the waterfall (preset <span class="ui">Measuring station</span>) they fill the whole height.</p>
+
+<h3>Name lists</h3>
+<p>The state of the name lists is shown at the top. <span class="ui">Download name lists</span> loads the users (7-digit ISSI) and repeaters (6-digit) from radioid.net and the names of the Brandmeister talk groups into the configuration folder. <span class="ui">Reload files</span> reads them again, e.g. after placing them there by hand without internet (file names in the tooltip and in <a href="#s19-1">appendix 19.1</a>).</p>
+
+<h3>Colours and operation in all tables</h3>
 <ul>
-  <li><b>Stations:</b> ISSI (in amateur radio = DMR ID; 7 digits user, 6 digits repeater), call sign and location from radioid.net, timeslot, last heard, scanned groups, activity.</li>
-  <li><b>Groups:</b> GSSI with the name of the talk group (Brandmeister), current and last speaker, registered stations.</li>
-  <li><b>Traffic:</b> call set-up, transmission grant, SDS text messages and positions in plain text.</li>
+  <li>The identity (ISSI or GSSI) is <b>green</b> while the station talks or someone talks in the group, <b>yellow</b> for activity within the last 2 minutes, otherwise <b>grey</b>.</li>
+  <li><b>Right-click on an identity</b> opens the menu for the priority list: <span class="ui">Listen to this one</span> (to the top), <span class="ui">Add to the end</span> or <span class="ui">Remove</span>. Entries of the list carry a “*” after the identity (see <a href="#s5">Listen to</a>).</li>
+  <li>Times in <span class="ui">Seen</span>: seconds (s), minutes (m) or hours (h) since the last activity.</li>
 </ul>
-<p><span class="ui">Download name lists</span> loads the name lists (radioid.net and Brandmeister) into the configuration folder; without internet the files can also be placed there by hand. <span class="ui">Hide call control</span> hides control messages so that only SDS and status remain.</p>
+
+<h3>Stations tab</h3>
+<table>
+<tr><th style="width:22%">Column</th><th>Content</th></tr>
+<tr><td>ISSI</td><td>Identity of the subscriber (in amateur radio = DMR ID; 7 digits user, 6 digits repeater).</td></tr>
+<tr><td>Type</td><td><b>ISSI</b> = recognised as an individual (calling, talking or registering); <b>?</b> = only seen as a MAC address so far, individual or group address not yet clear.</td></tr>
+<tr><td>Call</td><td>Call sign from radioid.net.</td></tr>
+<tr><td>TS</td><td>Last timeslot used; <b>C</b> = channel allocation seen, <b>E</b> = encrypted traffic seen (not decoded).</td></tr>
+<tr><td>Seen</td><td>Time since the last activity.</td></tr>
+<tr><td>Groups (scan list)</td><td>Groups the station has attached (group attachment or registration). Tooltip: the same groups with names.</td></tr>
+<tr><td>Activity</td><td>“TALKING in &lt;group&gt;” (green), otherwise the last activity (e.g. registration, call set-up, SDS); “encrypted – not decoded” for encrypted traffic only. If the station sent a position, it is in the tooltip.</td></tr>
+<tr><td>Info</td><td>Name and location from radioid.net.</td></tr>
+</table>
+<p><span class="ui">Clear all</span> empties stations and groups.</p>
+
+<h3>Groups tab</h3>
+<table>
+<tr><th style="width:22%">Column</th><th>Content</th></tr>
+<tr><td>GSSI</td><td>Identity of the group.</td></tr>
+<tr><td>Talkgroup</td><td>Name of the talk group (Brandmeister).</td></tr>
+<tr><td>TS</td><td>Timeslot of the last call; <b>E</b> = encrypted.</td></tr>
+<tr><td>Seen</td><td>Time since the last activity in the group.</td></tr>
+<tr><td>Talker</td><td>Who is talking right now (ISSI and call sign, green).</td></tr>
+<tr><td>Last talker</td><td>Who talked last.</td></tr>
+<tr><td>Attached</td><td>Number of stations that have this group in their scan list (group attachment). Tooltip: the stations with names.</td></tr>
+<tr><td>Attached by (from v0.23.6)</td><td>These stations as a list “ISSI call sign, …”. If the column is too narrow it ends with “…”; the tooltip shows all of them with name and location. Sorting by this column orders alphabetically by the list.</td></tr>
+</table>
+<p>The assignment comes from the group attachments (attach/detach) of the radios. It is as complete as what the program has heard since it started: a station that attached before the start only appears after its next attachment.</p>
+
+<h3>Traffic tab</h3>
+<table>
+<tr><th style="width:22%">Column</th><th>Content</th></tr>
+<tr><td>Time</td><td>Time of reception (PC clock).</td></tr>
+<tr><td>To</td><td>Destination: group (“G” and name) or station.</td></tr>
+<tr><td>PDU</td><td>Type of message, e.g. D-SETUP, D-TX-GRANTED, D-RELEASE (call control), in yellow D-SDS-DATA and D-STATUS, in orange “encrypted”.</td></tr>
+<tr><td>From</td><td>Sender (ISSI and call sign).</td></tr>
+<tr><td>TS</td><td>Timeslot.</td></tr>
+<tr><td>Content</td><td>Content in plain text: SDS text, status number, position (coordinates in the tooltip).</td></tr>
+</table>
+<p>Newest entries are at the top; the last 1000 are kept. <span class="ui">Hide call control</span> hides call control so that only SDS, status and encrypted messages remain. <span class="ui">Clear</span> empties the list. While a CSV log is running, stations and traffic are also written to their own files.</p>
 <figure><img src="shots/win_stations.png"><figcaption>Fig. 6 – Stations and traffic (identities blurred).</figcaption></figure>
 
 <!-- ============================================================ -->
@@ -365,7 +469,14 @@ sdrpp</pre></li>
   <li><b>Carrier line</b> – carrier leakage as a spectral line.</li>
 </ul>
 <p>With a large I/Q offset, a <b>diagnosis line</b> names the likely cause: if carrier line and I/Q offset agree and the receiver's DC is far enough away, it is carrier leakage of the transmitter (check its LO/DC calibration).</p>
-<p><span class="ui">RBW</span> and <span class="ui">Avg</span> set resolution and averaging. <span class="ui">Store floor</span> stores the noise of the receiver (transmitter off or input terminated with 50 Ω); values close to this limit are marked grey.</p>
+<p><b>Operation:</b></p>
+<ul>
+  <li><span class="ui">RBW</span>: resolution bandwidth 122 Hz (4k FFT), 61 Hz (8k) or 31 Hz (16k). Finer = more accurate shoulders, but slower.</li>
+  <li><span class="ui">Avg</span> (1…100): number of averaged spectra. <span class="ui">Reset average</span> restarts the averaging, e.g. after a change at the transmitter.</li>
+  <li><span class="ui">Store floor</span> stores the current averaged spectrum as the measurement floor of the receiver: first switch the transmitter off or terminate the SDR input with 50 Ω, same gain and sample rate. Values close to this floor are marked grey. Without a stored floor the noise far from the carrier serves as an estimate. <span class="ui">Clear floor</span> discards it.</li>
+  <li><span class="ui">ACP limits</span> (expand): limits at 25, 50 and 75 kHz in dBc, with presets from EN 300 394-1 7.1.3.2: <span class="ui">BS / MS class 1-3</span> (table 7.2: −60/−70/−70 dBc), <span class="ui">MS class 4/4L</span> (table 7.1: −55/−70/−70 dBc), <span class="ui">&gt; 700 MHz</span> (table 7.3: −55/−65/−65 dBc). The average power over the useful part is measured through the TETRA filter; the own floor of the test set-up must be below −70/−80/−80 dBc (B.1.2.3).</li>
+</ul>
+<p>The ACP table shows for each spacing (±25/50/75 kHz) the lower and upper value, the limit and the measurement floor. A “*” marks values less than 3 dB above the measurement floor – the true value may be lower. If the channel is closer than 15 kHz to the centre frequency of the SDR, a red line warns: the receiver's DC offset then falsifies I/Q offset and carrier leakage; tune the SDR at least ~100 kHz away.</p>
 <div class="box warn"><b class="t">Limits of the measurement</b>The adjacent channel measurement is limited by the dynamic range and phase noise of the SDR – typically −60 to −70 dBc. For values close to the limit, use a strong, clean signal and a low gain.</div>
 </div>
 <div><figure><img src="shots/win_txa.png"><figcaption>Fig. 7 – TX analysis: measured spectrum, ideal TETRA spectrum (thin) and ACP windows.</figcaption></figure></div>
@@ -376,7 +487,7 @@ sdrpp</pre></li>
 <h2>Over time</h2>
 <div class="cols">
 <div>
-<p>The <span class="ui">Trends &amp; timeslots</span> section keeps the last 24 hours with one value per second: level, MER, CRC errors, carrier offset, traffic per timeslot and bursts/s. For long time spans every pixel combines several seconds; line = mean, band = minimum to maximum, red marks = sync losses. The mouse shows the values at any point in time.</p>
+<p>The <span class="ui">Trends &amp; timeslots</span> section keeps the last 24 hours with one value per second: level, MER, CRC errors, carrier offset, traffic per timeslot and bursts/s. For long time spans every pixel combines several seconds; line = mean, band = minimum to maximum, red marks = sync losses. The mouse shows the values at any point in time. The <span class="ui">Over time</span> tab contains these histories; <span class="ui">Time span</span> selects the range: 10 min, 1 h, 6 h, 12 h, 24 h or <i>All</i> (everything since the start or the whole loaded log). The same time span applies to the <a href="#s15">measurement report</a>.</p>
 <p><span class="ui">Open a CSV log</span> opens a saved log in the same view – so measurements over several days can be evaluated, too. <span class="ui">Back to live</span> returns to the running measurement.</p>
 <h3>Timeslot usage</h3>
 <p>Every downlink burst announces what its timeslot is used for. The table counts traffic, assigned control, common control and free per timeslot, plus the uplink traffic. Frame 18 (always control) is left out.</p>
@@ -401,9 +512,11 @@ sdrpp</pre></li>
 <div>
 <p><span class="ui">Carriers (multi-carrier)</span> evaluates up to eight additional carriers within the SDR bandwidth at the same time: level, distance to the main carrier, MER, carrier offset and synchronisation – only the main carrier is decoded.</p>
 <ul>
-  <li>Enter a frequency → <span class="ui">Add carrier</span>, or <span class="ui">Add neighbour cells</span> takes the neighbour cells from the network information.</li>
-  <li>The level history of all carriers appears below (10 min to 24 h).</li>
-  <li>While a CSV log is running, <code>…_carriers.csv</code> is written as well.</li>
+  <li><b>Adding:</b> enter the frequency in MHz (arrows: 12.5 kHz steps) → <span class="ui">Add carrier</span>. <span class="ui">Add neighbour cells (n)</span> appears once the cell has reported neighbour cells and takes all not yet listed ones at once. With eight carriers both buttons are disabled.</li>
+  <li><b>Table:</b> the first line <span class="ui">Main (TETRA VFO)</span> is the main carrier for comparison. Columns: <span class="ui">Carrier</span> (name, e.g. cell identifier; colour = line in the history), <span class="ui">MHz</span>, level in <span class="ui">dBFS</span> or <span class="ui">dBm</span> (with level calibration), <span class="ui">vs. main</span> (level difference to the main carrier), <span class="ui">MER</span>, <span class="ui">Offset</span> (carrier offset in Hz) and <span class="ui">Sync</span> (yes/no). MER and offset only with synchronisation. “outside SDR span”: the carrier is outside the SDR bandwidth; “SDR stopped”: no data.</li>
+  <li><b>Removing:</b> <span class="ui">x</span> at the end of the line.</li>
+  <li><b>History:</b> below, the level history of all carriers; <span class="ui">Level history</span> selects 10 min, 1 h, 6 h or 24 h.</li>
+  <li>While a CSV log is running, <code>…_carriers.csv</code> is written as well. The carriers are kept over a restart.</li>
 </ul>
 <p>Each carrier costs about as much CPU time as another VFO.</p>
 </div>
@@ -422,10 +535,19 @@ sdrpp</pre></li>
   <li><b>Ripple:</b> ripple in the useful part (averaged).</li>
   <li><b>Outside the burst:</b> power before and after the burst (dBc) – limited by the receiver noise (“at the floor”).</li>
 </ul>
-<p>The chart shows the shape averaged over the last bursts with the <span class="ui">Time mask</span> (red). The mask values are adjustable and only guide values.</p>
+<p>The chart shows the shape averaged over the last bursts with the <span class="ui">Time mask</span> (red).</p>
+<h3>Operation</h3>
+<ol class="steps">
+  <li>Switch on <span class="ui">Run burst analysis</span> and choose the frequency below: <span class="ui">Uplink (SYSINFO)</span>, <span class="ui">Manual frequency</span> (enter MHz) or <span class="ui">TETRA VFO</span>. The <span class="ui">Frequency</span> line shows what is measured.</li>
+  <li><span class="ui">Averages</span> (1…500, default 200 per EN 300 394-1 8.4) sets how many bursts are averaged; <span class="ui">Reset</span> discards the bursts so far.</li>
+  <li><span class="ui">Also:</span> adds <span class="ui">Timing vs. downlink</span> and <span class="ui">Ramp spectrum</span> (both cost CPU time).</li>
+  <li>Reading: <span class="ui">Floor</span> and <span class="ui">peak</span> (noise floor and peak in the channel), <span class="ui">Bursts</span> (counted full and half bursts, bursts/s), then <span class="ui">Burst power</span> and the shape values. Green = within the mask, red = outside. “No bursts detected”: nobody transmits; “continuous carrier”: a steady carrier instead of bursts.</li>
+  <li>If the downlink is received as well, <span class="ui">Overload check</span> tests whether the downlink gets weaker during the bursts (more than 1 dB = receiver overloaded, results invalid). Without the downlink the <span class="ui">Linearity check</span> (below) takes this place.</li>
+</ol>
+<p><b>Time mask</b> (expand): <span class="ui">Check against EN 300 392-2 6.4.5</span> (default on) checks against the standard (see below); <span class="ui">Station</span> selects <i>Mobile station (uplink)</i> or <i>Base station, discontinuous</i>; <span class="ui">MS power class 4 / 4L</span> relaxes the switching transient limit; <span class="ui">MS transmit power known</span> with a dBm value converts the absolute limits to dBc. Without the standard check the own mask applies: <span class="ui">Ripple +- dB</span> (default ±1 dB), <span class="ui">Outside dBc</span> (−40 dBc) and <span class="ui">Ramp max. sym</span> (rise/fall −20…−1 dBc within at most 5 symbols) – guide values for your own comparison.</p>
 <h3>Measuring the uplink alone and checking linearity (default from v0.22.2)</h3>
 <p>The figures the standard defines for the mobile – power versus time, time mask, switching transients, power outside the burst, adjacent channel power and modulation accuracy – concern the transmitted signal only; they do not need the downlink. So <span class="ui">Timing vs. downlink</span> is now off by default, and the SDR can run on the uplink alone with a low sample rate (1–2 MS/s, source <span class="ui">Manual frequency</span>). This relieves the computer and avoids the dynamic range problem: the repeater a few kilometres away is weak, the nearby radio 60–80 dB stronger – more than a 12-bit converter handles at the same time.</p>
-<p>Without the downlink there is no reference for overload. Its place is taken by the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares: if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
+<p>Without the downlink there is no reference for overload. Its place is taken by the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares (<span class="ui">Check again</span> restarts the check): if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
 <p><b>Transmit power of the radio:</b> the absolute limits of the standard (−36 dBm for the power outside the burst and for switching transients) refer to the antenna connector of the radio. Over the air the received level says nothing about it (path loss). Under <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> enter the transmit power (e.g. 12.6 dBm for 18 mW, 32.6 dBm for 1.8 W); the dBc limit follows as Lmin = max(−70 dBc; −36 dBm − P). Without an entry −70 dBc applies.</p>
 <h3>Timing relative to the downlink (optional)</h3>
 <p>With <span class="ui">Timing vs. downlink</span> the program opens a second, sample-aligned tap on the TETRA VFO (downlink of the same cell), finds the slot grid there and measures when each burst rises after the start of its uplink timeslot. Most important is the <b>comparison between radios</b> and the spread; the absolute value also contains propagation differences (3.3 µs per km of detour).</p>
@@ -453,7 +575,7 @@ sdrpp</pre></li>
 <p>Most of the interference in the adjacent channels is produced when switching on and off. <span class="ui">Ramp spectrum</span> measures the channel power at −50, −25, ±0, +25, +50 kHz in 1.8 ms windows during the ramp-up, in the middle and during the ramp-down, relative to the middle. Orange: ramp more than 6 dB above the middle (splatter).</p>
 <p><b>As in the standard (from v0.21.1):</b> the line <span class="ui">Switching transients (peak, ±25 kHz)</span> measures, as in EN 300 394-1 7.1.4, the peak power through the TETRA filter at −25 and +25 kHz over the whole ramp-up and ramp-down period, with maximum hold since the last reset. Limit −50 dBc, for MS power classes 4/4L −45 dBc (selection under <span class="ui">Time mask</span>). The envelope of the burst analysis now runs through the TETRA filter (root raised cosine 0.35, 33 symbols) as EN 300 392-2 6.4.5 requires. <span class="ui">Time mask</span> checks table 6.8 / figure 6.3: ramp-up within t1 (16 symbols), ramp-down within t3 (15 symbols), at most +6 dBc during t1 and +3 dBc during t3, outside Lmin (MS −70 dBc or −36 dBm, BS −40 dBc). If the measurement floor is above Lmin, this is shown. Default averaging: 200 bursts (EN 300 394-1 8.4). For the adjacent channel power, <span class="ui">ACP limits</span> offers presets per tables 7.1–7.3.</p>
 <h3>Noise on the uplink</h3>
-<p><span class="ui">Noise between bursts</span> measures the power in the channel while nobody transmits – on the uplink of a repeater that is its receive noise and interference. The history over up to 24 h shows interferers that make the repeater “deaf”; an alarm can react to it.</p>
+<p><span class="ui">Noise between bursts</span> measures the power in the channel while nobody transmits – on the uplink of a repeater that is its receive noise and interference. Below it, <span class="ui">Noise history</span> shows the history (range under <span class="ui">Span</span>, up to 24 h) – interferers that make the repeater “deaf” stand out; an <a href="#s14">alarm</a> can react to it. Without gaps between bursts (steady carrier) there is no value.</p>
 <div class="box warn"><b class="t">Never connect a transmitter directly</b>Never connect a handheld to the SDR without sufficient attenuation (e.g. 60–70 dB, power-rated attenuator). For measurements an antenna a few metres away is usually enough.</div>
 
 <!-- ============================================================ -->
@@ -472,7 +594,7 @@ sdrpp</pre></li>
 
 <!-- ============================================================ -->
 <h1 id="s14"><span class="num">14</span>Alarms</h1>
-<p>For long-term monitoring, limits can be set under <span class="ui">Alarms</span>:</p>
+<p>For long-term monitoring, limits can be set under <span class="ui">Alarms</span>. <span class="ui">Monitor limits</span> switches the monitoring on; then tick each desired condition and enter the limit next to it (in dBm with level calibration, otherwise dBFS):</p>
 <table class="plain">
 <tr><th>Condition</th><th>Example</th></tr>
 <tr><td>Level below</td><td>−90 dBFS or dBm (calibrated)</td></tr>
@@ -482,7 +604,7 @@ sdrpp</pre></li>
 <tr><td>Uplink noise above</td><td>−100 dBFS (the burst analysis must run on the uplink)</td></tr>
 <tr><td>Samples lost</td><td>immediately (SDR overflow or timing slip)</td></tr>
 </table>
-<p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. Optionally an alarm starts the CSV log, on Windows also with a sound. Active alarms appear in red at the top of the TETRA menu.</p>
+<p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. <span class="ui">Start CSV log on alarm</span> starts the CSV log at the first alarm if it is not already running; <span class="ui">Sound</span> (Windows only) adds a sound. <span class="ui">Hold time (s)</span> can be set from 1 to 600 s. Active alarms appear in red at the top of the TETRA menu.</p>
 
 <!-- ============================================================ -->
 <h1 id="s15"><span class="num">15</span>Measurement report</h1>
@@ -496,9 +618,9 @@ sdrpp</pre></li>
   <li>TX analysis, burst analysis with profile, multipath, additional carriers,</li>
   <li>the latest events.</li>
 </ul>
-<p>The period is the time span selected under <span class="ui">Trends</span> (or the loaded log). Location, antenna or occasion can be entered under <span class="ui">Notes</span>. As PDF: print in the browser → “Save as PDF”.</p>
+<p>The period is the time span selected under <span class="ui">Trends</span> (or the loaded log). Location, antenna or occasion can be entered under <span class="ui">Notes</span>. After creating it, the file name and three buttons appear: <span class="ui">Open</span> (open in the browser), <span class="ui">Open folder</span> (log folder in the file manager) and <span class="ui">Copy path</span> (path to the clipboard). As PDF: print in the browser → “Save as PDF”.</p>
 </div>
-<div><figure><img src="shots/report.png"><figcaption>Fig. 13 – Measurement report (excerpt).</figcaption></figure></div>
+<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Fig. 13 – Measurement report (excerpt).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -525,7 +647,7 @@ sdrpp</pre></li>
 </ol>
 <h2>Measurement drive</h2>
 <ol class="steps">
-  <li>Let the decoder lock onto the desired cell and press <span class="ui">Lock current cell</span>: seconds in which another cell or no cell is received then count as “no service”.</li>
+  <li>Let the decoder lock onto the desired cell and press <span class="ui">Lock current cell</span>: seconds in which another cell or no cell is received then count as “no service”. The locked cell is then shown under <span class="ui">Cell lock</span> (green = received, red = not); <span class="ui">Unlock cell</span> removes the lock.</li>
   <li>Calibrate the level if possible (<span class="ui">Level cal.</span>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
   <li><span class="ui">Start CSV log</span> and drive off. Antenna firmly on the roof, same set-up as on earlier drives.</li>
   <li>After the drive, <span class="ui">Stop CSV log</span>.</li>

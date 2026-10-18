@@ -141,8 +141,13 @@ def session_a():
         ctx.module_cmd("TETRA Demodulator", "set_layout", "0")
         time.sleep(1.0)
         ctx.module_cmd("TETRA Demodulator", "make_report", "1")
-        time.sleep(2.0)
-        rp = ctx.module_cmd("TETRA Demodulator", "get_report", timeout=8.0).get("path", "")
+        rp = ""
+        for _ in range(20):   # the report is written in the GUI thread
+            time.sleep(1.0)
+            rp = ctx.module_cmd("TETRA Demodulator", "get_report", timeout=8.0).get("path", "")
+            if rp:
+                break
+        print("report:", rp)
         if rp and os.path.exists(rp):
             shutil.copyfile(rp, os.path.join(OUT, "report.html"))
 

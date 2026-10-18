@@ -120,6 +120,11 @@ jobs:
               timeout 120 google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1400,900 \
                 --virtual-time-budget=20000 --screenshot="docshots/map_$m.png" "file://$PWD/docshots/drive_${m}_map.html" || true
             done
+            # measurement report (figure in chapter 15), rendered like the maps
+            if [ -f docshots/report.html ]; then
+              timeout 120 google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --window-size=1100,1500 \
+                --virtual-time-budget=10000 --screenshot="docshots/report.png" "file://$PWD/docshots/report.html" || true
+            fi
             ls -la docshots
             cd docshots
             git init -q

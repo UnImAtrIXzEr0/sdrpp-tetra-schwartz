@@ -187,8 +187,8 @@ sdrpp</pre></li>
 <h3>Bedienhinweise</h3>
 <ul>
   <li>Fast jeder Messwert hat einen <b>Tooltip</b>: Maus kurz darüber halten.</li>
-  <li>Die Menüspalte ist in der Breite veränderbar; Inhalte brechen um, statt rechts zu verschwinden.</li>
-  <li>Tabellen: Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Die Anordnung wird gespeichert.</li>
+  <li><b>Anzeige wie ein Messgerät (ab v0.23.6):</b> Die Menüspalte ist in der Breite veränderbar; nichts wird abgeschnitten und nichts springt. Die Werte einer Zeile „Bezeichnung: Wert“ stehen in einer gemeinsamen Wertespalte. Passt ein Wert nicht mehr in die Zeile, rückt er mit seiner Einheit in eine Folgezeile unter die Wertespalte. Jeder Wert reserviert den Platz seines längsten bisherigen Textes, und bei gleicher Breite bleibt die Aufteilung fest – ein Wert, der seine Länge ändert, schiebt den Rest der Zeile nicht mehr. Erst wenn die Spalte etwa zwei Zeichen breiter wird als nötig, rückt ein umgebrochener Wert zurück. Zeilen, die nicht immer gesendet werden (z. B. <span class="ui">Security</span>), behalten ihren Platz und zeigen bis zum ersten Empfang „not broadcast yet“.</li>
+  <li><b>Tabellen:</b> Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Ein Klick auf einen Spaltenkopf sortiert auf-, ein zweiter absteigend, ein dritter hebt die Sortierung auf (Pfeil im Kopf). Zellen bleiben einzeilig; zu langer Text endet mit „…“, der volle Text steht im Tooltip. Ist das Fenster schmaler als alle Spalten, lässt sich die Tabelle seitlich verschieben, die Kopfzeile bleibt stehen. Die Anordnung wird gespeichert.</li>
   <li><b>Bereiche im TETRA Demodulator verschieben:</b> am Griff (sechs Punkte rechts in der Kopfzeile) ziehen; eine Linie zeigt das Ziel. Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Die Reihenfolge wird gespeichert.</li>
   <li><b>Eigenes Fenster:</b> Das Fenster-Symbol links vom Griff zeigt den Bereich in einem eigenen Fenster (Symbol blau = Fenster offen); ein zweiter Klick holt ihn zurück ins Menü. Die Konstellation ist ein eigener Bereich. Ganz oben stehen nur noch Audio, ETSI/Amateur radio und <span class="ui">Layout...</span>.</li>
   <li><b>Kanalraster:</b> Unter <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> zeigt das Spektrum gestrichelte Kanalgrenzen bei ±12,5 und ±37,5 kHz um den TETRA-Kanal. Das Spektrum über dem Wasserfall lässt sich unter <span class="ui">Display</span> → <span class="ui">Spectrum averaging</span> mitteln: Zeitkonstante in Sekunden (nach dieser Zeit hat ein Sprung 63 % erreicht, nach der fünffachen Zeit 99 %). <span class="ui">Power</span> mittelt die Leistung und zeigt richtige Pegel. <span class="ui">Log (dB)</span> mittelt die dB-Werte wie früher; Rauschen erscheint dabei etwa 2,5 dB zu niedrig. <span class="ui">Max hold</span> zeigt eine zweite Kurve mit dem Maximum, die mit der eingestellten Rate in dB/s abfällt (0 = halten bis zum Ausschalten). Für Messungen ist <span class="ui">TX analysis</span> mit <span class="ui">Avg</span> (feste Anzahl gemittelter Spektren) gedacht.</li>
@@ -292,7 +292,7 @@ sdrpp</pre></li>
 <h3>Verschlüsselung (nur Anzeige)</h3>
 <p>Das Programm entschlüsselt nichts; der Verschlüsselungscode von osmo-tetra ist entfernt. Unter <span class="ui">Network &amp; cell</span> zeigt <span class="ui">Air interface encryption</span>, ob die Zelle Luftschnittstellen-Verschlüsselung anbietet und ob ein CCK in Gebrauch ist (Sicherheitsklasse 3). Verschlüsselte Nachrichten erscheinen in <span class="ui">Traffic</span> als <span class="ui">encrypted – not decoded</span>, Stationen mit verschlüsseltem Verkehr tragen ein „E“ in der Spalte TS. Sendet die Zelle die erweiterten Dienste im SYSINFO, zeigt <span class="ui">Security</span> die Sicherheitsinformation nach EN 300 392-7 V3.5.1 (A.8.77): Authentisierung verlangt oder nicht, Unterstützung von Klasse-1-Geräten, Klasse 2 (mit SCK-Nummer) oder Klasse 3. Das Verfahren (TEA1 … TEA4, „KSG number“, A.8.41) steht im Downlink nur in einer D-LOCATION UPDATE COMMAND; kommt eine vorbei, zeigt <span class="ui">Algorithm</span> es an, sonst „not seen“. Alles nur Anzeige.</p>
 <h3>Decoder-Modus</h3>
-<p>Das Programm dekodiert selbst (Normalfall). Ganz unten im Menü liegt der zugeklappte Bereich <span class="ui">NETSYMS symbol streaming (advanced)</span>: Er schickt die Symbole per UDP an ein externes Programm. Solange er aktiv ist, sind der eingebaute Decoder und alle Messungen, die ihn brauchen, aus; oben im Menü steht dann ein Hinweis. Ab v0.20.1 startet das Programm mit dem eingebauten Decoder, wenn NETSYMS gewählt war, aber nicht gesendet hat.</p>
+<p>Das Programm dekodiert selbst (Normalfall). Ganz unten im Menü liegt der zugeklappte Bereich <span class="ui">NETSYMS symbol streaming (advanced)</span>: Er schickt die Symbole per UDP an ein externes Programm. Bedienung: <span class="ui">NETSYMS over UDP</span> wählen, Zieladresse und Port eintragen (Vorgabe <code>localhost</code>, Port <code>8355</code>), <span class="ui">Net start</span> drücken. <span class="ui">Net status</span> zeigt „Sending“ oder „Idle“; die Anzeigen <span class="ui">Sync</span> und <span class="ui">Training sequences</span> zeigen, ob der Demodulator Symbole liefert. <span class="ui">Net stop</span> beendet das Senden, <span class="ui">Built-in decoder</span> schaltet zurück. Solange er aktiv ist, sind der eingebaute Decoder und alle Messungen, die ihn brauchen, aus; oben im Menü steht dann ein Hinweis. Ab v0.20.1 startet das Programm mit dem eingebauten Decoder, wenn NETSYMS gewählt war, aber nicht gesendet hat.</p>
 <p>Der Kopf des TETRA-Demodulators hat kein Häkchen mehr zum Abschalten (ein versehentlicher Klick schaltete den ganzen Decoder ab). Ist das Modul doch einmal abgeschaltet, erscheint das Häkchen wieder.</p>
 </div>
 <div>
@@ -323,7 +323,7 @@ sdrpp</pre></li>
 <tr><td>Raw BER</td><td>Bitfehler in bekannten Bits (Trainingssequenzen) vor der Kanaldekodierung.</td><td>&lt; 1·10⁻³</td></tr>
 <tr><td>Bursts/s, Re-locks</td><td>dekodierte Bursts; Neusynchronisation <i>mit</i> Taktsprung = verlorene Abtastwerte (USB/CPU), <i>ohne</i> = gestörter Burst (Signal).</td><td>keine Re-locks</td></tr>
 <tr><td>CRC-Tabelle</td><td>Fehlerquote je Kanal (BSCH, SB2, Halbslot, SCH/F) in der letzten Sekunde und gesamt.</td><td>&lt; 1 %</td></tr>
-<tr><td>Events</td><td>Ereignisliste: Sync-Verluste, AFC- und Verstärkungsschritte, Alarme.</td><td></td></tr>
+<tr><td>Events</td><td>Ereignisliste: Sync-Verluste, AFC- und Verstärkungsschritte, Alarme. <span class="ui">Clear</span> leert die Liste (nicht die Datei <code>…_events.csv</code>).</td><td></td></tr>
 </table>
 <p><span class="ui">Reset totals</span> setzt Summen und Statistiken zurück. <span class="ui">Start CSV log</span> schreibt jede Sekunde eine Zeile in den Log-Ordner (siehe <a href="#s19-2">Anhang</a>), dazu Dateien für Ereignisse, Stationen, Verkehr und weitere Träger.</p>
 
@@ -331,25 +331,129 @@ sdrpp</pre></li>
 <h1 id="s7"><span class="num">7</span>Netz, Zelle und Duplex-Tabellen</h1>
 <div class="cols">
 <div>
-<p>Der Bereich <span class="ui">Network &amp; cell</span> zeigt, was die Basisstation über sich verbreitet: MCC/MNC, Farbcode, Downlink- und Uplink-Frequenz, Dienste (Verschlüsselung, Sprache, Daten), Zellauswahl-Parameter, Netzzeit und Nachbarzellen. Mit <span class="ui">Tune</span> springt der VFO auf eine Nachbarzelle.</p>
-<h3>Duplex-Tabellen</h3>
-<p>Die Uplink-Frequenz ergibt sich aus Downlink und Duplexabstand. Der Abstand steht nicht direkt in der Aussendung, sondern als Index in eine Tabelle. Im Amateurfunkmodus gelten für 70 cm diese Werte:</p>
-<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
-<tr><td>Abstand (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
-<p>Unter <span class="ui">Duplex spacing table</span> lassen sich alle Tabellen bearbeiten; gespeichert wird in <code>tetra_duplex_ham.json</code>. <span class="ui">Table = default</span> stellt die Vorgaben wieder her.</p>
+<p>Der Bereich <span class="ui">Network &amp; cell</span> zeigt, was die Basisstation über sich verbreitet (Broadcast nach EN 300 392-2: SYNC, SYSINFO, D-NWRK-BROADCAST). Er erscheint nur mit dem eingebauten Decoder. Alles ist reine Anzeige; verstellt wird hier nur die Duplex-Tabelle.</p>
+<p><b>Ablesen von oben nach unten:</b> Zuerst die Kopfzeilen (Synchronisation, Rahmenzähler, Frequenzen, Kennung), dann die Dienste als farbige Wörter, dann Verschlüsselung und Sicherheit, darunter zwei aufklappbare Tabellen mit allen Zellparametern und den Nachbarzellen. Solange der Decoder nicht eingerastet ist, sind die Werte grau; bei einem CRC-Fehler der letzten Nachricht ebenfalls.</p>
 </div>
 <div><figure><img src="shots/win_network.png"><figcaption>Abb. 5 – Netz und Zelle (Kennungen unkenntlich gemacht).</figcaption></figure></div>
 </div>
 
+<h3>Kopfzeilen</h3>
+<table>
+<tr><th style="width:22%">Anzeige</th><th>Bedeutung</th></tr>
+<tr><td>Sync</td><td>Grün: Der Demodulator findet die Trainingssequenzen (Symboltakt steht).</td></tr>
+<tr><td>Decoder</td><td><b>Locked</b> (grün): Rahmenstruktur erkannt, Nachrichten werden dekodiert. <b>Know next start</b> (gelb): Burstanfang gefunden, Rahmenstruktur noch nicht bestätigt. <b>Unlocked</b> (rot): keine Zelle.</td></tr>
+<tr><td>Hyperframe / Multiframe / Frame</td><td>TDMA-Zähler der Zelle: Hyperrahmennummer aus SYNC, Mehrfachrahmen 1…60, Rahmen 1…18. Läuft gleichmäßig weiter, solange der Empfang stabil ist.</td></tr>
+<tr><td>Timeslots</td><td>Inhalt der vier Zeitschlitze im aktuellen Rahmen: <b>UL</b> (nur Uplink belegt), <b>DATA</b>, <b>NDB</b> (Normal-Downlink-Burst mit Signalisierung), <b>SYNC</b> (Synchronisationsburst), <b>VOICE</b> (Sprache).</td></tr>
+<tr><td>CRC</td><td>PASS/FAIL der zuletzt dekodierten Nachricht.</td></tr>
+<tr><td>DL / UL</td><td>Downlink- und Uplink-Frequenz der Zelle, berechnet aus Trägernummer, Band, Versatz und Duplex-Tabelle. Dahinter die Belegung laut Zugriffszuweisung (AACH): Unalloc, Assigned ctl, Common ctl, Reserved, Traffic.</td></tr>
+<tr><td>Duplex</td><td>Index der Duplex-Tabelle und Frequenzband aus SYSINFO, „reverse“ bei vertauschtem Duplex (Uplink über dem Downlink).</td></tr>
+<tr><td>Access1 / Access2</td><td>Zugriffscode (A…D) und Basisrahmenlänge der beiden Zugriffsfelder der Zugriffszuweisung (AACH) für den Zufallszugriff.</td></tr>
+<tr><td>MCC / MNC / CC</td><td>Ländercode, Netzcode und Farbcode (0…63) aus SYNC. Der Farbcode ist Teil des Verwürfelungscodes: Wäre er falsch, bestünde kein anderer Kanal die Prüfsumme.</td></tr>
+</table>
+
+<h3>Dienste und Sicherheit</h3>
+<p>Die Dienste stehen als Wörter da – <b>grün = angeboten bzw. gesetzt, rot = nicht</b>: <span class="ui">Adv. link</span> (Advanced Link), <span class="ui">Encryption</span> (Luftschnittstellen-Verschlüsselung), <span class="ui">SNDCP</span> (Paketdaten), <span class="ui">Circuit data</span>, <span class="ui">Voice</span>, <span class="ui">Normal mode</span>, <span class="ui">Migration</span>, <span class="ui">Never min mode</span>, <span class="ui">Priority cell</span>, <span class="ui">Dereg req.</span> (Abmeldung verlangt), <span class="ui">Reg req.</span> (Registrierung verlangt).</p>
+<p>Darunter <span class="ui">Air interface encryption</span>, <span class="ui">Security</span> und gegebenenfalls <span class="ui">Algorithm</span> (Bedeutung in <a href="#s5">Kapitel 5</a>, „Verschlüsselung“). <span class="ui">Security</span> kommt nur in einem Teil der SYSINFO-Meldungen (erweiterte Dienste, nicht in jedem Mehrfachrahmen). Das Programm merkt sich den letzten Wert, der Tooltip zeigt sein Alter; nach einem Zellwechsel wird er gelöscht. <span class="ui">Encrypted PDUs seen</span> zählt verschlüsselte Nachrichten (nicht dekodiert).</p>
+
+<h3>Cell parameters (SYNC / SYSINFO)</h3>
+<p>Aufklappen mit dem Dreieck. Jede Zeile hat einen Tooltip.</p>
+<table>
+<tr><th style="width:24%">Zeile</th><th>Bedeutung</th></tr>
+<tr><td>Main carrier</td><td>Trägernummer des Hauptträgers (MCCH) mit Band und Frequenzversatz (0, +6,25, −6,25, +12,5 kHz).</td></tr>
+<tr><td>Location area (LA)</td><td>Aufenthaltsbereich. Wechselt ein Funkgerät in eine Zelle mit anderer LA, meldet es sich neu an.</td></tr>
+<tr><td>Subscriber classes</td><td>16-Bit-Maske der zugelassenen Teilnehmerklassen (dezimal).</td></tr>
+<tr><td>MS max TX power</td><td>Höchste Sendeleistung, die ein Funkgerät in dieser Zelle nutzen darf (15…45 dBm in 5-dB-Stufen).</td></tr>
+<tr><td>Min RX access level</td><td>Mindestpegel des Downlinks, ab dem ein Funkgerät die Zelle nutzt (RXLEV_ACCESS_MIN, −125…−50 dBm).</td></tr>
+<tr><td>Access parameter</td><td>Bezugswert für die Leistungsregelung der Funkgeräte beim Zugriff (ACCESS_PARAMETER, −53…−23 dBm).</td></tr>
+<tr><td>Radio DL timeout</td><td>Zeit ohne dekodierbaren Downlink, nach der ein Funkgerät die Zelle aufgibt (Vielfache von 144 Zeitschlitzen, in Sekunden umgerechnet) oder „disabled“.</td></tr>
+<tr><td>Secondary control ch.</td><td>Anzahl zusätzlicher Steuerkanäle (CSCH).</td></tr>
+<tr><td>CCK identifier</td><td>Nummer des gemeinsamen Schlüssels, nur wenn gesendet (Sicherheitsklasse 3).</td></tr>
+<tr><td>Cell load (SYNC)</td><td>Auslastung der Zelle laut SYNC.</td></tr>
+<tr><td>Air interface</td><td>Systemcode: 0 = ETS 300 392-2 Ausgabe 1, 1 = ab EN 300 392-2 V2.3.2, 2 = ab V3.1.1 (Release 2), 10…15 = Direktmodus (DMO).</td></tr>
+<tr><td>Sharing mode</td><td>Kontinuierliche Aussendung oder geteilter Träger/MCCH (carrier, MCCH, traffic carrier sharing); bei MCCH-Teilung zusätzlich <span class="ui">Reserved frames</span> je zwei Mehrfachrahmen.</td></tr>
+<tr><td>U-plane DTX</td><td>Unterbrochenes Senden auf dem Verkehrskanal erlaubt.</td></tr>
+<tr><td>Frame 18 extension</td><td>Funkgeräte dürfen Rahmen 18 für zusätzliche Signalisierung nutzen.</td></tr>
+<tr><td>Late entry</td><td>Für laufende Gruppenrufe werden Late-Entry-Informationen gesendet (Einstieg in ein laufendes Gespräch).</td></tr>
+<tr><td>Neighbour broadcast</td><td>Ob die Zelle D-NWRK-BROADCAST sendet und ob Funkgeräte danach fragen dürfen (gesendet / Anfrage unterstützt).</td></tr>
+</table>
+
+<h3>Network broadcast &amp; neighbour cells</h3>
+<p>Diese Tabelle füllt sich erst, wenn die Zelle eine D-NWRK-BROADCAST sendet – je nach Netz alle paar Sekunden, alle paar Minuten oder nie (siehe <span class="ui">Neighbour broadcast</span> oben). Bis dahin steht „no D-NWRK-BROADCAST received yet“. Die Kopfzeile zeigt Anzahl und Alter; <span class="ui">Clear</span> löscht die gespeicherte Nachbarliste.</p>
+<table>
+<tr><th style="width:24%">Zeile / Spalte</th><th>Bedeutung</th></tr>
+<tr><td>Slow / Fast reselect</td><td>Schwelle und Hysterese für die normale bzw. eilige Zellumschaltung (2-dB-Stufen).</td></tr>
+<tr><td>Cell load</td><td>Auslastung laut D-NWRK-BROADCAST.</td></tr>
+<tr><td>Network time, Local offset, vs. PC clock</td><td>Netzzeit (UTC, 2 s Auflösung, um das Alter der Nachricht weitergezählt), angekündigter Versatz der Ortszeit und Unterschied zur Uhr des PCs.</td></tr>
+<tr><td>Nachbarzellen: Cell</td><td>Zellkennung, „(sync)“ = mit dieser Zelle synchronisiert. Tooltip: Trägernummer, MCC/MNC, maximale Sendeleistung.</td></tr>
+<tr><td>DL MHz, LA, Load, Min RX</td><td>Downlink-Frequenz, Aufenthaltsbereich, Auslastung und Mindestpegel der Nachbarzelle (– = nicht gesendet).</td></tr>
+<tr><td>Age</td><td>Sekunden seit der letzten Meldung dieser Nachbarzelle.</td></tr>
+<tr><td>Tune</td><td>Stimmt den TETRA-VFO auf die Nachbarzelle ab. Für <a href="#s11">weitere Träger</a> übernimmt <span class="ui">Add neighbour cells</span> alle auf einmal.</td></tr>
+</table>
+
+<h3>Duplex-Tabellen</h3>
+<p>Die Uplink-Frequenz ergibt sich aus Downlink und Duplexabstand. Der Abstand steht nicht direkt in der Aussendung, sondern als Index (Tabelle 0…7) in eine Tabelle je Frequenzband. Im Amateurfunkmodus gelten für 70 cm diese Werte, sonst die ETSI-Werte (ETSI TS 100 392-15):</p>
+<table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
+<tr><td>Abstand (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
+<p><b>Bearbeiten</b> im Bereich <span class="ui">Duplex spacing table</span>:</p>
+<ol class="steps">
+  <li>Oben die Tabelle 0…7 wählen. Die Zeile von Band und Tabelle, die die empfangene Zelle gerade benutzt, ist grün.</li>
+  <li>Im Modus <span class="ui">ETSI</span> sind die Werte nur lesbar. Im Modus <span class="ui">Amateur radio</span> den Abstand in kHz je Band eintragen (−1 = nicht definiert). Werte, die von der Vorgabe abweichen, erscheinen orange.</li>
+  <li>Änderungen werden sofort in <code>tetra_duplex_ham.json</code> (Konfigurationsordner) gespeichert und gelten ab der nächsten SYSINFO. <span class="ui">Table = default</span> setzt die gewählte Tabelle auf die Vorgabe zurück, <span class="ui">Reload file</span> liest die Datei neu (nach einer Änderung von Hand), <span class="ui">Save file</span> schreibt sie. Die Statuszeile darunter nennt Datei und Ergebnis.</li>
+</ol>
+
 <!-- ============================================================ -->
 <h1 id="s8"><span class="num">8</span>Stationen und Verkehr</h1>
-<p>Im Amateurfunkmodus sammelt <span class="ui">Stations &amp; Traffic</span> alle Teilnehmer und Gruppen:</p>
+<p>Im Amateurfunkmodus sammelt <span class="ui">Stations &amp; Traffic</span> alle Teilnehmer und Gruppen, die in der unverschlüsselten Signalisierung der Zelle vorkommen. Der Bereich hat drei Reiter; die Zahl im Reiter ist die Anzahl der Einträge. Die Tabellen lassen sich wie in <a href="#s3">Kapitel 3</a> beschrieben sortieren, umordnen, ein- und ausblenden. Als breiter Streifen unter dem Wasserfall (Vorlage <span class="ui">Measuring station</span>) füllen sie die ganze Höhe.</p>
+
+<h3>Namenslisten</h3>
+<p>Oben steht der Stand der Namenslisten. <span class="ui">Download name lists</span> lädt die Benutzer (7-stellige ISSI) und Relais (6-stellig) von radioid.net sowie die Namen der Brandmeister-Sprechgruppen in den Konfigurationsordner. <span class="ui">Reload files</span> liest sie neu ein, etwa nachdem man sie ohne Internet von Hand dort abgelegt hat (Dateinamen im Tooltip und in <a href="#s19-1">Anhang 19.1</a>).</p>
+
+<h3>Farben und Bedienung in allen Tabellen</h3>
 <ul>
-  <li><b>Stations:</b> ISSI (bei Amateurfunk = DMR-ID; 7-stellig Benutzer, 6-stellig Relais), Rufzeichen und Ort aus radioid.net, Zeitschlitz, zuletzt gehört, gescannte Gruppen, Aktivität.</li>
-  <li><b>Groups:</b> GSSI mit Name der Sprechgruppe (Brandmeister), aktueller und letzter Sprecher, angemeldete Stationen.</li>
-  <li><b>Traffic:</b> Rufaufbau, Sprechrecht, SDS-Textnachrichten und Positionen im Klartext.</li>
+  <li>Die Kennung (ISSI bzw. GSSI) ist <b>grün</b>, solange die Station spricht bzw. in der Gruppe gesprochen wird, <b>gelb</b> bei Aktivität in den letzten 2 Minuten, sonst <b>grau</b>.</li>
+  <li><b>Rechtsklick auf eine Kennung</b> öffnet das Menü für die Prioritätsliste: <span class="ui">Listen to this one</span> (an die Spitze), <span class="ui">Add to the end</span> oder <span class="ui">Remove</span>. Einträge der Liste tragen ein „*“ hinter der Kennung (siehe <a href="#s5">Listen to</a>).</li>
+  <li>Zeitangaben in <span class="ui">Seen</span>: Sekunden (s), Minuten (m) oder Stunden (h) seit der letzten Aktivität.</li>
 </ul>
-<p>Die Namenslisten lädt <span class="ui">Download name lists</span> (radioid.net und Brandmeister) in den Konfigurationsordner; ohne Internet können die Dateien auch von Hand dort abgelegt werden. <span class="ui">Hide call control</span> blendet Steuermeldungen aus, sodass nur SDS und Status übrig bleiben.</p>
+
+<h3>Reiter Stations</h3>
+<table>
+<tr><th style="width:22%">Spalte</th><th>Inhalt</th></tr>
+<tr><td>ISSI</td><td>Kennung des Teilnehmers (bei Amateurfunk = DMR-ID; 7-stellig Benutzer, 6-stellig Relais).</td></tr>
+<tr><td>Type</td><td><b>ISSI</b> = als Einzelteilnehmer erkannt (rufend, sprechend oder bei der Anmeldung); <b>?</b> = bisher nur als MAC-Adresse gesehen, Einzel- oder Gruppenadresse noch unklar.</td></tr>
+<tr><td>Call</td><td>Rufzeichen aus radioid.net.</td></tr>
+<tr><td>TS</td><td>Zuletzt benutzter Zeitschlitz; <b>C</b> = Kanalzuweisung gesehen, <b>E</b> = verschlüsselter Verkehr gesehen (nicht dekodiert).</td></tr>
+<tr><td>Seen</td><td>Zeit seit der letzten Aktivität.</td></tr>
+<tr><td>Groups (scan list)</td><td>Gruppen, die die Station angemeldet hat (Gruppenanmeldung oder Registrierung). Tooltip: dieselben Gruppen mit Namen.</td></tr>
+<tr><td>Activity</td><td>„TALKING in &lt;Gruppe&gt;“ (grün), sonst die letzte Tätigkeit (z. B. Registrierung, Rufaufbau, SDS); „encrypted – not decoded“ bei nur verschlüsseltem Verkehr. Hat die Station eine Position gesendet, steht sie im Tooltip.</td></tr>
+<tr><td>Info</td><td>Name und Ort aus radioid.net.</td></tr>
+</table>
+<p><span class="ui">Clear all</span> leert Stationen und Gruppen.</p>
+
+<h3>Reiter Groups</h3>
+<table>
+<tr><th style="width:22%">Spalte</th><th>Inhalt</th></tr>
+<tr><td>GSSI</td><td>Kennung der Gruppe.</td></tr>
+<tr><td>Talkgroup</td><td>Name der Sprechgruppe (Brandmeister).</td></tr>
+<tr><td>TS</td><td>Zeitschlitz des letzten Gesprächs; <b>E</b> = verschlüsselt.</td></tr>
+<tr><td>Seen</td><td>Zeit seit der letzten Aktivität in der Gruppe.</td></tr>
+<tr><td>Talker</td><td>Wer gerade spricht (ISSI und Rufzeichen, grün).</td></tr>
+<tr><td>Last talker</td><td>Wer zuletzt gesprochen hat.</td></tr>
+<tr><td>Attached</td><td>Anzahl der Stationen, die diese Gruppe in ihrer Scanliste haben (Gruppenanmeldung). Tooltip: die Stationen mit Namen.</td></tr>
+<tr><td>Attached by (ab v0.23.6)</td><td>Diese Stationen als Liste „ISSI Rufzeichen, …“. Ist die Spalte zu schmal, endet sie mit „…“; der Tooltip zeigt alle mit Name und Ort. Sortieren nach dieser Spalte ordnet alphabetisch nach der Liste.</td></tr>
+</table>
+<p>Die Zuordnung stammt aus den Gruppenanmeldungen (Attach/Detach) der Funkgeräte. Sie ist so vollständig wie das, was das Programm seit dem Start gehört hat: Eine Station, die sich vor dem Start angemeldet hat, erscheint erst nach ihrer nächsten Anmeldung.</p>
+
+<h3>Reiter Traffic</h3>
+<table>
+<tr><th style="width:22%">Spalte</th><th>Inhalt</th></tr>
+<tr><td>Time</td><td>Uhrzeit des Empfangs (PC-Uhr).</td></tr>
+<tr><td>To</td><td>Ziel: Gruppe („G“ und Name) oder Station.</td></tr>
+<tr><td>PDU</td><td>Art der Nachricht, z. B. D-SETUP, D-TX-GRANTED, D-RELEASE (Rufsteuerung), gelb D-SDS-DATA und D-STATUS, orange „encrypted“.</td></tr>
+<tr><td>From</td><td>Absender (ISSI und Rufzeichen).</td></tr>
+<tr><td>TS</td><td>Zeitschlitz.</td></tr>
+<tr><td>Content</td><td>Inhalt im Klartext: SDS-Text, Statusnummer, Position (Koordinaten im Tooltip).</td></tr>
+</table>
+<p>Neueste Einträge stehen oben, gespeichert werden die letzten 1000. <span class="ui">Hide call control</span> blendet die Rufsteuerung aus, sodass nur SDS, Status und verschlüsselte Nachrichten übrig bleiben. <span class="ui">Clear</span> leert die Liste. Bei laufendem CSV-Log stehen Stationen und Verkehr zusätzlich in eigenen Dateien.</p>
 <figure><img src="shots/win_stations.png"><figcaption>Abb. 6 – Stationen und Verkehr (Kennungen unkenntlich gemacht).</figcaption></figure>
 
 <!-- ============================================================ -->
@@ -365,7 +469,14 @@ sdrpp</pre></li>
   <li><b>Carrier line</b> – Trägerrest als Spektrallinie.</li>
 </ul>
 <p>Ist der I/Q-Offset groß, nennt eine <b>Diagnosezeile</b> die wahrscheinliche Ursache: Stimmen Trägerlinie und I/Q-Offset überein und liegt der Gleichanteil des Empfängers weit genug weg, ist es ein Trägerrest des Senders (LO-/DC-Kalibrierung prüfen).</p>
-<p><span class="ui">RBW</span> und <span class="ui">Avg</span> stellen Auflösung und Mittelung ein. Mit <span class="ui">Store floor</span> wird das Rauschen des Empfängers gespeichert (Sender aus oder Eingang mit 50 Ω abgeschlossen); Werte nahe dieser Grenze werden grau markiert.</p>
+<p><b>Bedienung:</b></p>
+<ul>
+  <li><span class="ui">RBW</span>: Auflösungsbandbreite 122 Hz (4k-FFT), 61 Hz (8k) oder 31 Hz (16k). Feiner = genauere Schultern, aber langsamer.</li>
+  <li><span class="ui">Avg</span> (1…100): Anzahl gemittelter Spektren. <span class="ui">Reset average</span> beginnt die Mittelung neu, etwa nach einer Änderung am Sender.</li>
+  <li><span class="ui">Store floor</span> speichert das aktuelle gemittelte Spektrum als Messboden des Empfängers: vorher Sender aus oder SDR-Eingang mit 50 Ω abschließen, gleiche Verstärkung und Abtastrate. Werte nahe diesem Boden werden grau markiert. Ohne gespeicherten Boden dient das Rauschen weit neben dem Träger als Schätzung. <span class="ui">Clear floor</span> verwirft ihn.</li>
+  <li><span class="ui">ACP limits</span> (aufklappen): Grenzen bei 25, 50 und 75 kHz in dBc, mit Vorgaben aus EN 300 394-1 7.1.3.2: <span class="ui">BS / MS class 1-3</span> (Tabelle 7.2: −60/−70/−70 dBc), <span class="ui">MS class 4/4L</span> (Tabelle 7.1: −55/−70/−70 dBc), <span class="ui">&gt; 700 MHz</span> (Tabelle 7.3: −55/−65/−65 dBc). Gemessen wird die mittlere Leistung im Nutzteil durch das TETRA-Filter; der Eigenboden des Messaufbaus muss unter −70/−80/−80 dBc liegen (B.1.2.3).</li>
+</ul>
+<p>In der ACP-Tabelle stehen je Abstand (±25/50/75 kHz) der untere und obere Wert, die Grenze und der Messboden. Ein „*“ markiert Werte, die weniger als 3 dB über dem Messboden liegen – der wahre Wert kann niedriger sein. Liegt der Kanal näher als 15 kHz an der Mittenfrequenz des SDR, warnt eine rote Zeile: Der Gleichanteil des Empfängers verfälscht dann I/Q-Offset und Trägerrest; das SDR mindestens ~100 kHz daneben abstimmen.</p>
 <div class="box warn"><b class="t">Grenzen der Messung</b>Die Nachbarkanalmessung ist durch Dynamik und Phasenrauschen des SDR begrenzt – typischerweise −60 bis −70 dBc. Für Werte am Grenzwert ein starkes, sauberes Signal und eine niedrige Verstärkung verwenden.</div>
 </div>
 <div><figure><img src="shots/win_txa.png"><figcaption>Abb. 7 – TX-Analyse: gemessenes Spektrum, ideales TETRA-Spektrum (dünn) und ACP-Fenster.</figcaption></figure></div>
@@ -376,7 +487,7 @@ sdrpp</pre></li>
 <h2>Verlauf über die Zeit</h2>
 <div class="cols">
 <div>
-<p>Der Bereich <span class="ui">Trends &amp; timeslots</span> speichert die letzten 24 Stunden mit einem Wert pro Sekunde: Pegel, MER, CRC-Fehler, Trägerablage, Verkehr je Zeitschlitz und Bursts/s. Bei langen Zeitspannen fasst jedes Pixel mehrere Sekunden zusammen; Linie = Mittelwert, Band = Minimum bis Maximum, rote Striche = Sync-Verluste. Die Maus zeigt die Werte zu jedem Zeitpunkt.</p>
+<p>Der Bereich <span class="ui">Trends &amp; timeslots</span> speichert die letzten 24 Stunden mit einem Wert pro Sekunde: Pegel, MER, CRC-Fehler, Trägerablage, Verkehr je Zeitschlitz und Bursts/s. Bei langen Zeitspannen fasst jedes Pixel mehrere Sekunden zusammen; Linie = Mittelwert, Band = Minimum bis Maximum, rote Striche = Sync-Verluste. Die Maus zeigt die Werte zu jedem Zeitpunkt. Der Reiter <span class="ui">Over time</span> enthält diese Verläufe; <span class="ui">Time span</span> wählt den Ausschnitt: 10 min, 1 h, 6 h, 12 h, 24 h oder <i>All</i> (alles seit dem Start bzw. der ganze geladene Log). Dieselbe Zeitspanne gilt für den <a href="#s15">Messbericht</a>.</p>
 <p>Mit <span class="ui">Open a CSV log</span> wird ein gespeicherter Log in derselben Ansicht geöffnet – so lassen sich auch Messungen über mehrere Tage auswerten. <span class="ui">Back to live</span> kehrt zur laufenden Messung zurück.</p>
 <h3>Zeitschlitzbelegung</h3>
 <p>Jeder Downlink-Burst kündigt an, wofür der Zeitschlitz genutzt wird. Die Tabelle zählt je Zeitschlitz Verkehr, zugewiesene Steuerung, allgemeine Steuerung und frei sowie den Uplink-Verkehr. Rahmen 18 (immer Steuerung) bleibt außen vor.</p>
@@ -401,9 +512,11 @@ sdrpp</pre></li>
 <div>
 <p>Unter <span class="ui">Carriers (multi-carrier)</span> werden bis zu acht weitere Träger innerhalb der SDR-Bandbreite gleichzeitig ausgewertet: Pegel, Abstand zum Hauptträger, MER, Trägerablage und Synchronisation – dekodiert wird nur der Hauptträger.</p>
 <ul>
-  <li>Frequenz eingeben → <span class="ui">Add carrier</span>, oder <span class="ui">Add neighbour cells</span> übernimmt die Nachbarzellen aus der Netzinformation.</li>
-  <li>Der Pegelverlauf aller Träger erscheint darunter (10 min bis 24 h).</li>
-  <li>Läuft ein CSV-Log, entsteht zusätzlich <code>…_carriers.csv</code>.</li>
+  <li><b>Hinzufügen:</b> Frequenz in MHz eingeben (Pfeile: 12,5-kHz-Schritte) → <span class="ui">Add carrier</span>. <span class="ui">Add neighbour cells (n)</span> erscheint, sobald die Zelle Nachbarzellen gemeldet hat, und übernimmt alle noch nicht eingetragenen auf einmal. Bei acht Trägern sind beide Knöpfe gesperrt.</li>
+  <li><b>Tabelle:</b> Die erste Zeile <span class="ui">Main (TETRA VFO)</span> ist der Hauptträger zum Vergleich. Spalten: <span class="ui">Carrier</span> (Name, z. B. Zellkennung; Farbe = Linie im Verlauf), <span class="ui">MHz</span>, Pegel in <span class="ui">dBFS</span> bzw. <span class="ui">dBm</span> (mit Pegelkalibrierung), <span class="ui">vs. main</span> (Pegelabstand zum Hauptträger), <span class="ui">MER</span>, <span class="ui">Offset</span> (Trägerablage in Hz) und <span class="ui">Sync</span> (yes/no). MER und Offset gibt es nur mit Synchronisation. „outside SDR span“: Der Träger liegt außerhalb der Bandbreite des SDR; „SDR stopped“: keine Daten.</li>
+  <li><b>Entfernen:</b> <span class="ui">x</span> am Zeilenende.</li>
+  <li><b>Verlauf:</b> Darunter der Pegelverlauf aller Träger; <span class="ui">Level history</span> wählt 10 min, 1 h, 6 h oder 24 h.</li>
+  <li>Läuft ein CSV-Log, entsteht zusätzlich <code>…_carriers.csv</code>. Die Träger bleiben über den Neustart erhalten.</li>
 </ul>
 <p>Jeder Träger kostet etwa so viel Rechenzeit wie ein weiterer VFO.</p>
 </div>
@@ -422,10 +535,19 @@ sdrpp</pre></li>
   <li><b>Ripple:</b> Welligkeit im Nutzteil (gemittelt).</li>
   <li><b>Outside the burst:</b> Leistung vor und nach dem Burst (dBc) – begrenzt durch das Empfängerrauschen („at the floor“).</li>
 </ul>
-<p>Die Grafik zeigt die über die letzten Bursts gemittelte Form mit der <span class="ui">Time mask</span> (rot). Die Maskenwerte sind einstellbar und nur Richtwerte.</p>
+<p>Die Grafik zeigt die über die letzten Bursts gemittelte Form mit der <span class="ui">Time mask</span> (rot).</p>
+<h3>Bedienung</h3>
+<ol class="steps">
+  <li><span class="ui">Run burst analysis</span> einschalten, darunter die Frequenz wählen: <span class="ui">Uplink (SYSINFO)</span>, <span class="ui">Manual frequency</span> (MHz eintragen) oder <span class="ui">TETRA VFO</span>. Die Zeile <span class="ui">Frequency</span> zeigt, was gemessen wird.</li>
+  <li><span class="ui">Averages</span> (1…500, Standard 200 nach EN 300 394-1 8.4) legt fest, über wie viele Bursts gemittelt wird; <span class="ui">Reset</span> verwirft die bisherigen Bursts.</li>
+  <li><span class="ui">Also:</span> schaltet <span class="ui">Timing vs. downlink</span> und <span class="ui">Ramp spectrum</span> zu (beide kosten Rechenzeit).</li>
+  <li>Ablesen: <span class="ui">Floor</span> und <span class="ui">peak</span> (Rauschboden und Spitze im Kanal), <span class="ui">Bursts</span> (gezählte ganze und halbe Bursts, Bursts/s), dann <span class="ui">Burst power</span> und die Formwerte. Grün = innerhalb der Maske, rot = außerhalb. „No bursts detected“: niemand sendet; „continuous carrier“: Dauerträger statt Bursts.</li>
+  <li>Läuft gleichzeitig der Downlink mit, prüft <span class="ui">Overload check</span>, ob der Downlink während der Bursts schwächer wird (mehr als 1 dB = Empfänger übersteuert, Ergebnisse ungültig). Ohne Downlink steht an dieser Stelle die <span class="ui">Linearity check</span> (unten).</li>
+</ol>
+<p><b>Time mask</b> (aufklappen): <span class="ui">Check against EN 300 392-2 6.4.5</span> (Standard an) prüft nach der Norm (siehe unten); <span class="ui">Station</span> wählt <i>Mobile station (uplink)</i> oder <i>Base station, discontinuous</i>; <span class="ui">MS power class 4 / 4L</span> lockert die Grenze der Schalttransienten; <span class="ui">MS transmit power known</span> mit dBm-Wert rechnet die absoluten Grenzen in dBc um. Ohne Normprüfung gilt die eigene Maske: <span class="ui">Ripple +- dB</span> (Standard ±1 dB), <span class="ui">Outside dBc</span> (−40 dBc) und <span class="ui">Ramp max. sym</span> (Anstieg/Abfall −20…−1 dBc in höchstens 5 Symbolen) – Richtwerte zum eigenen Vergleich.</p>
 <h3>Nur Uplink messen und Linearität prüfen (Standard ab v0.22.2)</h3>
 <p>Die Messgrößen der Norm für das Endgerät – Leistung über der Zeit, Zeitmaske, Schalttransienten, Leistung außerhalb des Bursts, Nachbarkanal und Modulationsgenauigkeit – betreffen nur das Sendesignal. Den Downlink braucht man dafür nicht. Deshalb ist <span class="ui">Timing vs. downlink</span> jetzt standardmäßig aus, und das SDR kann mit kleiner Abtastrate (1–2 MS/s) nur auf dem Uplink laufen (Quelle <span class="ui">Manual frequency</span>). Das entlastet den Rechner und vermeidet das Dynamikproblem: Das Relais in einigen Kilometern Entfernung ist schwach, das nahe Funkgerät 60–80 dB stärker – mehr, als ein 12-Bit-Wandler gleichzeitig verarbeiten kann.</p>
-<p>Ohne Downlink gibt es keine Bezugsgröße für die Übersteuerung. An ihre Stelle tritt die <span class="ui">Linearity check</span> (übliches Laborverfahren): Verstärkung des Empfängers halten (<span class="ui">Level and hold</span>), <span class="ui">Note level</span> drücken, vor dem SDR die eingestellte Dämpfung zusätzlich einsetzen (Standard 10 dB, externes Dämpfungsglied), <span class="ui">Attenuator added</span> drücken. Nach 20 Bursts vergleicht das Programm: Sinkt die Burstleistung um den Dämpfungswert ±0,5 dB, ist der Empfänger linear. Sinkt sie weniger, war er vorher übersteuert – Dämpfung drinlassen und mit einem weiteren Schritt erneut prüfen. Sinkt sie mehr, hat das Funkgerät seine Leistung geändert (Leistungsregelung) oder der Dämpfungswert stimmt nicht. Die Software-Verstärkung zu senken ist kein Ersatz: Sie prüft nur die Stufen hinter dem Abschwächer.</p>
+<p>Ohne Downlink gibt es keine Bezugsgröße für die Übersteuerung. An ihre Stelle tritt die <span class="ui">Linearity check</span> (übliches Laborverfahren): Verstärkung des Empfängers halten (<span class="ui">Level and hold</span>), <span class="ui">Note level</span> drücken, vor dem SDR die eingestellte Dämpfung zusätzlich einsetzen (Standard 10 dB, externes Dämpfungsglied), <span class="ui">Attenuator added</span> drücken. Nach 20 Bursts vergleicht das Programm (<span class="ui">Check again</span> beginnt die Prüfung von vorn): Sinkt die Burstleistung um den Dämpfungswert ±0,5 dB, ist der Empfänger linear. Sinkt sie weniger, war er vorher übersteuert – Dämpfung drinlassen und mit einem weiteren Schritt erneut prüfen. Sinkt sie mehr, hat das Funkgerät seine Leistung geändert (Leistungsregelung) oder der Dämpfungswert stimmt nicht. Die Software-Verstärkung zu senken ist kein Ersatz: Sie prüft nur die Stufen hinter dem Abschwächer.</p>
 <p><b>Sendeleistung des Funkgeräts:</b> Die absoluten Grenzen der Norm (−36 dBm für die Leistung außerhalb des Bursts und für Schalttransienten) beziehen sich auf den Antennenanschluss des Funkgeräts. Über die Luft sagt der Empfangspegel darüber nichts aus (Streckendämpfung). Unter <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> trägt man die Sendeleistung ein (z. B. 12,6 dBm für 18 mW, 32,6 dBm für 1,8 W); daraus wird die dBc-Grenze: Lmin = max(−70 dBc; −36 dBm − P). Ohne Eintrag gilt −70 dBc.</p>
 <h3>Zeitlage gegenüber dem Downlink (optional)</h3>
 <p>Mit <span class="ui">Timing vs. downlink</span> öffnet das Programm einen zweiten, abtastgenau ausgerichteten Abgriff auf dem TETRA-VFO (Downlink derselben Zelle), findet dort das Zeitschlitzraster und misst, wann jeder Burst nach Beginn seines Uplink-Zeitschlitzes ansteigt. Wichtig ist vor allem der <b>Vergleich zwischen Geräten</b> und die Streuung; der Absolutwert enthält auch die Laufzeitunterschiede (3,3 µs je km Umweg).</p>
@@ -453,7 +575,7 @@ sdrpp</pre></li>
 <p>Beim Ein- und Ausschalten entstehen die meisten Störungen in den Nachbarkanälen. <span class="ui">Ramp spectrum</span> misst die Kanalleistung bei −50, −25, ±0, +25, +50 kHz in 1,8-ms-Fenstern beim Anstieg, in der Mitte und beim Abfall, bezogen auf die Mitte. Orange: Rampe mehr als 6 dB über der Mitte (Splatter).</p>
 <p><b>Nach Norm (ab v0.21.1):</b> Die Zeile <span class="ui">Switching transients (peak, ±25 kHz)</span> misst wie EN 300 394-1 7.1.4 die Spitzenleistung durch das TETRA-Filter bei −25 und +25 kHz über die ganze Anstiegs- und Abfallzeit, mit Maximalwert-Speicher seit dem letzten Zurücksetzen. Grenze −50 dBc, für MS der Leistungsklassen 4/4L −45 dBc (Auswahl unter <span class="ui">Time mask</span>). Die Hüllkurve der Burst-Analyse läuft jetzt durch das TETRA-Filter (Wurzel-Kosinus 0,35, 33 Symbole), wie EN 300 392-2 6.4.5 es verlangt. Die <span class="ui">Time mask</span> prüft nach Tabelle 6.8 / Bild 6.3: Anstieg innerhalb t1 (16 Symbole), Abfall innerhalb t3 (15 Symbole), höchstens +6 dBc in t1 und +3 dBc in t3, außerhalb Lmin (MS −70 dBc bzw. −36 dBm, BS −40 dBc). Liegt der Messboden über Lmin, wird das angezeigt. Standard für die Mittelung: 200 Bursts (EN 300 394-1 8.4). Für die Nachbarkanalleistung gibt es unter <span class="ui">ACP limits</span> Vorgaben nach Tabelle 7.1–7.3.</p>
 <h3>Störpegel auf dem Uplink</h3>
-<p><span class="ui">Noise between bursts</span> misst die Leistung im Kanal, während niemand sendet – auf dem Uplink eines Relais also dessen Empfangsrauschen und Störungen. Der Verlauf über bis zu 24 h zeigt Störer, die das Relais „taub“ machen; ein Alarm kann darauf reagieren.</p>
+<p><span class="ui">Noise between bursts</span> misst die Leistung im Kanal, während niemand sendet – auf dem Uplink eines Relais also dessen Empfangsrauschen und Störungen. Darunter zeigt <span class="ui">Noise history</span> den Verlauf (Zeitraum unter <span class="ui">Span</span>, bis 24 h) – Störer, die das Relais „taub“ machen, fallen so auf; ein <a href="#s14">Alarm</a> kann darauf reagieren. Ohne Pausen zwischen den Bursts (Dauerträger) gibt es keinen Wert.</p>
 <div class="box warn"><b class="t">Sender nie direkt anschließen</b>Ein Handfunkgerät nie ohne ausreichende Dämpfung (z. B. 60–70 dB, belastbares Dämpfungsglied) an das SDR anschließen. Für Messungen genügt meist eine Antenne in einigen Metern Abstand.</div>
 
 <!-- ============================================================ -->
@@ -472,7 +594,7 @@ sdrpp</pre></li>
 
 <!-- ============================================================ -->
 <h1 id="s14"><span class="num">14</span>Alarme</h1>
-<p>Für die Langzeitüberwachung lassen sich unter <span class="ui">Alarms</span> Grenzwerte setzen:</p>
+<p>Für die Langzeitüberwachung lassen sich unter <span class="ui">Alarms</span> Grenzwerte setzen. <span class="ui">Monitor limits</span> schaltet die Überwachung ein; danach jede gewünschte Bedingung ankreuzen und daneben den Grenzwert eintragen (bei Pegelkalibrierung in dBm, sonst dBFS):</p>
 <table class="plain">
 <tr><th>Bedingung</th><th>Beispiel</th></tr>
 <tr><td>Pegel unter</td><td>−90 dBFS bzw. dBm (kalibriert)</td></tr>
@@ -482,7 +604,7 @@ sdrpp</pre></li>
 <tr><td>Uplink-Rauschen über</td><td>−100 dBFS (Burst-Analyse muss auf dem Uplink laufen)</td></tr>
 <tr><td>Abtastwerte verloren</td><td>sofort (Überlauf im SDR oder Taktsprung)</td></tr>
 </table>
-<p>Eine Bedingung muss die <span class="ui">Hold time</span> lang anhalten, bevor ein Alarm ausgelöst wird (und ebenso lange, bevor er endet). Alarme und ihr Ende stehen im Ereignislog und – bei laufendem Log – in <code>…_events.csv</code>. Optional startet ein Alarm den CSV-Log, unter Windows auch mit Ton. Aktive Alarme erscheinen rot oben im TETRA-Menü.</p>
+<p>Eine Bedingung muss die <span class="ui">Hold time</span> lang anhalten, bevor ein Alarm ausgelöst wird (und ebenso lange, bevor er endet). Alarme und ihr Ende stehen im Ereignislog und – bei laufendem Log – in <code>…_events.csv</code>. <span class="ui">Start CSV log on alarm</span> startet beim ersten Alarm den CSV-Log, falls er nicht schon läuft; <span class="ui">Sound</span> (nur Windows) gibt zusätzlich einen Ton. <span class="ui">Hold time (s)</span> ist einstellbar von 1 bis 600 s. Aktive Alarme erscheinen rot oben im TETRA-Menü.</p>
 
 <!-- ============================================================ -->
 <h1 id="s15"><span class="num">15</span>Messbericht</h1>
@@ -496,9 +618,9 @@ sdrpp</pre></li>
   <li>TX-Analyse, Burst-Analyse mit Profil, Mehrwege, weitere Träger,</li>
   <li>die letzten Ereignisse.</li>
 </ul>
-<p>Zeitraum ist die unter <span class="ui">Trends</span> gewählte Zeitspanne (oder der geladene Log). Unter <span class="ui">Notes</span> lassen sich Ort, Antenne oder Anlass eintragen. Als PDF: im Browser drucken → „Als PDF speichern“.</p>
+<p>Zeitraum ist die unter <span class="ui">Trends</span> gewählte Zeitspanne (oder der geladene Log). Unter <span class="ui">Notes</span> lassen sich Ort, Antenne oder Anlass eintragen. Nach dem Erstellen erscheinen der Dateiname und drei Knöpfe: <span class="ui">Open</span> (im Browser öffnen), <span class="ui">Open folder</span> (Log-Ordner im Dateimanager) und <span class="ui">Copy path</span> (Pfad in die Zwischenablage). Als PDF: im Browser drucken → „Als PDF speichern“.</p>
 </div>
-<div><figure><img src="shots/report.png"><figcaption>Abb. 13 – Messbericht (Ausschnitt).</figcaption></figure></div>
+<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Abb. 13 – Messbericht (Ausschnitt).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -525,7 +647,7 @@ sdrpp</pre></li>
 </ol>
 <h2>Messfahrt</h2>
 <ol class="steps">
-  <li>Den Decoder auf die gewünschte Zelle einrasten lassen und <span class="ui">Lock current cell</span> drücken: Sekunden, in denen eine andere oder keine Zelle empfangen wird, gelten dann als „keine Versorgung“.</li>
+  <li>Den Decoder auf die gewünschte Zelle einrasten lassen und <span class="ui">Lock current cell</span> drücken: Sekunden, in denen eine andere oder keine Zelle empfangen wird, gelten dann als „keine Versorgung“. Die gesperrte Zelle steht danach unter <span class="ui">Cell lock</span> (grün = wird empfangen, rot = nicht); <span class="ui">Unlock cell</span> hebt die Sperre auf.</li>
   <li>Pegel möglichst kalibrieren (<span class="ui">Level cal.</span>) und <span class="ui">Auto RF gain</span> für vergleichbare Werte ausschalten oder den Pegel in dBm auswerten.</li>
   <li><span class="ui">Start CSV log</span> und losfahren. Antenne fest auf dem Dach, gleicher Aufbau wie bei früheren Fahrten.</li>
   <li>Nach der Fahrt <span class="ui">Stop CSV log</span>.</li>
