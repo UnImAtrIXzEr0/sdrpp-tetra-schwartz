@@ -81,7 +81,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 22, 0,
+    /* Version:         */ 0, 22, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 

@@ -606,7 +606,7 @@ private:
                 std::unique_lock<std::mutex> lck(cvMtx);
                 if (cv.wait_for(lck, std::chrono::milliseconds(150), [this] { return stopFlag; })) { return; }
             }
-            std::vector<std::complex<float>> x, raw, dlx;
+            std::vector<std::complex<float>> x, raw, dlx, dlAligned;
             uint64_t end;
             bool withDl;
             {
@@ -625,6 +625,12 @@ private:
                 if (withDl) {   // slot grid on every pass: a sample slip is caught within 0.15 s
                     dlx.resize(WIN);
                     for (size_t i = 0; i < WIN; i++) { dlx[i] = ringDl[(size_t)((s0 + i) & (RING - 1))]; }
+                    // downlink on the time line of the (longer-delayed) uplink filter, for the overload check
+                    const uint64_t dd = (uint64_t)(ulFilter.delay() - dlFilter.delay());
+                    if (s0 >= dd) {
+                        dlAligned.resize(WIN);
+                        for (size_t i = 0; i < WIN; i++) { dlAligned[i] = ringDl[(size_t)((s0 + i - dd) & (RING - 1))]; }
+                    }
                 }
             }
             if (resetReq.exchange(false)) { dsp.reset(); slotState.reset(); }
@@ -635,10 +641,12 @@ private:
                 std::vector<std::complex<float>> dls(dlx.end() - SW, dlx.end());
                 tetra_sp::SlotEstimate e = tetra_sp::slotTiming(dls, end - SW, &slotState);
                 dlQuality.store((float)e.quality);
-                phase = e.valid ? e.phase : NAN;
+                // the slot grid comes from the downlink filter, the bursts from the
+                // (longer) TETRA filter on the uplink: refer both to the same moment
+                phase = e.valid ? std::fmod(e.phase + (double)(ulFilter.delay() - dlFilter.delay()) + 2040.0, 2040.0) : NAN;
             }
             double nowS = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN, dlx.empty() ? nullptr : &dlx);
+            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN, dlAligned.empty() ? nullptr : &dlAligned);
             std::lock_guard<std::mutex> lck(resMtx);
             res = dsp.result();
         }

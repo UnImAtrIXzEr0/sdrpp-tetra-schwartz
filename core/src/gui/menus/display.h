@@ -13,6 +13,8 @@ namespace displaymenu {
     void checkKeybinds();
     void draw(void* ctx);
     extern bool phoneLayout;
+    // touch mode for modules (functions are exported from the core DLL, data is not)
+    bool touchMode();
 #ifdef __ANDROID__
     extern float displayDensity;
 #endif

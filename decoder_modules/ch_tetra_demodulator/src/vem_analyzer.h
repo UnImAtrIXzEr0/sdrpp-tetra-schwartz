@@ -111,6 +111,16 @@ public:
                               "(carrier leakage of the transmitter), %.1f dB.", 20.0 * std::log10((std::max)(r.c0Mean, 1e-6)));
         }
         tw::Text("Frequency (fit):"); tw::SameTextColored(val, "%+.1f Hz", r.freqMean); tw::SameTextDisabled("+-%.1f Hz vs. the TETRA VFO", r.freqStd);
+        if (!std::isnan(r.clockPpm)) {
+            tw::Text("Sample clock:"); tw::SameTextColored(std::fabs(r.clockPpm) > 50.0 ? warn : val, "%+.0f ppm", r.clockPpm);
+            tw::SameTextDisabled("vs. symbol rate (compensated)");
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Difference between the SDR's sample clock and the symbol rate of the cell,\n"
+                                  "fitted per burst and taken out of the vector error (the test system of the\n"
+                                  "standard is locked to the transmitter; an SDR is not). More than 50 ppm:\n"
+                                  "check the SDR clock / sample rate.");
+            }
+        }
         if (r.paDevBursts > 0) {
             tw::TextColored(warn, "Phase adjustment bits unlike EN 300 392-2 9.4.4.3.6 in %d of %d bursts", r.paDevBursts, r.n);
             if (ImGui::IsItemHovered()) {

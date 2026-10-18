@@ -10,7 +10,7 @@ here = pathlib.Path(__file__).resolve().parent
 outdir = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else here)
 tmp = here / "_build"
 tmp.mkdir(exist_ok=True)
-VERSION = "v0.22.0-beta"
+VERSION = "v0.22.1-beta"
 
 LANGS = {
     "de": dict(cover="manual_cover.html", body="manual_body.html",

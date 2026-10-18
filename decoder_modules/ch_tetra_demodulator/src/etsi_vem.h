@@ -302,29 +302,38 @@ namespace etsi_vem {
         return acc;
     }
 
-    // samples at t0 + k*SPS, k = 0..n-1 (same fraction for all: weights once)
-    inline void interpRow(const std::vector<std::complex<float>>& y, double t0, int n, std::complex<double>* out) {
-        const int H = 8;
-        int i0 = (int)std::floor(t0);
-        double f = t0 - i0;
-        if (f < 1e-9) {
-            for (int k = 0; k < n; k++) {
-                int i = i0 + k * SPS;
-                out[k] = (i >= 0 && i < (int)y.size()) ? std::complex<double>(y[i]) : std::complex<double>(0.0, 0.0);
+    // windowed-sinc interpolation table: 1024 fractional positions x 16 taps
+    struct InterpTable {
+        static constexpr int H = 8, NF = 1024;
+        float w[NF + 1][2 * H];
+        InterpTable() {
+            for (int fi = 0; fi <= NF; fi++) {
+                double f = (double)fi / NF;
+                for (int j = 0; j < 2 * H; j++) {
+                    double x = (j - H + 1) - f;
+                    double sc = std::fabs(x) < 1e-12 ? 1.0 : std::sin(PI_D * x) / (PI_D * x);
+                    w[fi][j] = (float)(sc * (0.42 + 0.5 * std::cos(PI_D * x / H) + 0.08 * std::cos(2.0 * PI_D * x / H)));
+                }
             }
-            return;
         }
-        double w[2 * H];
-        for (int j = 0; j < 2 * H; j++) {
-            double x = (j - H + 1) - f;
-            double s = std::sin(PI_D * x) / (PI_D * x);
-            w[j] = s * (0.42 + 0.5 * std::cos(PI_D * x / H) + 0.08 * std::cos(2.0 * PI_D * x / H));
-        }
+    };
+    inline const InterpTable& interpTable() { static const InterpTable t; return t; }
+
+    // samples at the symbol times: position of symbol k = t0 + 127*SPS + (k - 127)*sps
+    // (sps != SPS: sample clock of the SDR off against the symbol rate)
+    inline void interpRow(const std::vector<std::complex<float>>& y, double t0, int n, std::complex<double>* out, double sps = SPS) {
+        const InterpTable& T = interpTable();
+        const int H = InterpTable::H;
+        const double c = t0 + 127.0 * SPS;
         for (int k = 0; k < n; k++) {
-            int c = i0 + k * SPS;
-            if (c - H + 1 < 0 || c + H >= (int)y.size()) { out[k] = 0.0; continue; }
+            double t = c + (k - 127) * sps;
+            int i0 = (int)std::floor(t);
+            int fi = (int)std::lround((t - i0) * InterpTable::NF);
+            if (fi == InterpTable::NF) { fi = 0; i0++; }
+            if (i0 - H + 1 < 0 || i0 + H >= (int)y.size()) { out[k] = 0.0; continue; }
+            const float* w = T.w[fi];
+            const std::complex<float>* p = &y[i0 - H + 1];
             double re = 0.0, im = 0.0;
-            const std::complex<float>* p = &y[c - H + 1];
             for (int j = 0; j < 2 * H; j++) { re += w[j] * p[j].real(); im += w[j] * p[j].imag(); }
             out[k] = std::complex<double>(re, im);
         }
@@ -338,16 +347,18 @@ namespace etsi_vem {
         double freqHz = NAN;       // frequency offset of the burst vs. the tap
         double ampDroopDb = NAN;   // amplitude change over the burst
         double timing = 0.0;       // refined position of symbol 0 (samples)
+        double sps = SPS;          // samples per symbol found (sample clock vs. symbol rate)
+        double clockPpm = 0.0;     // (sps / 8 - 1) * 1e6
         double cost = INFINITY;
         int peakSym = -1;
     };
 
     // evaluate the model for one timing / frequency / amplitude slope
-    inline Fit evalModel(const std::vector<std::complex<float>>& y, double t0, const std::vector<std::complex<double>>& S, double w, double dr, bool keepE = false, std::vector<double>* emag = nullptr) {
+    inline Fit evalModel(const std::vector<std::complex<float>>& y, double t0, const std::vector<std::complex<double>>& S, double w, double dr, bool keepE = false, std::vector<double>* emag = nullptr, double sps = SPS) {
         Fit f;
         const int N = (int)S.size();
         std::vector<std::complex<double>> Y(N);
-        interpRow(y, t0, N, Y.data());
+        interpRow(y, t0, N, Y.data(), sps);
         {
             std::complex<double> step = std::exp(std::complex<double>(-dr, -w)), rot(1.0, 0.0);
             for (int k = 0; k < N; k++) { Y[k] *= rot; rot *= step; }
@@ -382,15 +393,17 @@ namespace etsi_vem {
         f.freqHz = w / (2.0 * PI_D) * SYMRATE;
         f.ampDroopDb = 20.0 * std::log10(std::exp(dr * (N - 1)));
         f.timing = t0;
+        f.sps = sps;
+        f.clockPpm = (sps / SPS - 1.0) * 1e6;
         return f;
     }
 
     // initial frequency and amplitude slope from D(k) = Z(k) conj(S(k))
-    inline void slopes(const std::vector<std::complex<float>>& y, double t0, const std::vector<std::complex<double>>& S, double& w, double& dr) {
+    inline void slopes(const std::vector<std::complex<float>>& y, double t0, const std::vector<std::complex<double>>& S, double& w, double& dr, double sps = SPS) {
         const int N = (int)S.size();
         std::vector<double> ph(N), lm(N);
         std::vector<std::complex<double>> Z(N);
-        interpRow(y, t0, N, Z.data());
+        interpRow(y, t0, N, Z.data(), sps);
         double prev = 0.0;
         for (int k = 0; k < N; k++) {
             std::complex<double> d = Z[k] * std::conj(S[k]);
@@ -421,23 +434,26 @@ namespace etsi_vem {
         return (a + b) / 2.0;
     }
 
-    // full fit: timing (+-0.6 samples around t0), frequency, amplitude slope,
-    // C0, C1 by least squares of the vector error
+    // full fit: timing (+-0.6 samples around t0), sample clock (+-300 ppm:
+    // the test system of the standard is locked, an SDR is not), frequency,
+    // amplitude slope, C0, C1 by least squares of the vector error
     inline Fit fitBurst(const std::vector<std::complex<float>>& y, double t0, const std::vector<std::complex<double>>& S) {
-        double w = 0.0, dr = 0.0;
-        auto costAt = [&](double t) {
+        double w = 0.0, dr = 0.0, sps = SPS;
+        auto costTS = [&](double t, double q) {
             double ww, dd;
-            slopes(y, t, S, ww, dd);
-            return evalModel(y, t, S, ww, dd).cost;
+            slopes(y, t, S, ww, dd, q);
+            return evalModel(y, t, S, ww, dd, false, nullptr, q).cost;
         };
-        double t = golden(costAt, t0 - 0.6, t0 + 0.6, 18);
-        slopes(y, t, S, w, dr);
+        double t = golden([&](double tt) { return costTS(tt, sps); }, t0 - 0.6, t0 + 0.6, 16);
+        sps = golden([&](double q) { return costTS(t, q); }, SPS * (1.0 - 3e-4), SPS * (1.0 + 3e-4), 16);
+        t = golden([&](double tt) { return costTS(tt, sps); }, t - 0.3, t + 0.3, 12);
+        slopes(y, t, S, w, dr, sps);
         // refine the frequency (slope estimate is slightly biased by C0)
         double span = 2.0 * PI_D * 20.0 / SYMRATE;
-        w = golden([&](double ww) { return evalModel(y, t, S, ww, dr).cost; }, w - span, w + span, 20);
-        dr = golden([&](double dd) { return evalModel(y, t, S, w, dd).cost; }, dr - 2e-4, dr + 2e-4, 16);
-        t = golden([&](double tt) { return evalModel(y, tt, S, w, dr).cost; }, t - 0.15, t + 0.15, 14);
-        return evalModel(y, t, S, w, dr);
+        w = golden([&](double ww) { return evalModel(y, t, S, ww, dr, false, nullptr, sps).cost; }, w - span, w + span, 20);
+        dr = golden([&](double dd) { return evalModel(y, t, S, w, dd, false, nullptr, sps).cost; }, dr - 2e-4, dr + 2e-4, 16);
+        t = golden([&](double tt) { return evalModel(y, tt, S, w, dr, false, nullptr, sps).cost; }, t - 0.15, t + 0.15, 14);
+        return evalModel(y, t, S, w, dr, false, nullptr, sps);
     }
 
     // demodulate the 510 bits of a burst (decision on the phase changes);
@@ -599,6 +615,7 @@ namespace etsi_vem {
         double rmsMean = NAN, rmsMax = NAN, peakMax = NAN;
         double c0Mean = NAN, c0Max = NAN;
         double freqMean = NAN, freqStd = NAN;
+        double clockPpm = NAN;   // sample clock vs. symbol rate (mean)
         int paDevBursts = 0;
         bool cellKnown = false;
         uint16_t mcc = 0, mnc = 0;
@@ -648,7 +665,7 @@ namespace etsi_vem {
                         continue;
                     }
                     st.measured++;
-                    hist.push_back({ m.fit.rmsVe, m.fit.peakVe, m.fit.residualCarrier, m.fit.freqHz, m.paDeviations > 0 });
+                    hist.push_back({ m.fit.rmsVe, m.fit.peakVe, m.fit.residualCarrier, m.fit.freqHz, m.paDeviations > 0, m.fit.clockPpm });
                     if ((int)hist.size() > Stats::TARGET) { hist.erase(hist.begin()); }
                 }
             }
@@ -657,13 +674,14 @@ namespace etsi_vem {
         }
 
     private:
-        struct One { double rms, peak, c0, f; bool paDev; };
+        struct One { double rms, peak, c0, f; bool paDev; double ppm; };
         void summarise() {
             st.n = (int)hist.size();
             if (hist.empty()) { return; }
-            double s2 = 0, rmax = 0, pmax = 0, c0s = 0, c0max = 0, fs = 0, fs2 = 0;
+            double s2 = 0, rmax = 0, pmax = 0, c0s = 0, c0max = 0, fs = 0, fs2 = 0, pp = 0;
             int pd = 0;
             for (auto& o : hist) {
+                pp += o.ppm;
                 s2 += o.rms * o.rms; rmax = (std::max)(rmax, o.rms); pmax = (std::max)(pmax, o.peak);
                 c0s += o.c0; c0max = (std::max)(c0max, o.c0); fs += o.f; fs2 += o.f * o.f;
                 pd += o.paDev ? 1 : 0;
@@ -677,6 +695,7 @@ namespace etsi_vem {
             st.freqMean = fs / n;
             st.freqStd = std::sqrt((std::max)(0.0, fs2 / n - st.freqMean * st.freqMean));
             st.paDevBursts = pd;
+            st.clockPpm = pp / n;
         }
         std::vector<float> h;
         std::vector<One> hist;

@@ -24,7 +24,7 @@
 #include "gps.h"
 #include "trend.h"
 
-#define TETRA_PLUGIN_VERSION "0.22.0"
+#define TETRA_PLUGIN_VERSION "0.22.1"
 
 struct TetraMeasSnapshot {
     bool valid = false;

@@ -5,7 +5,7 @@
 #include <gui/menus/display.h>
 
 namespace touch {
-    inline bool enabled() { return displaymenu::phoneLayout; }
+    inline bool enabled() { return displaymenu::touchMode(); }
 
     // call inside a window/child after its content: a drag that started on an
     // empty spot (no item hovered or active) scrolls the window

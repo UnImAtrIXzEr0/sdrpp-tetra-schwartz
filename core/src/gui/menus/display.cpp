@@ -40,6 +40,7 @@ namespace displaymenu {
     bool fftSmoothing = false;
     int fftSmoothingSpeed = 100;
     bool phoneLayout = false;
+    bool touchMode() { return phoneLayout; }
 
     Event<ImGuiContext *> onDisplayDraw;
 
