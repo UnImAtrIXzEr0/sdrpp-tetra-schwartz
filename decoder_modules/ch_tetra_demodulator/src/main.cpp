@@ -4003,7 +4003,7 @@ private:
 
         auto tableHeight = [&](int rows) {
             return visibleRows > 0 ? ImGui::GetTextLineHeightWithSpacing() * ((std::min<int>)(rows, visibleRows) + 1.5f)
-                                   : (std::max)(ImGui::GetContentRegionAvail().y - ImGui::GetTextLineHeightWithSpacing() * 1.5f, 60.0f);
+                                   : (std::max)(ImGui::GetContentRegionAvail().y - ImGui::GetStyle().WindowPadding.y * 0.5f, 60.0f);   // fill to the bottom edge (tile / strip)
         };
         // Tables: one line per row (cells clip with "..."), columns sized to
         // their content, resizable, movable to any place (drag the header),
