@@ -86,7 +86,7 @@ static Bits syncPdu(int tn, int fn, int mn) {
     return p;                   // 60 bits
 }
 
-static Bits sysinfoPdu(int hyperframe) {
+static Bits sysinfoPdu(int hyperframe, int multiframe) {
     Bits p;
     p.put(2, 2);                // MAC PDU type: broadcast
     p.put(0, 2);                // SYSINFO
@@ -102,8 +102,23 @@ static Bits sysinfoPdu(int hyperframe) {
     p.put(9, 4);                // RADIO_DOWNLINK_TIMEOUT
     p.put(0, 1);                // hyperframe number follows
     p.put(hyperframe & 0xffff, 16);
-    p.put(2, 2);                // optional field: default definition for access code A
-    p.put(0x0f, 4); p.put(0x0f, 4); p.put(0, 3); p.put(0, 3); p.put(0, 1); p.put(0, 1); p.put(0, 4);   // 20 bits
+    // optional field: rotates from multiframe to multiframe like on real cells
+    // (EN 300 392-2 21.4.4.1), so values that come only in some SYSINFOs are
+    // tested (the extended services with the security information only in
+    // every fourth multiframe)
+    switch (multiframe & 3) {
+    case 0: p.put(0, 2); p.put(0xfffff, 20); break;   // even multiframe definition for TS mode
+    case 1: p.put(1, 2); p.put(0xfffff, 20); break;   // odd multiframe definition for TS mode
+    case 2:                                           // default definition for access code A
+        p.put(2, 2);
+        p.put(0x0f, 4); p.put(0x0f, 4); p.put(0, 3); p.put(0, 3); p.put(0, 1); p.put(0, 1); p.put(0, 4);
+        break;
+    default:                                          // extended services broadcast
+        p.put(3, 2);
+        p.put(0x00, 8);         // security information: no authentication, class 1 not supported, class 2 (EN 300 392-7 A.8.77)
+        p.put(0, 12);           // SDS-TL addressing, GCK, section 1 etc.: not used
+        break;
+    }
     // MLE part (D-MLE-SYSINFO, 42 bits)
     p.put(1, 14);               // location area
     p.put(0xffff, 16);          // subscriber class
@@ -257,7 +272,7 @@ int main(int argc, char** argv) {
         uint8_t bb[30];
         bool sync = (fn == 18);
         if (sync) {
-            Bits sp = syncPdu(tn, fn, mn), si = sysinfoPdu(hyper);
+            Bits sp = syncPdu(tn, fn, mn), si = sysinfoPdu(hyper, mn);
             uint8_t sb[120], bk[216];
             codeBlock(sp.b.data(), 60, 120, 11, SCRAMB_SB1, sb);
             codeAach(0, scr, bb);           // ACCESS-ASSIGN: header 00, both fields 0

@@ -94,7 +94,7 @@ jobs:
             export E2E_ROOT_DEV="$PWD/e2eroot" E2E_BUILD_DIR="$PWD/build" E2E_BINARY="$PWD/AppDir/usr/bin/sdrpp"
             export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib" SDRPP_APPDIR="$PWD/AppDir" LIBGL_ALWAYS_SOFTWARE=1
             set +e
-            xvfb-run -a -s "-screen 0 1600x1000x24" python3 e2e/test_tetra_schwartz.py 2>&1 | tee e2e.log
+            xvfb-run -a -s "-screen 0 1600x1400x24" python3 e2e/test_tetra_schwartz.py 2>&1 | tee e2e.log
             rc=${PIPESTATUS[0]}
             set -e
             grep -E "FAIL|PASS|last measurements" e2e.log | sed 's/^/::notice::/' | head -20 || true

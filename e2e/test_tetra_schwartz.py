@@ -491,6 +491,91 @@ def test_bursts():
     return True
 
 
+def test_layout_stability():
+    """The menu must not move while the window width stays the same (values that
+    change, SYSINFO fields that come only in some broadcasts), at a normal and at
+    the minimum menu width. Measured on the screen: row profile of the menu."""
+    stats.test_start("test_layout_stability")
+    try:
+        import numpy  # noqa: F401
+        from xgrab import Grabber, moved_rows
+        grab = Grabber()
+    except Exception as e:  # noqa: BLE001
+        stats.test_pass("test_layout_stability", f"skipped ({e})")
+        return True
+    problems = []
+    for menu_w in (420, 300):
+        tmpdir = tempfile.mkdtemp(prefix="tetra_layout_")
+        rec = os.path.join(tmpdir, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
+        if not upsample_recording(recording(), rec):
+            shutil.copyfile(recording(), rec)
+        cfg = get_base_config()
+        cfg["moduleInstances"].pop("Radio", None)
+        cfg["streams"].pop("Radio", None)
+        cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+        cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
+        cfg["source"] = "File"
+        cfg["File Source"] = {"path": rec, "filename": rec}
+        cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+        # tall enough that "Network & cell" with all its lines is on the screen
+        # (the CI display is 1600x1400 for this)
+        scr_h = int(os.environ.get("E2E_SCREEN_H", "1400"))
+        cfg["windowSize"] = {"w": 1600, "h": scr_h}
+        cfg["menuWidth"] = menu_w
+        with SDRPPTestContext() as ctx:
+            ctx.write_configs(cfg)
+            if not ctx.start():
+                stats.test_fail("test_layout_stability", "SDR++ did not start")
+                return False
+            ctx.sleep(2.0)
+            ctx.module_cmd("File Source", "set_filename", rec)
+            http_get(ctx.base_url, "/sdr/start")
+            ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
+            ctx.module_cmd("TETRA Demodulator", "set_layout", "1")   # tiles: Network & cell stays in the menu
+            locked = False
+            t0 = time.time()
+            while time.time() - t0 < 30.0:
+                ctx.sleep(1.0)
+                m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+                if m.get("rx_state") == 2 and m.get("sync"):
+                    locked = True
+                    break
+            if not locked:
+                problems.append(f"menu {menu_w}: decoder did not lock")
+                continue
+            ctx.sleep(4.0)   # several SYSINFO rotations, all lines seen once
+            # the label column of the menu (static texts only; status boxes left
+            # of it and values right of it are excluded): any change = movement
+            # (down to the bottom: the lines with values that come and go are there)
+            region = (36, 120, 74, scr_h - 130)
+            ref = grab.gray(*region)
+            rows = []
+            prev_locked = True
+            for _ in range(50):   # 10 s
+                ctx.sleep(0.2)
+                img = grab.gray(*region)
+                m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+                now_locked = m.get("rx_state") == 2
+                # the looped recording loses the lock at the wrap ("Decoder: Unlocked"):
+                # a real content change, not a movement - skip those grabs
+                if now_locked and prev_locked:
+                    rows.append(moved_rows(ref, img))
+                prev_locked = now_locked
+            # one line may change its text (lock state at the wrap of the looped
+            # recording); a moved layout changes a whole block of lines
+            moved = [r for r in rows if r > 40]
+            stats.info(f"menu {menu_w}: changed label rows per grab {rows}")
+            if moved:
+                problems.append(f"menu {menu_w}: layout moved in {len(moved)} of {len(rows)} grabs (up to {max(moved)} rows)")
+            if not alive(ctx):
+                problems.append(f"menu {menu_w}: SDR++ stopped")
+    if problems:
+        stats.test_fail("test_layout_stability", "; ".join(problems))
+        return False
+    stats.test_pass("test_layout_stability", "menu does not move at a constant width (420 px and 300 px)")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
@@ -499,7 +584,8 @@ if __name__ == "__main__":
     r2 = test_tetra_chain()
     r3 = test_bursts()
     r4 = test_timing_multipath()
-    res = [r1, r2, r3, r4]
+    r5 = test_layout_stability()
+    res = [r1, r2, r3, r4, r5]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

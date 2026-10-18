@@ -1,8 +1,10 @@
 #pragma once
-// Layout helpers with an instrument-style value column (see valueSameLine):
-// text never wraps or jumps with the values; controls go to the next line only
-// if they do not fit (with hysteresis).
+// Layout helpers with an instrument-style value column and segment memory
+// (see placeSegment): nothing is cut off, nothing moves at a constant width.
 #include <imgui.h>
+#include <imgui_internal.h>
+#include <cmath>
+#include <cstdint>
 #include <cstdarg>
 #include <cstdio>
 #include <algorithm>
@@ -20,32 +22,36 @@ namespace tw {
     inline bool& pendingSame() { static bool p = false; return p; }
     inline void SameNext() { pendingSame() = true; }
 
-    // Continue on the line of the last item if 'w' more pixels fit, else start
-    // a new line (indented a little so it reads as a continuation).
-    inline bool SameLineFor(float w) {
-        pendingSame() = false;
-        float x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
-        if (x + w <= rightEdge()) {
-            ImGui::SameLine();
-            return true;
-        }
-        // new line, slightly indented as a continuation (if that still fits)
-        if (ImGui::GetCursorScreenPos().x + ImGui::GetFontSize() + w <= rightEdge()) {
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetFontSize());
-        }
-        return false;
-    }
+    // Continue on the line of the last item if 'w' more pixels fit, else on a
+    // continuation line (segment memory, see placeSegment)
+    inline bool SameLineFor(float w);
 
     inline float textWidth(const char* s) { return ImGui::CalcTextSize(s, nullptr, true).x; }
 
-    // ---- Instrument-style layout (v0.23.4) ----
-    // Text lines never wrap: a "Label:" line puts its values into a value
-    // column at a fixed x (the widest label of the window, at most 45 % of the
-    // width), further values follow on the same line, and whatever does not fit
-    // is cut with "..." (full text as tooltip). The layout depends only on the
-    // window width and the (static) labels, never on the values - nothing moves
-    // when a value changes. Only when the window is too narrow for a readable
-    // value column the values go to a fixed line below their label.
+    // ---- Instrument-style layout (v0.23.6) ----
+    // Nothing is cut off and nothing moves while the window width stays the same:
+    //  - A "Label:" line puts its first value into a value column at a fixed x
+    //    (widest label of the window, at most 45 % of the width; below 7 em of
+    //    room the values go to a fixed line below the label).
+    //  - Every further part of a line (value, unit, control) is a "segment" with
+    //    its own memory, keyed by the line (its label / first text) and the
+    //    segment's number within the line - not by its position in the window,
+    //    so lines that come and go elsewhere cannot disturb it, and a value drawn
+    //    with different texts (e.g. timeslot content) keeps its place.
+    //  - A static sub-label in front of a value (" peak", " | Frame:") moves to
+    //    the continuation line together with its value, a static unit after a
+    //    value (" MHz ", " dB") together with the value in front of it.
+    //  - A segment reserves the widest text it has shown so far, so a value
+    //    getting longer does not push the rest of the line.
+    //  - A segment that does not fit goes to a continuation line (value column,
+    //    full text). At a constant window width this decision is frozen - it can
+    //    only change once if a value grows beyond the room (then it wraps and
+    //    stays wrapped). When the width changes it is decided again, with a
+    //    hysteresis of 2 em before a wrapped segment comes back.
+    //  - Text too long for a whole line wraps word by word and keeps the largest
+    //    height it had at this width (no line count flicker).
+    // Table cells (CellScope) stay single line, clipped with "..." and the full
+    // text as tooltip, so rows keep their height; the columns can be resized.
     struct LabelCol { float maxW = 0.0f; };
     inline std::unordered_map<ImGuiID, LabelCol>& labelCols() { static std::unordered_map<ImGuiID, LabelCol> m; return m; }
     inline bool& labelPending() { static bool p = false; return p; }
@@ -56,9 +62,72 @@ namespace tw {
         while (n > 0 && t[n - 1] == ' ') { n--; }
         return n > 1 && t[n - 1] == ':' && !strchr(t, '\n');
     }
-    // after a label item: remember it (window-scoped key, labels are static)
-    inline void noteLabel(const char* t) {
+    inline float contentLeft() { return ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x; }
+    inline float fullWidth() { return rightEdge() - contentLeft(); }
+
+    // memory of one segment
+    struct Seg {
+        float maxW = 0.0f;      // widest text shown at this window width
+        float atW = -1.0f;      // window width the decision was made for
+        bool wrapped = false;
+    };
+    inline std::unordered_map<ImGuiID, Seg>& segs() { static std::unordered_map<ImGuiID, Seg> m; return m; }
+    // the line being drawn
+    struct LineState {
+        ImGuiID key = 0;
+        ImGuiWindow* win = nullptr;
+        float contX = 0.0f;         // x of continuation lines
+        float lastStart = 0.0f;     // last segment: start x, reserved width, y
+        float lastResW = 0.0f;
+        float lastY = 0.0f;
+        int nSeg = 0;               // segments so far in this line
+        ImGuiID prevId = 0;         // previous segment of the line
+        bool prevGlue = false;      // ... was a static sub-label
+        bool prevValue = false;     // ... was a value (not static text)
+        bool prevSameLine = false;  // ... and is directly in front of the current one
+    };
+    inline LineState& line() { static LineState l; return l; }
+    inline void beginLine(const char* key) {
+        LineState& l = line();
+        l.key = ImGui::GetID(key);
+        l.win = ImGui::GetCurrentWindowRead();
+        l.nSeg = 0;
+        l.lastResW = 0.0f;
+        l.prevId = 0;
+        l.prevGlue = false;
+    }
+    // key of a segment: line + its number within the line
+    inline ImGuiID segKey(const void* fmt) {
+        (void)fmt;
+        LineState& l = line();
+        int n = l.nSeg++;
+        return ImHashData(&n, sizeof(n), l.key);
+    }
+    // sub-label: plain or disabled text without conversions (" peak", " | Frame:")
+    inline bool& nextIsGlue() { static bool g = false; return g; }
+    inline bool isGlue(const void* fmt, bool keyIsId) {
+        bool g = nextIsGlue();
+        nextIsGlue() = false;
+        return g && !keyIsId && fmt && !strchr((const char*)fmt, '%');
+    }
+    // a static unit belongs to the value in front of it
+    inline bool isUnit(const char* t) {
+        static const char* units[] = { "MHz", "kHz", "Hz", "dB", "dBm", "dBFS", "dBc", "%", "ppm", "s", "ms", "deg", "S/s", "/" };
+        while (*t == ' ') { t++; }
+        size_t n = strlen(t);
+        while (n > 0 && t[n - 1] == ' ') { n--; }
+        for (const char* u : units) { if (strlen(u) == n && strncmp(t, u, n) == 0) { return true; } }
+        return false;
+    }
+    // after a line-start text: remember it as the line, and as label if it is one
+    inline void noteLineStart(const char* t, const char* key) {
         labelPending() = false;
+        beginLine(key);
+        LineState& l = line();
+        l.contX = ImGui::GetItemRectMin().x + ImGui::GetFontSize();
+        l.lastStart = ImGui::GetItemRectMin().x;
+        l.lastResW = ImGui::GetItemRectSize().x;
+        l.lastY = ImGui::GetItemRectMin().y;
         if (!isLabel(t)) { return; }
         LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
         float w = ImGui::GetItemRectSize().x;
@@ -67,46 +136,111 @@ namespace tw {
         labelStartX() = ImGui::GetItemRectMin().x;
         labelEndX() = ImGui::GetItemRectMax().x;
     }
-    // position for a value that follows on the line of the last item
-    inline void valueSameLine() {
+
+    // Place the next segment (width w) after the last item. Returns true if it
+    // stays on the same line. 'key' identifies the segment (format string or
+    // control label).
+    inline bool placeSegment(const void* key, float w, bool keyIsId = false) {
         pendingSame() = false;
-        const float sp = ImGui::GetStyle().ItemSpacing.x;
-        // the label must still be the last item (raw ImGui items in between: no column)
+        bool glue = isGlue(key, keyIsId);
+        const bool unit = glue && isUnit((const char*)key);
+        if (unit) { glue = false; }
+        const ImGuiStyle& st = ImGui::GetStyle();
+        const float sp = st.ItemSpacing.x;
+        const float em = ImGui::GetFontSize();
+        const float right = rightEdge();
+        const float full = fullWidth();
+        LineState& l = line();
+        if (l.win != ImGui::GetCurrentWindowRead()) { beginLine("##tw_noline"); l.contX = contentLeft() + em; l.lastResW = 0.0f; }
+
+        // where the segment would start on this line
         bool lastIsLabel = labelPending() && ImGui::GetItemRectMax().x == labelEndX() && ImGui::GetItemRectMin().x == labelStartX();
         labelPending() = false;
-        if (!lastIsLabel) { ImGui::SameLine(); return; }
-        const LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
-        float x0 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x;
-        float full = rightEdge() - x0;
-        float col = labelStartX() + (std::min)(c.maxW + sp, 0.45f * full);
-        float minVal = ImGui::GetFontSize() * 7.0f;
-        if (rightEdge() - col < minVal) {
-            // too narrow for a value column: values on a fixed line below
-            ImGui::SetCursorScreenPos(ImVec2(labelStartX() + ImGui::GetFontSize(), ImGui::GetCursorScreenPos().y));
-            return;
+        float y = ImGui::GetItemRectMin().y;
+        float x;
+        bool firstValue = false;
+        if (lastIsLabel) {
+            const LabelCol& c = labelCols()[ImGui::GetID("##tw_labelcol")];
+            float col = labelStartX() + (std::min)(c.maxW + sp, 0.45f * full);
+            if (right - col < em * 7.0f) {
+                // too narrow for a value column: all values on lines below the label
+                l.contX = labelStartX() + em;
+                ImGui::SetCursorScreenPos(ImVec2(l.contX, ImGui::GetCursorScreenPos().y));
+                l.lastStart = l.contX; l.lastResW = 0.0f; l.lastY = ImGui::GetCursorScreenPos().y;
+                // the following segments continue on that line
+                ImGuiID nid = keyIsId ? (ImGuiID)(uintptr_t)key : segKey(key);
+                Seg& s = segs()[nid];
+                s.maxW = (std::max)(s.maxW, w);
+                l.lastResW = s.maxW;
+                l.prevId = nid; l.prevGlue = glue; l.prevValue = !glue && !unit && !keyIsId; l.prevSameLine = true;
+                return false;
+            }
+            x = (std::max)(col, labelEndX() + sp);
+            l.contX = col;
+            firstValue = true;
         }
-        if (col < labelEndX() + sp) { ImGui::SameLine(); return; }   // longer label than the column
-        ImGui::SameLine(0, 0);
-        ImGui::SetCursorScreenPos(ImVec2(col, ImGui::GetCursorScreenPos().y));
+        else if (ImGui::GetItemRectMin().x == l.lastStart && y == l.lastY && l.lastResW > 0.0f) {
+            x = l.lastStart + l.lastResW + sp;   // after the reserved width of the previous segment
+        }
+        else {
+            x = ImGui::GetItemRectMax().x + sp;  // after a raw ImGui item
+            l.prevSameLine = false;
+        }
+        bool prevDirect = !lastIsLabel && l.prevId != 0 && l.prevSameLine;
+
+        ImGuiID id = keyIsId ? (ImGuiID)(uintptr_t)key : segKey(key);
+        Seg& s = segs()[id];
+        bool widthChanged = std::fabs(full - s.atW) > 0.5f;
+        if (widthChanged) { s.maxW = w; }
+        else { s.maxW = (std::max)(s.maxW, w); }
+        bool fits = x + s.maxW <= right + 0.5f;
+        if (widthChanged) {
+            // new width: decide again, a wrapped segment needs 2 em extra to come back
+            s.wrapped = s.wrapped && s.atW >= 0.0f ? !(x + s.maxW + 2.0f * em <= right) : !fits;
+            s.atW = full;
+        }
+        else if (!s.wrapped && !fits) {
+            s.wrapped = true;   // grew beyond the room: wrap (and stay wrapped at this width)
+        }
+        // never leave the line if the continuation line would not have more room
+        if (s.wrapped && x <= l.contX + 0.5f) { s.wrapped = false; }
+        bool drawWrapped = s.wrapped;
+        // a value that has to wrap takes its static sub-label along: from the next
+        // frame on the sub-label starts the continuation line and the value follows it
+        if (s.wrapped && prevDirect && (l.prevGlue || (unit && l.prevValue))) {
+            Seg& ps = segs()[l.prevId];
+            if (!ps.wrapped) { ps.wrapped = true; s.wrapped = false; }
+        }
+
+        if (!drawWrapped) {
+            ImGui::SameLine(0, 0);
+            ImGui::SetCursorScreenPos(ImVec2(x, ImGui::GetCursorScreenPos().y));
+            l.lastStart = x; l.lastY = y;
+        }
+        else {
+            ImGui::SetCursorScreenPos(ImVec2(l.contX, ImGui::GetCursorScreenPos().y));
+            l.lastStart = l.contX; l.lastY = ImGui::GetCursorScreenPos().y;
+        }
+        l.lastResW = s.maxW;
+        l.prevId = id; l.prevGlue = glue; l.prevValue = !glue && !unit && !keyIsId; l.prevSameLine = true;
+        (void)firstValue;
+        return !drawWrapped;
+    }
+    inline bool valueSameLine(const void* key, float w) { return placeSegment(key, w); }
+    // a separator "|" is not drawn at the start of a continuation line
+    inline const char* dropLeadingBar(const char* t, bool sameLine) {
+        if (sameLine) { return t; }
+        const char* p = t;
+        while (*p == ' ') { p++; }
+        if (*p != '|') { return t; }
+        p++;
+        while (*p == ' ') { p++; }
+        return p;
     }
 
-    // controls after an item: same line if they fit, with a hysteresis of one
-    // character per control (keyed by its unique label) so a changing value in
-    // front of them cannot make them jump back and forth
-    inline std::unordered_map<ImGuiID, bool>& ctrlWrap() { static std::unordered_map<ImGuiID, bool> m; return m; }
+    // controls after an item: segment keyed by the control's unique label
     inline bool SameLineForCtrl(const char* id, float w) {
-        pendingSame() = false;
-        labelPending() = false;
-        float x = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x;
-        bool& wrapped = ctrlWrap()[ImGui::GetID(id)];
-        float margin = wrapped ? ImGui::GetFontSize() * 2.0f : 0.0f;
-        bool fits = x + w + margin <= rightEdge();
-        wrapped = !fits;
-        if (fits) { ImGui::SameLine(); return true; }
-        if (ImGui::GetCursorScreenPos().x + ImGui::GetFontSize() + w <= rightEdge()) {
-            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetFontSize());
-        }
-        return false;
+        return placeSegment((const void*)(uintptr_t)ImGui::GetID(id), w, true);
     }
     inline float checkboxWidth(const char* label) {
         return ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + textWidth(label);
@@ -125,17 +259,30 @@ namespace tw {
         ~CellScope() { cellMode() = prev; }
     };
 
-    // Fit 'buf' into the remaining width: in cell mode truncate (returns true
-    // and keeps the full text in 'full'), otherwise wrap if needed.
+    // Fit 'buf' into the remaining width. Cells: clip with "..." (tooltip with
+    // the full text). Elsewhere nothing is cut: text longer than the room wraps
+    // word by word and keeps the largest height it had at this window width.
+    struct WrapMem { float maxH = 0.0f; float atW = -1.0f; };
+    inline std::unordered_map<ImGuiID, WrapMem>& wrapMems() { static std::unordered_map<ImGuiID, WrapMem> m; return m; }
     struct FitText {
         bool wrap = false, cut = false;
+        ImGuiID memId = 0;
+        float y0 = 0.0f;
         char full[512];
-        FitText(char* buf, size_t n) {
+        FitText(char* buf, size_t n, const void* key = nullptr) {
             float avail = ImGui::GetContentRegionAvail().x;
+            if (!cellMode()) {
+                // wrap only if needed; the height memory keeps the space if a
+                // shorter value later fits on fewer lines
+                memId = ImHashData(&key, sizeof(key), line().key ^ ImGui::GetID("##tw_wrap"));
+                y0 = ImGui::GetCursorScreenPos().y;
+                if (textWidth(buf) > avail && avail > 0) {
+                    ImGui::PushTextWrapPos(0.0f);
+                    wrap = true;
+                }
+                return;
+            }
             if (textWidth(buf) <= avail || avail <= 0) { return; }
-            // multi-line (static explanations) wrap; single lines are clipped with
-            // "..." and the full text as tooltip, so nothing below them moves
-            if (!cellMode() && strchr(buf, '\n')) { ImGui::PushTextWrapPos(0.0f); wrap = true; return; }
             snprintf(full, sizeof(full), "%s", buf);
             size_t total = strlen(buf);
             float dots = textWidth("...");
@@ -154,68 +301,85 @@ namespace tw {
             cut = true;
         }
         void done() {
-            if (wrap) { ImGui::PopTextWrapPos(); wrap = false; }
+            if (wrap) { ImGui::PopTextWrapPos(); }
             if (cut && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", full); }
+            if (cellMode() || !memId) { return; }
+            WrapMem& m = wrapMems()[memId];
+            float full = fullWidth();
+            float h = ImGui::GetItemRectSize().y;
+            if (std::fabs(full - m.atW) > 0.5f) { m.atW = full; m.maxH = h; }
+            if (h > m.maxH) { m.maxH = h; }
+            if (h + 0.5f < m.maxH) {
+                // keep the room of the taller version (only below a single item line)
+                ImVec2 c = ImGui::GetCursorScreenPos();
+                ImGui::SetCursorScreenPos(ImVec2(c.x, c.y + (m.maxH - h)));
+            }
+            (void)y0;
         }
     };
 
-    inline void flushPending(const void* key, float w) {
-        (void)key; (void)w;
-        if (pendingSame()) { valueSameLine(); }
-        else { labelPending() = false; }
+    // a line-start text after SameNext() is a segment of the previous line
+    inline bool flushPending(const void* key, float w) {
+        if (pendingSame()) { valueSameLine(key, w); return true; }
+        labelPending() = false;
+        return false;
     }
-    // drop-in replacements for ImGui::Text*: behave identically unless a
-    // SameNext() is pending; too long texts wrap (cells: clip with "...")
+    // drop-in replacements for ImGui::Text*
     inline void TextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf));
+        bool seg = flushPending(fmt, textWidth(buf));
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextColored(col, "%s", buf);
         f.done();
-        if (!cellMode()) { noteLabel(buf); }
+        if (!cellMode() && !seg) { noteLineStart(buf, fmt); }
     }
     inline void Text(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf));
+        bool seg = flushPending(fmt, textWidth(buf));
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextUnformatted(buf);
         f.done();
-        if (!cellMode()) { noteLabel(buf); }
+        // TextU passes "%s": key the line by its (static) text then
+        if (!cellMode() && !seg) { noteLineStart(buf, strcmp(fmt, "%s") == 0 ? buf : fmt); }
     }
     inline void TextU(const char* text) { Text("%s", text); }
     inline void TextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        flushPending(fmt, textWidth(buf));
-        FitText f(buf, sizeof(buf));
+        bool seg = flushPending(fmt, textWidth(buf));
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextDisabled("%s", buf);
         f.done();
-        if (!cellMode()) { noteLabel(buf); }
+        if (!cellMode() && !seg) { noteLineStart(buf, fmt); }
     }
 
     inline void SameTextColored(const ImVec4& col, const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        valueSameLine();
-        FitText f(buf, sizeof(buf));
+        if (cellMode()) { ImGui::SameLine(); } else { valueSameLine(fmt, textWidth(buf)); }
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextColored(col, "%s", buf);
         f.done();
     }
     inline void SameText(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        valueSameLine();
-        FitText f(buf, sizeof(buf));
+        bool same = true;
+        if (cellMode()) { ImGui::SameLine(); } else { nextIsGlue() = true; same = valueSameLine(fmt, textWidth(buf)); }
+        if (!same) { memmove(buf, dropLeadingBar(buf, false), strlen(dropLeadingBar(buf, false)) + 1); }
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextUnformatted(buf);
         f.done();
     }
     inline void SameTextDisabled(const char* fmt, ...) {
         char buf[512];
         va_list ap; va_start(ap, fmt); vfmt(buf, sizeof(buf), fmt, ap); va_end(ap);
-        valueSameLine();
-        FitText f(buf, sizeof(buf));
+        bool same = true;
+        if (cellMode()) { ImGui::SameLine(); } else { nextIsGlue() = true; same = valueSameLine(fmt, textWidth(buf)); }
+        if (!same) { memmove(buf, dropLeadingBar(buf, false), strlen(dropLeadingBar(buf, false)) + 1); }
+        FitText f(buf, sizeof(buf), fmt);
         ImGui::TextDisabled("%s", buf);
         f.done();
     }
@@ -284,4 +448,9 @@ namespace tw {
             return changed;
         }
     };
+
+    inline bool SameLineFor(float w) {
+        static const char key[] = "##tw_samelinefor%";   // "%": not a sub-label
+        return placeSegment(key, w);
+    }
 }

@@ -781,9 +781,14 @@ void MainWindow::draw() {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        // TETRA-SCHWARTZ: the menu keeps room for a label and a value column
+        // (21 characters wide at the current font size); narrower than that the
+        // measured values would only wrap into many short lines
+        const float minMenuW = (std::max)(250.0f, ImGui::GetFontSize() * 21.0f);
+        if (!grabbingMenu && menuWidth < minMenuW && winSize.x > minMenuW + 250) { menuWidth = newWidth = minMenuW; }
         if (grabbingMenu) {
             newWidth = mousePos.x;
-            newWidth = std::clamp<float>(newWidth, 250, winSize.x - 250);
+            newWidth = std::clamp<float>(newWidth, minMenuW, (std::max)(minMenuW, (float)winSize.x - 250));
             ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth, curY), ImVec2(newWidth, winSize.y - 10), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
         }
         if (mousePos.x >= newWidth - (2.0f * style::uiScale) && mousePos.x <= newWidth + (2.0f * style::uiScale) && mousePos.y > curY) {
@@ -815,7 +820,9 @@ void MainWindow::draw() {
     if (haveSide) {
         float leftW = (showMenu ? menuWidth : 8.0f * style::uiScale) + 60.0f * style::uiScale;
         float maxW = (std::max)(160.0f * style::uiScale, (float)winSize.x - leftW - 250.0f * style::uiScale);
-        *sidePanelW = std::clamp<float>(*sidePanelW, 160.0f * style::uiScale, maxW);
+        // tile column: at least 18 characters wide (label + value), like the menu
+        const float minSideW = (std::max)(160.0f * style::uiScale, ImGui::GetFontSize() * 18.0f);
+        *sidePanelW = std::clamp<float>(*sidePanelW, minSideW, (std::max)(minSideW, maxW));
         sideW = *sidePanelW + splitW;
     }
     const int nCols = haveSide ? 4 : 3;

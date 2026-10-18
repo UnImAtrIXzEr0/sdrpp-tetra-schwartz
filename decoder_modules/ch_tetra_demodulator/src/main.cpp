@@ -3109,19 +3109,19 @@ private:
         for(int i = 0; i < 4; i++) {
             switch(_this->osmotetradecoder.getTimeslotContent(i)) {
                 case 0:
-                    tw::SameTextColored(tc::lgrey(), "   UL  ");
+                    tw::SameTextColored(tc::lgrey(), "UL");
                     break;
                 case 1:
-                    tw::SameTextColored(tc::magenta(), " DATA  ");
+                    tw::SameTextColored(tc::magenta(), "DATA");
                     break;
                 case 2:
-                    tw::SameTextColored(tc::val(), "  NDB  ");
+                    tw::SameTextColored(tc::val(), "NDB");
                     break;
                 case 3:
-                    tw::SameTextColored(tc::cyan(), " SYNC  ");
+                    tw::SameTextColored(tc::cyan(), "SYNC");
                     break;
                 case 4:
-                    tw::SameTextColored(tc::good(), " VOICE ");
+                    tw::SameTextColored(tc::good(), "VOICE");
                     break;
             }
         }
@@ -3141,7 +3141,7 @@ private:
         tw::Text("Duplex: ");tw::SameTextColored(tc::val(), "Table %d, Band %d%s",
             _this->osmotetradecoder.getDuplexIdx(), _this->osmotetradecoder.getFreqBand(),
             _this->osmotetradecoder.getReverseOp() ? ", reverse" : "");
-        tw::Text("Access1: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess1Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess1());tw::SameText("| Access2: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess2Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess2());
+        tw::Text("Access1: ");tw::SameTextColored(tc::val(), "%c / %d", _this->osmotetradecoder.getAccess1Code(), _this->osmotetradecoder.getAccess1());tw::SameText("| Access2: ");tw::SameTextColored(tc::val(), "%c / %d", _this->osmotetradecoder.getAccess2Code(), _this->osmotetradecoder.getAccess2());
         tw::Text("MCC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMcc());tw::SameText("| MNC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMnc());tw::SameText("| CC: ");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getCc());
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Colour code (0..63) from the SYNC PDU = %d.\nIt is part of the scrambling code: if it were wrong,\nno other channel would pass its CRC.", _this->osmotetradecoder.getCc());
