@@ -516,7 +516,7 @@ namespace ImGui {
                 double freqOffset = (viewOffset + (viewBandwidth / 2.0)) - (wholeBandwidth / 2.0);
                 viewOffset = (wholeBandwidth / 2.0) - (viewBandwidth / 2.0);
                 if (!centerFrequencyLocked) {
-                    centerFreq += freqOffset;
+                    centerFreq += shiftCenterKeepLocked(freqOffset);
                     centerFreqMoved = true;
                 }
             }
@@ -524,7 +524,7 @@ namespace ImGui {
                 double freqOffset = (viewOffset - (viewBandwidth / 2.0)) + (wholeBandwidth / 2.0);
                 viewOffset = (viewBandwidth / 2.0) - (wholeBandwidth / 2.0);
                 if (!centerFrequencyLocked) {
-                    centerFreq += freqOffset;
+                    centerFreq += shiftCenterKeepLocked(freqOffset);
                     centerFreqMoved = true;
                 }
             }
@@ -546,13 +546,13 @@ namespace ImGui {
             if (viewOffset + (viewBandwidth / 2.0) > wholeBandwidth / 2.0) {
                 double freqOffset = (viewOffset + (viewBandwidth / 2.0)) - (wholeBandwidth / 2.0);
                 viewOffset = (wholeBandwidth / 2.0) - (viewBandwidth / 2.0);
-                centerFreq += freqOffset;
+                centerFreq += shiftCenterKeepLocked(freqOffset);
                 centerFreqMoved = true;
             }
             if (viewOffset - (viewBandwidth / 2.0) < -(wholeBandwidth / 2.0)) {
                 double freqOffset = (viewOffset - (viewBandwidth / 2.0)) + (wholeBandwidth / 2.0);
                 viewOffset = (viewBandwidth / 2.0) - (wholeBandwidth / 2.0);
-                centerFreq += freqOffset;
+                centerFreq += shiftCenterKeepLocked(freqOffset);
                 centerFreqMoved = true;
             }
 
@@ -574,13 +574,13 @@ namespace ImGui {
             if (viewOffset + (viewBandwidth / 2.0) > wholeBandwidth / 2.0) {
                 double freqOffset = (viewOffset + (viewBandwidth / 2.0)) - (wholeBandwidth / 2.0);
                 viewOffset = (wholeBandwidth / 2.0) - (viewBandwidth / 2.0);
-                centerFreq += freqOffset;
+                centerFreq += shiftCenterKeepLocked(freqOffset);
                 centerFreqMoved = true;
             }
             if (viewOffset - (viewBandwidth / 2.0) < -(wholeBandwidth / 2.0)) {
                 double freqOffset = (viewOffset - (viewBandwidth / 2.0)) + (wholeBandwidth / 2.0);
                 viewOffset = (viewBandwidth / 2.0) - (wholeBandwidth / 2.0);
-                centerFreq += freqOffset;
+                centerFreq += shiftCenterKeepLocked(freqOffset);
                 centerFreqMoved = true;
             }
 
@@ -1494,6 +1494,29 @@ namespace ImGui {
 
     float WaterFall::getWaterfallMax() {
         return waterfallMax;
+    }
+
+    double WaterFall::shiftCenterKeepLocked(double freqOffset) {
+        // allowed range so that every locked VFO stays inside the band
+        double lo = -1e300, hi = 1e300;
+        bool any = false;
+        for (auto const& [name, vfo] : vfos) {
+            if (!vfo->positionLocked) { continue; }
+            double lim = (std::max)(0.0, wholeBandwidth / 2.0 - vfo->bandwidth / 2.0);
+            lo = (std::max)(lo, vfo->generalOffset - lim);
+            hi = (std::min)(hi, vfo->generalOffset + lim);
+            any = true;
+        }
+        if (!any) { return freqOffset; }
+        if (lo > hi) { return 0.0; }
+        freqOffset = std::clamp<double>(freqOffset, lo, hi);
+        if (freqOffset == 0.0) { return 0.0; }
+        for (auto const& [name, vfo] : vfos) {
+            if (!vfo->positionLocked) { continue; }
+            vfo->setOffset(vfo->generalOffset - freqOffset);
+            vfo->centerOffsetChanged = true;
+        }
+        return freqOffset;
     }
 
     void WaterFall::updateAllVFOs(bool checkRedrawRequired) {

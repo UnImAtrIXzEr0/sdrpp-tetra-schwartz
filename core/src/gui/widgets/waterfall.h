@@ -280,6 +280,9 @@ namespace ImGui {
         void drawWaterfallImages();
 
         void updateAllVFOs(bool checkRedrawRequired = false);
+        // TETRA-SCHWARTZ: retune the centre by 'freqOffset' while VFOs with
+        // positionLocked keep their absolute frequency (clamped so they stay in the band)
+        double shiftCenterKeepLocked(double freqOffset);
         bool calculateVFOSignalInfo(float* fftLine, WaterfallVFO* vfo, float& strength, float& snr);
 
         bool waterfallUpdate = false;

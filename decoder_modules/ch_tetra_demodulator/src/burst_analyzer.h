@@ -40,12 +40,15 @@ struct TetraBurstSettings {
     float maskRippleDb = 1.0f; // useful part within +-ripple of the burst power
     float maskOffDbc = -40.0f; // before the ramp-up and after the ramp-down
     float maskRampSym = 5.0f;  // max. ramp time (-20 dBc ... -1 dBc) in symbols
-    bool timing = true;        // burst timing against the downlink slot grid (2nd tap on the TETRA VFO)
+    bool timing = false;       // burst timing against the downlink slot grid (2nd tap on the TETRA VFO)
+    float linStepDb = 10.0f;   // linearity check: added attenuation in front of the SDR
     bool transients = true;    // spectrum during the ramps
     int floorSpan = 0;         // history of the uplink noise: 0 10 min, 1 1 h, 2 6 h, 3 24 h
     bool stdMask = true;       // time mask of EN 300 392-2 6.4.5 (table 6.8) instead of the user mask
     int station = 0;           // 0 mobile station (uplink), 1 base station in discontinuous mode
     bool msClass4 = false;     // MS power class 4 / 4L (transient limit -45 dBc instead of -50 dBc)
+    bool msPowerKnown = false; // transmit power of the MS known (absolute limits -36 dBm need it)
+    float msPowerDbm = 30.0f;  // transmit power of the MS at its antenna connector, dBm
 };
 
 class TetraBurstAnalyzer {
@@ -150,7 +153,7 @@ public:
     // ---- GUI ----
     // returns true when a setting was changed (to be saved)
     bool draw(const std::string& id, float width, const TetraConstellationView::Palette& pal, TetraBurstSettings& st,
-              double ulFreq, double vfoFreq, float levelCal, bool& run) {
+              double ulFreq, double vfoFreq, float levelCal, bool gainHeld, bool& run) {
         bool changed = false;
         ImVec4 val = tc::val(), good = tc::good(), bad = tc::bad(), warn = tc::warn();
         if (ImGui::Checkbox(("Run burst analysis##_ba_run_" + id).c_str(), &run)) { changed = true; }
@@ -201,10 +204,10 @@ public:
         tw::Text("Bursts:"); tw::SameTextColored(val, "%llu full slot", (unsigned long long)r.nFull);
         tw::SameTextColored(val, " %llu half slot", (unsigned long long)r.nHalf);
         tw::SameText(" ("); tw::SameTextColored(val, "%.1f/s", r.burstsPerSec); tw::SameText(")");
-        if (r.state == 2) {
+        if (r.state == 2 && !hasDlTap()) { drawLinearity(id, width, r, st, gainHeld, changed); }
+        if (r.state == 2 && hasDlTap()) {
             tw::Text("Overload check:");
-            if (!hasDlTap()) { tw::SameTextDisabled("needs the downlink in the SDR span (Timing vs. downlink)"); }
-            else if (!r.desenseValid) { tw::SameTextDisabled("collecting bursts..."); }
+            if (!r.desenseValid) { tw::SameTextDisabled("collecting bursts..."); }
             else if (r.desenseDb > 1.0f) {
                 tw::SameTextColored(bad, "RECEIVER OVERLOADED - results invalid");
                 tw::TextColored(bad, "Downlink drops %.1f dB during the bursts. Increase the distance,\nadd an attenuator or use a coupler and dummy load.", r.desenseDb);
@@ -263,6 +266,18 @@ public:
             ImGui::SetNextItemWidth(200.0f * style::uiScale);
             if (ImGui::Combo(("Station##_ba_sta_" + id).c_str(), &st.station, "Mobile station (uplink)\0Base station, discontinuous\0")) { changed = true; }
             if (ImGui::Checkbox(("MS power class 4 / 4L##_ba_c4_" + id).c_str(), &st.msClass4)) { changed = true; }
+            if (ImGui::Checkbox(("MS transmit power known##_ba_pk_" + id).c_str(), &st.msPowerKnown)) { changed = true; }
+            if (st.msPowerKnown) {
+                tw::SameLineFor(90.0f * style::uiScale + tw::textWidth("dBm") + ImGui::GetStyle().ItemInnerSpacing.x);
+                ImGui::SetNextItemWidth(90.0f * style::uiScale);
+                if (ImGui::InputFloat(("dBm##_ba_pw_" + id).c_str(), &st.msPowerDbm, 1.0f, 3.0f, "%.1f")) { st.msPowerDbm = std::clamp(st.msPowerDbm, -30.0f, 50.0f); changed = true; }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Output power of the mobile station at its antenna (e.g. 12.6 dBm for 18 mW,\n"
+                                  "32.6 dBm for 1.8 W). Over the air the received level depends on the path,\n"
+                                  "so the absolute limits of EN 300 394-1 (-36 dBm: power outside the burst,\n"
+                                  "switching transients) can only be converted to dBc with this value.");
+            }
             ImGui::TreePop();
         }
         return changed;
@@ -293,8 +308,11 @@ private:
         double sn0 = c - 0.5 * t2 * s8, snmax = c + 0.5 * t2 * s8;
         int i1 = (int)std::floor(sn0 - t1 * s8), i3 = (int)std::ceil(snmax + t3 * s8);
         // Lmin: BS -40 dBc; MS -70 dBc or -36 dBm, whichever is greater (needs dBm)
+        // Over the air the received level says nothing about the MS output power
+        // (path loss), so the -36 dBm rule takes the transmit power entered by the user.
+        (void)levelCal;
         float lmin = st.station == 1 ? -40.0f : -70.0f;
-        if (st.station == 0 && levelCal != 0.0f) { lmin = (std::max)(lmin, -36.0f - (r.powerDbfs + levelCal)); }
+        if (st.station == 0 && st.msPowerKnown) { lmin = (std::max)(lmin, -36.0f - st.msPowerDbm); }
         float pkT1 = -200.0f, pkT3 = -200.0f, outBefore = -200.0f, outAfter = -200.0f;
         for (int k = 0; k < n; k++) {
             if (k < i1) { outBefore = (std::max)(outBefore, p[k]); }
@@ -311,7 +329,8 @@ private:
                               "within t3 = %d symbols after SNmax (useful part t2 = %d symbols). During t1\n"
                               "at most +6 dBc, during t3 at most +3 dBc, outside the mask at most Lmin\n"
                               "(%s). Averaged power profile through the TETRA filter.",
-                              t1, t3, t2, st.station == 1 ? "BS: -40 dBc" : "MS: -70 dBc or -36 dBm, whichever is greater");
+                              t1, t3, t2, st.station == 1 ? "BS: -40 dBc" : "MS: -70 dBc or -36 dBm, whichever is greater;\n"
+                              "-36 dBm is applied to the MS transmit power entered under Time mask");
         }
         bool okT1 = pkT1 <= 6.0f, okT3 = pkT3 <= 3.0f;
         tw::Text("  during t1:"); tw::SameTextColored(okT1 ? good : bad, "%+.1f dBc", pkT1); tw::SameTextDisabled("(<= +6)");
@@ -325,8 +344,87 @@ private:
         out(haveBefore, outBefore, "before");
         out(haveAfter, outAfter, " after");
         tw::SameTextDisabled("(Lmin %.0f dBc)", lmin);
+        if (st.station == 0 && !st.msPowerKnown) {
+            tw::TextDisabled("  Lmin -70 dBc: enter the MS transmit power (Time mask) for the -36 dBm rule.");
+        }
         if (floorLimited) {
             tw::TextDisabled("  Measurement floor %.0f dBc is above Lmin: 'outside' can only be checked down to the floor.", fl);
+        }
+    }
+
+    // Linearity check without a downlink reference: the averaged burst power has to
+    // drop by exactly the attenuation added in front of the SDR (receiver gain held).
+    // A smaller drop means the receiver was compressed at the higher level.
+    static constexpr int LIN_MIN_BURSTS = 20;
+    int linState = 0;          // 0 idle, 1 reference taken, 2 collecting after the change, 3 result
+    float linRef = NAN, linDelta = NAN;
+    bool linSawReset = false;
+
+    void drawLinearity(const std::string& id, float width, const TetraBurstResult& r, TetraBurstSettings& st, bool gainHeld, bool& changed) {
+        (void)width;
+        ImVec4 good = tc::good(), bad = tc::bad(), warn = tc::warn(), val = tc::val();
+        tw::Text("Linearity check:");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Shows whether the receiver is overloaded by the bursts (over the air there is\n"
+                              "no downlink reference): note the burst power, add the attenuation step in\n"
+                              "front of the SDR (external attenuator), then the power has to drop by the\n"
+                              "same amount within +-0.5 dB. A smaller drop: the receiver was compressed\n"
+                              "at the higher level - keep the attenuation and check again.\n"
+                              "The receiver gain must stay held and the mobile must not change its power\n"
+                              "(power control) during the check.");
+        }
+        if (!gainHeld) {
+            tw::SameTextColored(warn, "hold the receiver gain first");
+            linState = 0;
+            return;
+        }
+        bool enough = r.averaged >= (std::min)(LIN_MIN_BURSTS, st.averages);
+        switch (linState) {
+        case 0:
+            if (!enough) { tw::SameTextDisabled("collecting bursts (%d/%d)", r.averaged, (std::min)(LIN_MIN_BURSTS, st.averages)); break; }
+            if (tw::SameSmallButton(("Note level##_ba_lin0_" + id).c_str())) { linRef = r.powerDbfs; linState = 1; }
+            break;
+        case 1:
+            tw::SameTextDisabled("reference %.1f dBFS", linRef);
+            tw::TextDisabled("  Add");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(80.0f * style::uiScale);
+            if (ImGui::InputFloat(("dB##_ba_linstep_" + id).c_str(), &st.linStepDb, 1.0f, 5.0f, "%.1f")) { st.linStepDb = std::clamp(st.linStepDb, 3.0f, 30.0f); changed = true; }
+            tw::SameTextDisabled("in front of the SDR, then:");
+            if (ImGui::SmallButton(("Attenuator added##_ba_lin1_" + id).c_str())) { reset(); linState = 2; linSawReset = false; }
+            if (tw::SameSmallButton(("Cancel##_ba_linc_" + id).c_str())) { linState = 0; }
+            break;
+        case 2:
+            // the reset is done by the worker: wait until the average has restarted
+            if (r.averaged < (std::min)(LIN_MIN_BURSTS, st.averages)) { linSawReset = true; }
+            if (!linSawReset || r.averaged < (std::min)(LIN_MIN_BURSTS, st.averages)) {
+                tw::SameTextDisabled("collecting bursts (%d/%d)", r.averaged, (std::min)(LIN_MIN_BURSTS, st.averages));
+                if (tw::SameSmallButton(("Cancel##_ba_linc2_" + id).c_str())) { linState = 0; }
+                break;
+            }
+            linDelta = linRef - r.powerDbfs;
+            linState = 3;
+            [[fallthrough]];
+        case 3: {
+            float e = linDelta - st.linStepDb;
+            if (std::fabs(e) <= 0.5f) {
+                tw::SameTextColored(good, "OK - linear");
+                tw::SameTextDisabled("(dropped %.1f dB for %.1f dB)", linDelta, st.linStepDb);
+            }
+            else if (e < 0.0f) {
+                tw::SameTextColored(bad, "RECEIVER COMPRESSED");
+                tw::TextColored(bad, "  The power dropped only %.1f dB for %.1f dB: the level before was too high.\n"
+                                     "  Keep the attenuation and check again with one more step.", linDelta, st.linStepDb);
+            }
+            else {
+                tw::SameTextColored(warn, "not conclusive");
+                tw::TextColored(warn, "  The power dropped %.1f dB for %.1f dB: the mobile changed its power\n"
+                                      "  (power control) or the attenuator value is wrong - repeat.", linDelta, st.linStepDb);
+            }
+            tw::Text("  now:"); tw::SameTextColored(val, "%.1f dBFS", r.powerDbfs);
+            if (tw::SameSmallButton(("Check again##_ba_lin3_" + id).c_str())) { linState = 0; }
+            break;
+        }
         }
     }
 
@@ -335,6 +433,7 @@ private:
         if (!r.transPeakValid) { return; }
         ImVec4 good = tc::good(), bad = tc::bad(), val = tc::val();
         float lim = (st.station == 0 && st.msClass4) ? -45.0f : -50.0f;
+        if (st.station == 0 && st.msPowerKnown) { lim = (std::max)(lim, -36.0f - st.msPowerDbm); }
         float fl = r.transPeakFloorDbc;
         tw::Text("Switching transients (peak, +-25 kHz):");
         if (ImGui::IsItemHovered()) {
@@ -342,7 +441,8 @@ private:
                               "ramp-down periods, maximum hold since the last reset, relative to the\n"
                               "channel power of the useful part (EN 300 394-1 7.1.4).\n"
                               "Limit: -45 dBc for MS power classes 4 / 4L, -50 dBc otherwise\n"
-                              "(never stricter than -36 dBm).");
+                              "(never stricter than -36 dBm: applied to the MS transmit power\n"
+                              "entered under Time mask).");
         }
         auto cell = [&](float v) {
             bool atFloor = !std::isnan(fl) && v <= fl + 3.0f;

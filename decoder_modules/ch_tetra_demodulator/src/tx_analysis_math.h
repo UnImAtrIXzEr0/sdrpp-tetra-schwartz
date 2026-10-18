@@ -230,4 +230,62 @@ struct TxMath {
         slope = (f30 > f6) ? 24.0 / ((f30 - f6) / 1000.0) : 0.0;
     }
 
+    // Snap to carrier (see TetraBandMonitor::snapCarrier); true: found
+    static bool findCarrier(const std::vector<std::complex<float>>& lastX, double fs, double center, double clickOffsetHz, double& outOffsetHz) {
+        const int n = (int)(std::min)(lastX.size(), (size_t)(std::max)(4096.0, fs * 0.01));
+        const double step = 500.0, span = 45000.0;
+        const int nf = (int)(2.0 * span / step) + 1;
+        std::vector<float> win(n);
+        for (int i = 0; i < n; i++) { win[i] = 0.5f - 0.5f * std::cos(2.0f * (float)PI * (float)i / (float)(n - 1)); }
+        std::vector<double> p(nf);
+        for (int k = 0; k < nf; k++) {
+            double f = clickOffsetHz - span + k * step;
+            if (std::fabs(f) > fs / 2.0) { p[k] = 0.0; continue; }
+            // phasor recursion in double, renormalised every 1024 samples
+            std::complex<double> rot = std::polar(1.0, -2.0 * PI * f / fs), ph(1.0, 0.0), acc(0.0, 0.0);
+            for (int i = 0; i < n; i++) {
+                acc += std::complex<double>(lastX[i].real() * win[i], lastX[i].imag() * win[i]) * ph;
+                ph *= rot;
+                if ((i & 1023) == 1023) { ph /= std::abs(ph); }
+            }
+            p[k] = std::norm(acc);
+        }
+        // 18 kHz window with the most power, centre within +-25 kHz of the click
+        const int half = (int)(9000.0 / step), reach = (int)(25000.0 / step), c0 = nf / 2;
+        int best = -1;
+        double bestSum = -1.0;
+        for (int c = c0 - reach; c <= c0 + reach; c++) {
+            if (c - half < 0 || c + half >= nf) { continue; }
+            double sum = 0.0;
+            for (int k = c - half; k <= c + half; k++) { sum += p[k]; }
+            if (sum > bestSum) { bestSum = sum; best = c; }
+        }
+        if (best < 0) { return false; }
+        // floor: lower third of the whole evaluated span (mostly outside the carrier)
+        std::vector<double> sorted(p);
+        std::nth_element(sorted.begin(), sorted.begin() + nf / 3, sorted.end());
+        double floor = (std::max)(sorted[nf / 3], 1e-30);   // noise: about 0.4 x the mean
+        double chan = bestSum / (2 * half + 1);
+        if (10.0 * std::log10(chan / floor) < 8.0) { return false; }
+        // power centroid over +-12.5 kHz, values above the floor only
+        double sw = 0.0, sf = 0.0;
+        const int h2 = (int)(12500.0 / step);
+        for (int k = (std::max)(0, best - h2); k <= (std::min)(nf - 1, best + h2); k++) {
+            double w = (std::max)(0.0, p[k] - 2.0 * floor);
+            sw += w;
+            sf += w * (clickOffsetHz - span + k * step);
+        }
+        if (!(sw > 0.0)) { return false; }
+        double fOff = sf / sw;
+        // the skirt of a carrier further away pulls the window to the edge of the
+        // search range: the centre itself has to be within +-25 kHz of the click
+        if (std::fabs(fOff - clickOffsetHz) > 25000.0) { return false; }
+        double fAbs = center + fOff;
+        double r = std::round(fAbs / 6250.0) * 6250.0;
+        if (std::fabs(r - fAbs) <= 1000.0) { fAbs = r; }
+        else { fAbs = std::round(fAbs / 10.0) * 10.0; }
+        outOffsetHz = fAbs - center;
+        return true;
+    }
+
 };

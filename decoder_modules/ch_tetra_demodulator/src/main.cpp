@@ -36,6 +36,7 @@
 #include "gui_widgets.h"
 #include "tetra_colors.h"
 #include "tetra_layout.h"
+#include "analysis_tap.h"
 #include "tx_analyzer.h"
 #include "trend_view.h"
 #include "carrier_monitor.h"
@@ -54,6 +55,7 @@
 #include "subscribers.h"
 #include "radioid.h"
 #include "gps.h"
+#include "propagation.h"
 #include "map_export.h"
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
@@ -178,6 +180,7 @@ public:
         if (config.conf[name].contains("vemRun")) { vemRun = config.conf[name]["vemRun"]; }
         if (config.conf[name].contains("chanRaster")) { chanRaster = config.conf[name]["chanRaster"]; }
         if (config.conf[name].contains("vfoLocked")) { vfoLocked = config.conf[name]["vfoLocked"]; }
+        if (config.conf[name].contains("snapCarrier")) { snapCarrier = config.conf[name]["snapCarrier"]; }
         startViewDone = config.conf[name].contains("startViewV21");
         if (config.conf[name].contains("mp") && config.conf[name]["mp"].is_object()) {
             json& mp = config.conf[name]["mp"];
@@ -188,11 +191,16 @@ public:
         if (config.conf[name].contains("crcLimit")) { evalView.crcLimit = config.conf[name]["crcLimit"]; }
         if (config.conf[name].contains("burst") && config.conf[name]["burst"].is_object()) {
             json& b = config.conf[name]["burst"];
-            if (b.contains("timing")) { burstSt.timing = b["timing"]; }
+            // from v0.22.2 the uplink is measured alone by default (timing vs. the
+            // downlink only on request): older saved values are not taken over
+            if (b.contains("timing") && b.contains("ulOnlyV222")) { burstSt.timing = b["timing"]; }
+            if (b.contains("linStepDb")) { burstSt.linStepDb = std::clamp((float)b["linStepDb"], 3.0f, 30.0f); }
             if (b.contains("transients")) { burstSt.transients = b["transients"]; }
             if (b.contains("stdMask")) { burstSt.stdMask = b["stdMask"]; }
             if (b.contains("station")) { burstSt.station = std::clamp((int)b["station"], 0, 1); }
             if (b.contains("msClass4")) { burstSt.msClass4 = b["msClass4"]; }
+            if (b.contains("msPowerKnown")) { burstSt.msPowerKnown = b["msPowerKnown"]; }
+            if (b.contains("msPowerDbm")) { burstSt.msPowerDbm = b["msPowerDbm"]; }
             if (b.contains("floorSpan")) { burstSt.floorSpan = b["floorSpan"]; }
         }
         if (config.conf[name].contains("alarms") && config.conf[name]["alarms"].is_object()) {
@@ -213,6 +221,13 @@ public:
         if (config.conf[name].contains("gpsPort")) { gpsPort = config.conf[name]["gpsPort"]; }
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
+        if (config.conf[name].contains("prop") && config.conf[name]["prop"].is_object()) {
+            json& pp = config.conf[name]["prop"];
+            if (pp.contains("bsValid")) { propView.bsValid = pp["bsValid"]; }
+            if (pp.contains("bsLat")) { propView.bsLat = pp["bsLat"]; }
+            if (pp.contains("bsLon")) { propView.bsLon = pp["bsLon"]; }
+            if (pp.contains("metric")) { propView.metric = std::clamp((int)pp["metric"], 0, 1); }
+        }
         bool gpsStartNow = config.conf[name].contains("gpsEnabled") && config.conf[name]["gpsEnabled"];
         if (config.conf[name].contains("hamMode")) {
             hamMode = config.conf[name]["hamMode"];
@@ -255,8 +270,10 @@ public:
             }
             carrierMon.takeChanged();
             burstAn.setName(name + " bursts");
-            chanAn.setName(name + " channel");
-            vemAn.setName(name + " modulation accuracy");
+            anaTap.setName(name + " analysis");
+            chanAn.setTap(&anaTap);
+            vemAn.setTap(&anaTap);
+            txa.setTap(&anaTap);
             fftRedrawHandler.handler = fftRedraw;
             fftRedrawHandler.ctx = this;
             gui::waterfall.onFFTRedraw.bindHandler(&fftRedrawHandler);
@@ -1352,8 +1369,25 @@ private:
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("The mouse no longer tunes the TETRA VFO: clicking or dragging in the\n"
                               "spectrum / waterfall moves the view instead, the wheel does nothing.\n"
+                              "When the view is dragged past the band edge the SDR is retuned and the\n"
+                              "VFO keeps its frequency (the view stops where the VFO would leave the band).\n"
                               "AFC and frequency entry still work.");
         }
+        {
+            std::string sl = std::string("Snap to carrier##_tetra_snap_") + name;
+            if (tw::SameCheckbox(sl.c_str(), &snapCarrier)) {
+                config.acquire();
+                config.conf[name]["snapCarrier"] = snapCarrier;
+                config.release(true);
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("A click / drag with the mouse that tunes the TETRA VFO ends on the centre of\n"
+                              "the strongest carrier within +-25 kHz (spectrum of the raw samples, 6.25 kHz\n"
+                              "raster when within 1 kHz of it). Works zoomed out as well. Then tick Lock VFO\n"
+                              "to keep it there while moving the view.");
+        }
+        if (!snapStatus.empty()) { tw::SameTextDisabled("%s", snapStatus.c_str()); }
 
         SourceGainInterface* g = findGainInterface();
         if (ImGui::Checkbox(CONCAT("Auto RF gain##_tetra_agc_", name), &autoGain)) {
@@ -1443,9 +1477,57 @@ private:
     }
 
     // Called every frame from the GUI thread
+    // Snap to carrier: watch mouse tunes of the TETRA VFO (GUI thread)
+    void snapLoop() {
+        if (!vfo || !vfo->wtfVFO) { snapPending = false; snapMouseDown = false; return; }
+        double cur = gui::waterfall.getCenterFrequency() + vfo->getOffset();
+        bool inSpec = gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall;
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && inSpec) {
+            snapMouseDown = true;
+            snapStartFreq = cur;
+        }
+        if (snapMouseDown && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            snapMouseDown = false;
+            bool ours = gui::waterfall.selectedVFO == name;
+            if (snapCarrier && !vfoLocked && ours && std::fabs(cur - snapStartFreq) > 1.0) {
+                snapPending = true;
+                snapClickOffset = vfo->getOffset();
+                snapReqTime = std::chrono::steady_clock::now();
+                snapStatus = "searching...";
+            }
+        }
+        if (!snapPending) { return; }
+        // a newer tune (frequency entry, another click) cancels the snap
+        if (std::fabs(vfo->getOffset() - snapClickOffset) > 1.0) { snapPending = false; snapStatus.clear(); return; }
+        double off = 0.0;
+        int r = bandMon.snapCarrier(snapClickOffset, off);
+        if (r == 1) {
+            if (std::chrono::duration<double>(std::chrono::steady_clock::now() - snapReqTime).count() > 4.0) {
+                snapPending = false;
+                snapStatus = "no samples";
+            }
+            return;
+        }
+        snapPending = false;
+        if (r == 2) { snapStatus = "no carrier near the click"; return; }
+        snapStatus.clear();
+        tuner::tune(tuner::TUNER_MODE_NORMAL, name, gui::waterfall.getCenterFrequency() + off);
+    }
+
     void controlLoops() {
         if (vfo && vfo->wtfVFO) { vfo->wtfVFO->positionLocked = enabled && vfoLocked; }
         if (!enabled) { return; }
+        snapLoop();
+        double propT = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (gps.isRunning() && propView.due(propT)) {
+            // propagation diagram: level / MER with position (only the locked cell, if locked)
+            GpsFix pf = gps.get();
+            TetraMeasSnapshot pm = meas.get();
+            bool cellOk = !meas.getCellLock().active || pm.cellMatch == 1;
+            float lv = (pm.valid && cellOk) ? pm.levelDbfs + levelCalEff : NAN;
+            float mr = (pm.valid && cellOk && pm.symSync) ? pm.merDb : NAN;
+            propView.feed(propT, pf.valid, pf.lat, pf.lon, lv, mr);
+        }
         {
             // dBm calibration follows the RF gain (difference from the gain table)
             float eff = levelCalDb;
@@ -2137,6 +2219,20 @@ private:
         }
         std::string st = mapExport.status();
         if (!st.empty()) { ImGui::TextWrapped("%s", st.c_str()); }
+
+        ImGui::Separator();
+        if (ImGui::TreeNode(CONCAT("Propagation diagram##_tetra_prop_", name))) {
+            if (propView.draw(name, ImGui::GetContentRegionAvail().x, levelCalEff != 0.0f)) {
+                config.acquire();
+                json& pp = config.conf[name]["prop"];
+                pp["bsValid"] = propView.bsValid;
+                pp["bsLat"] = propView.bsLat;
+                pp["bsLon"] = propView.bsLon;
+                pp["metric"] = propView.metric;
+                config.release(true);
+            }
+            ImGui::TreePop();
+        }
     }
 
     // ---------------- Constellation & floating windows ----------------
@@ -2518,11 +2614,11 @@ private:
             if (txa.isRunning()) { txa.stop(); }
             return;
         }
-        double off = vfo->wtfVFO->centerOffset;
+        double off = vfo->getOffset();   // same value as the other users of the shared tap
         if (!txa.isRunning()) {
             txa.setFftSize(4096 << txaFftIdx);
             txa.setAverages(txaAvg);
-            txa.start(name + " TX analysis", off);
+            txa.start(off);
         } else {
             txa.setOffset(off);
         }
@@ -2637,8 +2733,9 @@ private:
         }
         if (ImGui::Checkbox(CONCAT("Run analysis (250 kHz tap)##_tetra_txarun_", name), &txaRun)) { saveTxaConfig(); }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Separate 250 kHz wide tap around the TETRA channel (not shown on the waterfall).\n"
-                              "Costs some CPU; switch off when not needed.");
+            ImGui::SetTooltip("250 kHz wide tap around the TETRA channel (288 kS/s, not shown on the waterfall).\n"
+                              "Shared with modulation accuracy and multipath: one tap at the full SDR\n"
+                              "rate instead of one per analysis.");
         }
         if (!txaRun) {
             tw::TextDisabled("Spectrum, adjacent channel power, occupied bandwidth,\nshoulders and carrier leakage of the received carrier.");
@@ -2852,7 +2949,11 @@ private:
         b["stdMask"] = burstSt.stdMask;
         b["station"] = burstSt.station;
         b["msClass4"] = burstSt.msClass4;
+        b["msPowerKnown"] = burstSt.msPowerKnown;
+        b["msPowerDbm"] = burstSt.msPowerDbm;
         b["timing"] = burstSt.timing;
+        b["ulOnlyV222"] = true;
+        b["linStepDb"] = burstSt.linStepDb;
         b["transients"] = burstSt.transients;
         b["floorSpan"] = burstSt.floorSpan;
         config.release(true);
@@ -3062,7 +3163,9 @@ private:
     void drawBursts(float width) {
         TetraMeasSnapshot m = meas.get();
         bool run = burstRun;
-        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalEff, run)) {
+        SourceGainInterface* g = findGainInterface();
+        bool gainHeld = !autoGain || (gainHolding && !gainFollowNow()) || !(g && g->gainControllable());
+        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalEff, gainHeld, run)) {
             burstRun = run;
             saveBurstConfig();
         }
@@ -3840,6 +3943,7 @@ private:
     bool focusSubsWin = false;
     bool netDetached = false;
     bool focusNetWin = false;
+    TetraAnalysisTap anaTap;   // declared before its users: destroyed after them
     TetraTxAnalyzer txa;
     bool txaRun = false;
     bool txaDetached = false;
@@ -3874,6 +3978,11 @@ private:
     bool vemRun = true;
     bool chanRaster = true;   // 25 kHz channel boundaries around the TETRA channel in the spectrum
     bool vfoLocked = false;   // no mouse tuning of the TETRA VFO (drag pans the view)
+    bool snapCarrier = true;  // a mouse tune lands on the centre of the nearest carrier
+    bool snapMouseDown = false, snapPending = false;
+    double snapStartFreq = 0.0, snapClickOffset = 0.0;
+    std::chrono::steady_clock::time_point snapReqTime;
+    std::string snapStatus;
     bool startViewDone = false;
     EventHandler<ImGui::WaterFall::FFTRedrawArgs> fftRedrawHandler;
     bool mpRun = false, mpDetached = false, focusMpWin = false;
@@ -3927,6 +4036,7 @@ private:
     std::vector<std::string> gpsPorts;
     CoverageMapExporter mapExport;
     int mapMetric = 0;
+    TetraPropagationView propView;
     RadioIdDb radioid;
     float levelCalDb = 0.0f;
     float levelCalGainDb = NAN;   // RF gain (dB) when the calibration was entered

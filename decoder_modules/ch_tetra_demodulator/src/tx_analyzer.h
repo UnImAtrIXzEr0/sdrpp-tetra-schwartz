@@ -13,7 +13,7 @@
 
 #include <dsp/types.h>
 #include <dsp/stream.h>
-#include <dsp/sink/handler_sink.h>
+#include "analysis_tap.h"
 #include <signal_path/signal_path.h>
 #include <algorithm>
 #include <atomic>
@@ -56,18 +56,17 @@ struct TxAnalysisResult {
 
 class TetraTxAnalyzer {
 public:
-    static constexpr double FS = 250000.0;
+    static constexpr double FS = TetraAnalysisTap::FS;   // 288 kS/s from the shared tap
 
     ~TetraTxAnalyzer() { stop(); }
 
     bool isRunning() const { return running; }
 
     // name: unique DSP VFO name; offset: centre offset of the TETRA channel (Hz)
-    void start(const std::string& vfoName, double offset) {
-        if (running) { return; }
-        name = vfoName;
-        rxvfo = sigpath::iqFrontEnd.addVFO(name, FS, 230000.0, offset);
-        if (!rxvfo) { return; }
+    void setTap(TetraAnalysisTap* t) { tap = t; }
+
+    void start(double offset) {
+        if (running || !tap) { return; }
         curOffset = offset;
         {
             std::lock_guard<std::mutex> lck(ringMtx);
@@ -75,9 +74,7 @@ public:
             ringW = 0;
             ringFill = 0;
         }
-        if (!sinkInit) { sink.init(&rxvfo->out, handler, this); sinkInit = true; }
-        else { sink.setInput(&rxvfo->out); }
-        sink.start();
+        if (!tap->subscribe(this, false, handler, offset)) { return; }
         stopFlag = false;
         worker = std::thread(&TetraTxAnalyzer::work, this);
         running = true;
@@ -91,9 +88,7 @@ public:
         }
         cv.notify_all();
         if (worker.joinable()) { worker.join(); }
-        sink.stop();
-        sigpath::iqFrontEnd.removeVFO(name);
-        rxvfo = nullptr;
+        tap->unsubscribe(this);
         running = false;
         std::lock_guard<std::mutex> lck(resMtx);
         res = TxAnalysisResult();
@@ -101,10 +96,10 @@ public:
 
     // follow the TETRA VFO (AFC, retuning)
     void setOffset(double offset) {
-        if (!running || !rxvfo) { return; }
+        if (!running) { return; }
         if (std::fabs(offset - curOffset) < 0.5) { return; }
         curOffset = offset;
-        rxvfo->setOffset(offset);
+        tap->setOffset(offset);
         resetAverage();
     }
 
@@ -135,17 +130,17 @@ public:
 
 private:
     using Metrics = TxMath::Metrics;
-    static const size_t RING = 1 << 18;   // ~1 s at 250 kS/s
-    static const size_t LEAK_N = 1 << 16; // 3.8 Hz bins for the carrier line
+    static const size_t RING = 1 << 18;   // ~0.9 s at 288 kS/s
+    static const size_t LEAK_N = 1 << 16; // 4.4 Hz bins for the carrier line
 
-    static void handler(dsp::complex_t* data, int count, void* ctx) {
+    static void handler(const std::complex<float>* data, int count, void* ctx) {
         TetraTxAnalyzer* _this = (TetraTxAnalyzer*)ctx;
         std::lock_guard<std::mutex> lck(_this->ringMtx);
         float pk = _this->peakAcc;
         for (int i = 0; i < count; i++) {
-            _this->ring[_this->ringW] = std::complex<float>(data[i].re, data[i].im);
+            _this->ring[_this->ringW] = data[i];
             _this->ringW = (_this->ringW + 1) & (RING - 1);
-            float a = data[i].re * data[i].re + data[i].im * data[i].im;
+            float a = std::norm(data[i]);
             if (a > pk) { pk = a; }
         }
         _this->peakAcc = pk;
@@ -245,10 +240,7 @@ private:
         }
     }
 
-    std::string name;
-    dsp::channel::RxVFO* rxvfo = nullptr;
-    dsp::sink::Handler<dsp::complex_t> sink;
-    bool sinkInit = false;
+    TetraAnalysisTap* tap = nullptr;
     bool running = false;
     double curOffset = 0.0;
 

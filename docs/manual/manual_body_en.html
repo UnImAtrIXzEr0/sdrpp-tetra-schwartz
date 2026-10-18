@@ -66,7 +66,7 @@
 <figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Fig. 1 – Main window: the menu with the TETRA demodulator on the left, spectrum and waterfall with the TETRA VFO on the right.</figcaption></figure>
 
 <h3>How the program works</h3>
-<p>The SDR delivers a wide I/Q data stream. From it the program cuts several narrow “taps” (VFOs): the TETRA VFO for demodulator and decoder and – only when switched on – further, invisible taps for TX analysis, burst analysis, multipath and additional carriers. All taps must lie within the bandwidth of the SDR.</p>
+<p>The SDR delivers a wide I/Q data stream. From it the program cuts several narrow “taps” (VFOs): the TETRA VFO for demodulator and decoder and – only when switched on – further, invisible taps for TX analysis, burst analysis, multipath and additional carriers. All taps must lie within the bandwidth of the SDR. Every tap costs processing time at the full sample rate, so from v0.22.2 TX analysis, modulation accuracy and multipath share one analysis tap (288 kS/s, halved exactly to 144 kS/s for the latter two – passband ripple 0.0002 dB, stopband attenuation 100 dB; the results are the same as with separate taps).</p>
 <figure>
 <svg viewBox="0 0 860 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5a6774"/></marker></defs>
@@ -184,7 +184,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
   <li><b>Level:</b> as much gain as needed, as little as possible. <span class="ui">Auto RF gain</span> looks for the best signal-to-noise ratio: it steps up by 3 dB while the ratio still improves and steps back once the noise floor only rises with the gain. It goes down at once when any signal in the whole SDR band (not only TETRA) reaches the ADC limit. The <span class="ui">Band</span> line shows this peak and the ratio.</li>
   <li><b>Gain mode</b> (from v0.20.4): <span class="ui">Level and hold</span> finds the best step once and then keeps it fixed – all results of a measurement series are taken with the same receiver settings. If the ADC nears clipping or the ratio drops by more than 6 dB, a note appears; <span class="ui">Re-level</span> levels again. <span class="ui">Follow</span> adjusts continuously. <span class="ui">Automatic (GPS)</span> (default) follows while moving (GPS above 5 km/h, averaged over 10 s) and holds after 30 s standing still or without GPS. With a level calibration (dBm) it may follow as well: the program remembers the gain when the calibration is entered and corrects the level by the difference from the SDR's gain table (about ±1 dB, shown as "gain-corrected"). Older calibrations without a remembered gain ask to be entered again; until then it holds.</li>
-  <li><b>Lock VFO:</b> the mouse no longer tunes the TETRA VFO – clicking or dragging in the spectrum and waterfall only moves the view, the wheel and the arrow keys do nothing. AFC and frequency entry still work.</li>
+  <li><b>Lock VFO:</b> the mouse no longer tunes the TETRA VFO – clicking or dragging in the spectrum and waterfall only moves the view, the wheel and the arrow keys do nothing. AFC and frequency entry still work. From v0.22.2 the VFO also keeps its frequency when the view is dragged past the band edge and the SDR is retuned; the view stops before the VFO would leave the band.</li>
+  <li><b>Snap to carrier</b> (from v0.22.2, on by default): a click or drag that tunes the TETRA VFO ends on the centre of the strongest carrier within ±25 kHz – also with the view zoomed out. The program evaluates a spectrum of the raw samples around the click and puts the frequency on the 6.25 kHz raster when it is within 1 kHz of it. Without a recognisable carrier (at least 8 dB above the noise) the VFO stays where it is. Workflow: click the carrier, then tick <span class="ui">Lock VFO</span>.</li>
   <li><b>SDR line:</b> shows source and sample rate and recommends a range (tooltip). <span class="ui">Recommended view</span> sets the centre to 440 MHz − 0.45 × sample rate so the band ends just above 440 MHz; this also happens automatically at the very first start.</li>
   <li><b>Gain control locked:</b> while Auto RF gain is active, the gain control in the source menu is locked ("Locked by TETRA Auto RF gain"). <span class="ui">Release</span> switches the automatic gain off and frees the control.</li>
   <li><b>Warm-up:</b> wait 10–15 minutes after switching on before calibrating the frequency or measuring stability.</li>
@@ -196,7 +197,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>RTL-SDR</td><td>2.4 MS/s; <span class="ui">Tuner AGC</span> off; bias-T only for active antennas. Cheap sticks drift a lot – prefer TCXO models.</td><td>tuner gain steps; PPM correction (1 ppm steps)</td></tr>
 <tr><td>PlutoSDR / Zynq AD9363</td><td>3–5 MS/s (up to about 7 MS/s over USB 2.0 if the computer keeps up); gain mode <span class="ui">Manual</span>. <span class="ui">Overflows</span> counts lost samples and must stay at 0. A Pluto+ with an external 10 MHz reference is the best choice for frequency measurements.</td><td>gain in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
 <tr><td>Airspy</td><td>mode <span class="ui">Sensitive</span> or <span class="ui">Linear</span>; sample rate 3 or 10 MS/s.</td><td>steps 0–21; no frequency correction in the GUI</td></tr>
-<tr><td>USRP B2xx</td><td>sample rate 2–20 MS/s, choose antenna port RX2 or TX/RX accordingly; external reference possible.</td><td>gain in dB</td></tr>
+<tr><td>USRP B2xx</td><td>sample rate 2–20 MS/s, choose antenna port RX2 or TX/RX accordingly; external reference possible. Leave <span class="ui">Master Clock</span> at <span class="ui">Auto</span> (default from v0.22.2): the device divides the master clock by whole numbers only, with a fixed 16 MHz e.g. 14 MS/s is not possible and it would run at 16 MS/s. If the actual rate differs, the source shows it below the selection.</td><td>gain in dB</td></tr>
 <tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> only for weak signals (overload!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>BladeRF</td><td>gain mode <span class="ui">Manual</span>.</td><td>overall gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>LimeSDR</td><td>suitable antenna input (<code>LNAW</code> for 70 cm).</td><td>0–73 dB; <span class="ui">Freq. corr. (ppb)</span></td></tr>
@@ -291,7 +292,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <h1 id="s9"><span class="num">9</span>TX analysis (spectrum)</h1>
 <div class="cols">
 <div>
-<p><span class="ui">Run analysis (250 kHz tap)</span> starts a 250 kHz wide tap around the channel and measures:</p>
+<p><span class="ui">Run analysis (250 kHz tap)</span> uses the shared 250 kHz wide analysis tap around the channel and measures:</p>
 <ul>
   <li><b>Channel power</b> through the TETRA filter.</li>
   <li><b>ACP</b> at ±25, ±50, ±75 kHz in dBc, with (adjustable) limits.</li>
@@ -358,7 +359,11 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Outside the burst:</b> power before and after the burst (dBc) – limited by the receiver noise (“at the floor”).</li>
 </ul>
 <p>The chart shows the shape averaged over the last bursts with the <span class="ui">Time mask</span> (red). The mask values are adjustable and only guide values.</p>
-<h3>Timing relative to the downlink</h3>
+<h3>Measuring the uplink alone and checking linearity (default from v0.22.2)</h3>
+<p>The figures the standard defines for the mobile – power versus time, time mask, switching transients, power outside the burst, adjacent channel power and modulation accuracy – concern the transmitted signal only; they do not need the downlink. So <span class="ui">Timing vs. downlink</span> is now off by default, and the SDR can run on the uplink alone with a low sample rate (1–2 MS/s, source <span class="ui">Manual frequency</span>). This relieves the computer and avoids the dynamic range problem: the repeater a few kilometres away is weak, the nearby radio 60–80 dB stronger – more than a 12-bit converter handles at the same time.</p>
+<p>Without the downlink there is no reference for overload. Its place is taken by the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares: if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
+<p><b>Transmit power of the radio:</b> the absolute limits of the standard (−36 dBm for the power outside the burst and for switching transients) refer to the antenna connector of the radio. Over the air the received level says nothing about it (path loss). Under <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> enter the transmit power (e.g. 12.6 dBm for 18 mW, 32.6 dBm for 1.8 W); the dBc limit follows as Lmin = max(−70 dBc; −36 dBm − P). Without an entry −70 dBc applies.</p>
+<h3>Timing relative to the downlink (optional)</h3>
 <p>With <span class="ui">Timing vs. downlink</span> the program opens a second, sample-aligned tap on the TETRA VFO (downlink of the same cell), finds the slot grid there and measures when each burst rises after the start of its uplink timeslot. Most important is the <b>comparison between radios</b> and the spread; the absolute value also contains propagation differences (3.3 µs per km of detour).</p>
 </div>
 <div><figure><img src="shots/win_bursts.png"><figcaption>Fig. 10 – Burst analysis with profile, timing and ramp spectrum (synthetic test signal).</figcaption></figure></div>
@@ -469,6 +474,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>Open <code>…_level_map.html</code> with a double-click (internet connection needed for the map tiles). At the top right the layers <i>Points</i>, <i>Heatmap</i> and <i>No service only</i> can be switched; a click on a point shows time, level, MER, BER and CRC errors.</p>
 <h3>In Google Earth</h3>
 <p>Open <code>…_level.kml</code> in Google Earth (desktop, or web: <i>Projects → Import KML file</i>). Every point is coloured, the description contains the measured values. In Google Earth Pro the file can be combined with elevation profile and terrain.</p>
+<h3>Propagation diagram (from v0.22.2)</h3>
+<p>Under <span class="ui">GPS &amp; coverage map</span> → <span class="ui">Propagation diagram</span> enter the position of the base station (decimal degrees) or press <span class="ui">Use GPS position</span> next to it. While driving (GPS connected) the program takes 20 level values per second and forms a power average every 50 m travelled: the fast fading (half a wavelength, 35 cm) averages out, the local mean with the shadowing by terrain and buildings remains (Lee: 20–40 wavelengths are enough, 50 m are about 70 at 430 MHz). Standing still does not close a point. The polar plot shows the points around the base station (centre, north up) by distance and bearing; the scale follows the farthest point, the colour scale the smallest and largest value (<span class="ui">Level</span> or <span class="ui">MER</span>). With a locked cell (<span class="ui">Lock current cell</span>) only values of that cell count. The circle marks the current position; a tooltip shows distance, bearing, level and MER of the point under the mouse.</p>
 <h3>Own evaluations</h3>
 <p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route.</p>
 </div>
@@ -522,12 +529,13 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 </ol></div>
 
 <div class="scen"><h3>E · Checking a handheld (uplink)</h3>
-<div class="meta">Goal: burst shape, timing and splatter of a radio</div>
+<div class="meta">Goal: burst shape, time mask and splatter of a radio</div>
 <ol class="steps">
-  <li>Set the SDR so that downlink <i>and</i> uplink are within the bandwidth; TETRA VFO on the downlink, decoder locked.</li>
-  <li>Start <span class="ui">Burst analysis</span> with source <span class="ui">Uplink (SYSINFO)</span>, switch on <span class="ui">Timing vs. downlink</span> and <span class="ui">Ramp spectrum</span>.</li>
+  <li>Set the SDR to the uplink only (1–2 MS/s), attenuator in front of the SDR (18 mW at 1–3 m: about 20–35 dB). Source <span class="ui">Manual frequency</span> with the uplink frequency; hold the gain (<span class="ui">Level and hold</span>).</li>
+  <li>Start <span class="ui">Burst analysis</span>, switch on <span class="ui">Ramp spectrum</span>; enter the transmit power of the radio under <span class="ui">Time mask</span>.</li>
+  <li>Run the <span class="ui">Linearity check</span>; the figures are valid only once it reports “OK – linear”.</li>
   <li>Make a few transmissions with the radio (or send an SDS); receiver close to the radio (mind the attenuation!).</li>
-  <li>Check burst length, ramps, ripple and mask; compare timing and spread with other radios; look at the ramp spectrum for splatter.</li>
+  <li>Check burst length, ramps, ripple and mask; look at the ramp spectrum for splatter. Timing against the downlink needs an SDR span over both frequencies (≥ 12 MS/s) and similar levels – usually not needed.</li>
 </ol></div>
 
 <div class="scen"><h3>F · Hunting interference at the repeater receiver</h3>
@@ -568,6 +576,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
 <tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only (no timing reference to the downlink). The radio must be registered in trunked mode (TMO).</td></tr>
+<tr><td><span class="ui">Linearity check</span>: RECEIVER COMPRESSED</td><td>The burst power dropped by less than the added attenuation: the receiver was overloaded. Leave the attenuation in and check again with one more step until “OK – linear” appears.</td></tr>
 <tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>The downlink gets weaker during the bursts: the strong radio overloads the receiver (analog, before the ADC; lowering the gain in the software is often not enough). Increase the distance, add an attenuator (30–40 dB) or use a coupler and dummy load. Limit: 1 dB, averaged over 20 bursts; needs the downlink in the SDR span.</td></tr>
 <tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
 </table>

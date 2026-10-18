@@ -21,7 +21,7 @@
 #include <gui/style.h>
 #include <gui/main_window.h>
 #include <signal_path/signal_path.h>
-#include <dsp/sink/handler_sink.h>
+#include "analysis_tap.h"
 #include "tetra_colors.h"
 #include "tetra_layout.h"
 #include "etsi_vem.h"
@@ -33,7 +33,7 @@ public:
     static constexpr double FS = etsi_vem::FS;
 
     ~TetraVemAnalyzer() { stop(); }
-    void setName(const std::string& n) { name = n; }
+    void setTap(TetraAnalysisTap* t) { tap = t; }
     bool isRunning() const { return running; }
     std::string status;
 
@@ -46,12 +46,12 @@ public:
         status.clear();
         if (!enable) { stop(); return; }
         if (!sdr) { status = "SDR stopped"; stop(); return; }
-        if (!(sr > 0) || std::fabs(off) > sr / 2.0 - 20000.0) { status = "TETRA VFO outside the SDR span"; stop(); return; }
+        if (!(sr > 0) || std::fabs(off) > TetraAnalysisTap::maxOffset(sr)) { status = "TETRA VFO outside the SDR span"; stop(); return; }
         scrReq.store((mcc || mnc) ? ::tetra_scramb_get_init(mcc, mnc, cc) : 0u);
         if (!running) { start(off); }
         else if (std::fabs(off - curOffset) > 0.5) {
             curOffset = off;
-            vfo->setOffset(off);
+            tap->setOffset(off);
             if (std::fabs(off - resetOffset) > 2000.0) { resetOffset = off; resetReq.store(true); }   // retuned, not AFC
         }
     }
@@ -64,9 +64,7 @@ public:
         }
         cv.notify_all();
         if (worker.joinable()) { worker.join(); }
-        sink.stop();
-        sigpath::iqFrontEnd.removeVFO(name);
-        vfo = nullptr;
+        tap->unsubscribe(this);
         running = false;
         std::lock_guard<std::mutex> lck(resMtx);
         res = TetraVemResult();
@@ -147,7 +145,7 @@ private:
     static constexpr size_t RING = 1 << 20;
 
     void start(double off) {
-        vfo = sigpath::iqFrontEnd.addVFO(name, FS, 125000.0, off);
+        if (!tap) { return; }
         curOffset = off;
         resetOffset = off;
         {
@@ -155,9 +153,7 @@ private:
             ring.assign(RING, std::complex<float>(0.0f, 0.0f));
             wIdx = 0;
         }
-        if (!sinkInit) { sink.init(&vfo->out, handler, this); sinkInit = true; }
-        else { sink.setInput(&vfo->out); }
-        sink.start();
+        if (!tap->subscribe(this, true, handler, off)) { return; }
         {
             std::lock_guard<std::mutex> lck(cvMtx);
             stopFlag = false;
@@ -167,11 +163,11 @@ private:
         running = true;
     }
 
-    static void handler(dsp::complex_t* data, int count, void* ctx) {
+    static void handler(const std::complex<float>* data, int count, void* ctx) {
         TetraVemAnalyzer* _this = (TetraVemAnalyzer*)ctx;
         std::lock_guard<std::mutex> lck(_this->ringMtx);
         for (int i = 0; i < count; i++) {
-            _this->ring[(size_t)(_this->wIdx & (RING - 1))] = std::complex<float>(data[i].re, data[i].im);
+            _this->ring[(size_t)(_this->wIdx & (RING - 1))] = data[i];
             _this->wIdx++;
         }
     }
@@ -201,10 +197,7 @@ private:
         }
     }
 
-    std::string name = "TETRA modulation accuracy";
-    dsp::channel::RxVFO* vfo = nullptr;
-    dsp::sink::Handler<dsp::complex_t> sink;
-    bool sinkInit = false;
+    TetraAnalysisTap* tap = nullptr;
     bool running = false;
     double curOffset = 0.0, resetOffset = 0.0;
     std::mutex ringMtx;

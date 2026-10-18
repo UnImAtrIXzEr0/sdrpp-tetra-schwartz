@@ -11,6 +11,7 @@
 #include <mutex>
 #include <vector>
 #include <signal_path/signal_path.h>
+#include <gui/gui.h>
 #include <dsp/sink/handler_sink.h>
 #include "tx_analysis_math.h"
 
@@ -52,6 +53,10 @@ public:
         }
         res.peakDbfs = pk > 0.0f ? 20.0f * log10f(pk) : NAN;
         double fs = sigpath::iqFrontEnd.getEffectiveSamplerate();
+        // the block was collected right after the previous update: keep it with
+        // the centre frequency of that time for snapCarrier()
+        if (x.size() >= (size_t)NCOLLECT) { lastX = x; lastCenter = collectCenter; lastFs = fs; }
+        collectCenter = gui::waterfall.getCenterFrequency();
         if (x.size() >= (size_t)NCOLLECT && fs > 0) {
             std::vector<double> p;
             double enbw = 1.0;
@@ -86,6 +91,18 @@ public:
     }
 
     Result last() const { return res; }
+
+    // Snap to carrier: strongest TETRA-like signal (18 kHz occupied) within
+    // +-25 kHz of 'clickOffsetHz' (relative to the SDR centre). Spectrum of the
+    // last raw block evaluated directly around the click (Hann window, 500 Hz
+    // steps), centre from the power centroid, put on the 6.25 kHz raster when
+    // within 1 kHz of it. Returns 0 found, 1 no fresh block for this centre
+    // frequency yet (retry), 2 no carrier.
+    int snapCarrier(double clickOffsetHz, double& outOffsetHz) {
+        double center = gui::waterfall.getCenterFrequency();
+        if (lastX.empty() || !(lastFs > 0) || std::fabs(lastCenter - center) > 0.5) { return 1; }
+        return TxMath::findCarrier(lastX, lastFs, center, clickOffsetHz, outOffsetHz) ? 0 : 2;
+    }
 
 private:
     void start() {
@@ -137,5 +154,7 @@ private:
     float peak = 0.0f;
     bool collect = true;
     std::vector<std::complex<float>> buf;
+    std::vector<std::complex<float>> lastX;
+    double lastCenter = 0.0, collectCenter = 0.0, lastFs = 0.0;
     Result res;
 };

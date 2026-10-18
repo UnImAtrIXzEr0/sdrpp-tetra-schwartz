@@ -66,7 +66,7 @@
 <figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA-Demodulator, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
 
 <h3>Wie das Programm arbeitet</h3>
-<p>Das SDR liefert einen breiten I/Q-Datenstrom. Daraus schneidet das Programm mehrere schmale „Abgriffe“ (VFOs) heraus: den TETRA-VFO für Demodulator und Decoder, und – nur wenn eingeschaltet – weitere, unsichtbare Abgriffe für TX-Analyse, Burst-Analyse, Mehrwegeempfang und weitere Träger. Alle Abgriffe müssen innerhalb der Bandbreite des SDR liegen.</p>
+<p>Das SDR liefert einen breiten I/Q-Datenstrom. Daraus schneidet das Programm mehrere schmale „Abgriffe“ (VFOs) heraus: den TETRA-VFO für Demodulator und Decoder, und – nur wenn eingeschaltet – weitere, unsichtbare Abgriffe für TX-Analyse, Burst-Analyse, Mehrwegeempfang und weitere Träger. Alle Abgriffe müssen innerhalb der Bandbreite des SDR liegen. Jeder Abgriff kostet Rechenzeit bei der vollen Abtastrate; deshalb teilen sich TX-Analyse, Modulationsgenauigkeit und Mehrwegeempfang ab v0.22.2 einen gemeinsamen Analyse-Abgriff (288 kS/s, für die beiden letzten exakt auf 144 kS/s halbiert – Welligkeit im Durchlass 0,0002 dB, Sperrdämpfung 100 dB; die Messwerte sind dieselben wie mit eigenen Abgriffen).</p>
 <figure>
 <svg viewBox="0 0 860 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5a6774"/></marker></defs>
@@ -184,7 +184,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Mitte nicht auf den Träger legen:</b> Der Gleichanteil des SDR liegt in der Bandmitte. Den TETRA-Träger mindestens ~100 kHz daneben einstellen, sonst verfälscht er I/Q-Offset und Trägerrest.</li>
   <li><b>Pegel:</b> So viel Verstärkung wie nötig, so wenig wie möglich. <span class="ui">Auto RF gain</span> sucht den besten Signal-Rausch-Abstand: Es regelt in 3-dB-Schritten hoch, solange der Abstand noch steigt, und geht zurück, sobald der Rauschboden nur noch mitwächst. Sofort herunter geht es, wenn irgendein Signal im ganzen SDR-Band (nicht nur TETRA) die Wandlergrenze erreicht. Die Zeile <span class="ui">Band</span> zeigt diese Spitze und den Abstand.</li>
   <li><b>Betriebsart der Verstärkung</b> (ab v0.20.4): <span class="ui">Level and hold</span> sucht die beste Stufe einmal und hält sie dann fest – alle Messwerte einer Messreihe entstehen mit denselben Empfängereinstellungen. Nähert sich der Wandler der Begrenzung oder fällt der Abstand um mehr als 6 dB, erscheint ein Hinweis; <span class="ui">Re-level</span> pegelt neu ein. <span class="ui">Follow</span> regelt laufend nach. <span class="ui">Automatic (GPS)</span> (Standard) folgt bei Fahrt (GPS über 5 km/h, gemittelt über 10 s) und hält nach 30 s Stillstand oder ohne GPS. Mit Pegelkalibrierung (dBm) darf es ebenfalls folgen: Das Programm merkt sich die Verstärkung beim Eintragen der Kalibrierung und korrigiert den Pegel um die Differenz laut Gain-Tabelle des SDR (etwa ±1 dB, Anzeige „gain-corrected“). Bei älteren Kalibrierungen ohne gemerkte Verstärkung erscheint der Hinweis, sie neu einzutragen; bis dahin hält es.</li>
-  <li><b>Lock VFO:</b> Die Maus verstellt den TETRA-VFO nicht mehr – Klicken oder Ziehen im Spektrum und Wasserfall verschiebt nur die Ansicht, das Mausrad und die Pfeiltasten tun nichts. AFC und Frequenzeingabe wirken weiter.</li>
+  <li><b>Lock VFO:</b> Die Maus verstellt den TETRA-VFO nicht mehr – Klicken oder Ziehen im Spektrum und Wasserfall verschiebt nur die Ansicht, das Mausrad und die Pfeiltasten tun nichts. AFC und Frequenzeingabe wirken weiter. Ab v0.22.2 behält der VFO auch dann seine Frequenz, wenn man die Ansicht über den Bandrand hinaus zieht und das SDR dabei neu abgestimmt wird; die Ansicht bleibt stehen, bevor der VFO das Band verlassen würde.</li>
+  <li><b>Snap to carrier</b> (ab v0.22.2, Standard an): Ein Klick oder Ziehen, das den TETRA-VFO verstellt, endet auf der Mitte des stärksten Trägers innerhalb ±25 kHz – auch bei herausgezoomter Ansicht. Das Programm wertet dafür ein Spektrum der Rohdaten rund um den Klick aus und legt die Frequenz auf das 6,25-kHz-Raster, wenn sie höchstens 1 kHz daneben liegt. Ohne erkennbaren Träger (mindestens 8 dB über dem Rauschen) bleibt der VFO, wo er ist. Ablauf: Träger anklicken, dann <span class="ui">Lock VFO</span> setzen.</li>
   <li><b>SDR-Zeile:</b> zeigt Quelle und Abtastrate und empfiehlt einen Bereich (Tooltip). <span class="ui">Recommended view</span> stellt die Mitte auf 440 MHz − 0,45 × Abtastrate, sodass das Band knapp über 440 MHz endet; das geschieht auch automatisch beim allerersten Start.</li>
   <li><b>Gain-Regler gesperrt:</b> Solange Auto RF gain aktiv ist, ist der Gain-Regler unter Source gesperrt („Locked by TETRA Auto RF gain“). <span class="ui">Release</span> schaltet die Automatik ab und gibt den Regler frei.</li>
   <li><b>Aufwärmen:</b> Nach dem Einschalten 10–15 Minuten warten, bevor Frequenz kalibriert oder Stabilität gemessen wird.</li>
@@ -196,7 +197,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>RTL-SDR</td><td>2,4 MS/s; <span class="ui">Tuner AGC</span> aus; Bias-T nur für aktive Antennen. Günstige Sticks driften stark – TCXO-Modelle bevorzugen.</td><td>Stufen des Tuners; PPM-Korrektur (1-ppm-Schritte)</td></tr>
 <tr><td>PlutoSDR / Zynq AD9363</td><td>3–5 MS/s (bis etwa 7 MS/s über USB 2.0, wenn der Rechner mithält); Verstärkungsmodus <span class="ui">Manual</span>. <span class="ui">Overflows</span> zeigt verlorene Abtastwerte und muss 0 bleiben. Pluto+ mit externer 10-MHz-Referenz ist die beste Wahl für Frequenzmessungen.</td><td>Verstärkung in dB; <span class="ui">XO corr. (ppb)</span></td></tr>
 <tr><td>Airspy</td><td>Modus <span class="ui">Sensitive</span> oder <span class="ui">Linear</span>; Abtastrate 3 oder 10 MS/s.</td><td>Stufen 0–21; keine Frequenzkorrektur über die Oberfläche</td></tr>
-<tr><td>USRP B2xx</td><td>Abtastrate 2–20 MS/s, Antennenanschluss RX2 oder TX/RX passend wählen; externe Referenz möglich.</td><td>Verstärkung in dB</td></tr>
+<tr><td>USRP B2xx</td><td>Abtastrate 2–20 MS/s, Antennenanschluss RX2 oder TX/RX passend wählen; externe Referenz möglich. <span class="ui">Master Clock</span> auf <span class="ui">Auto</span> lassen (ab v0.22.2 Standard): Das Gerät teilt den Master Clock nur ganzzahlig, mit festen 16 MHz sind z. B. 14 MS/s nicht möglich und es liefe mit 16 MS/s. Weicht die tatsächliche Rate ab, zeigt die Quelle das unter der Auswahl an.</td><td>Verstärkung in dB</td></tr>
 <tr><td>HackRF</td><td>2–10 MS/s; <span class="ui">Amp Enabled</span> nur bei schwachen Signalen (Übersteuerung!).</td><td>LNA + VGA; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>BladeRF</td><td>Verstärkungsmodus <span class="ui">Manual</span>.</td><td>Gesamtverstärkung; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>LimeSDR</td><td>Antenne passend (<code>LNAW</code> für 70 cm).</td><td>0–73 dB; <span class="ui">Freq. corr. (ppb)</span></td></tr>
@@ -291,7 +292,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <h1 id="s9"><span class="num">9</span>TX-Analyse (Spektrum)</h1>
 <div class="cols">
 <div>
-<p><span class="ui">Run analysis (250 kHz tap)</span> startet einen 250 kHz breiten Abgriff um den Kanal und misst daraus:</p>
+<p><span class="ui">Run analysis (250 kHz tap)</span> nutzt den gemeinsamen, 250 kHz breiten Analyse-Abgriff um den Kanal und misst daraus:</p>
 <ul>
   <li><b>Channel power</b> durch das TETRA-Filter.</li>
   <li><b>ACP</b> bei ±25, ±50, ±75 kHz in dBc, mit Grenzwerten (einstellbar).</li>
@@ -358,7 +359,11 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   <li><b>Outside the burst:</b> Leistung vor und nach dem Burst (dBc) – begrenzt durch das Empfängerrauschen („at the floor“).</li>
 </ul>
 <p>Die Grafik zeigt die über die letzten Bursts gemittelte Form mit der <span class="ui">Time mask</span> (rot). Die Maskenwerte sind einstellbar und nur Richtwerte.</p>
-<h3>Zeitlage gegenüber dem Downlink</h3>
+<h3>Nur Uplink messen und Linearität prüfen (Standard ab v0.22.2)</h3>
+<p>Die Messgrößen der Norm für das Endgerät – Leistung über der Zeit, Zeitmaske, Schalttransienten, Leistung außerhalb des Bursts, Nachbarkanal und Modulationsgenauigkeit – betreffen nur das Sendesignal. Den Downlink braucht man dafür nicht. Deshalb ist <span class="ui">Timing vs. downlink</span> jetzt standardmäßig aus, und das SDR kann mit kleiner Abtastrate (1–2 MS/s) nur auf dem Uplink laufen (Quelle <span class="ui">Manual frequency</span>). Das entlastet den Rechner und vermeidet das Dynamikproblem: Das Relais in einigen Kilometern Entfernung ist schwach, das nahe Funkgerät 60–80 dB stärker – mehr, als ein 12-Bit-Wandler gleichzeitig verarbeiten kann.</p>
+<p>Ohne Downlink gibt es keine Bezugsgröße für die Übersteuerung. An ihre Stelle tritt die <span class="ui">Linearity check</span> (übliches Laborverfahren): Verstärkung des Empfängers halten (<span class="ui">Level and hold</span>), <span class="ui">Note level</span> drücken, vor dem SDR die eingestellte Dämpfung zusätzlich einsetzen (Standard 10 dB, externes Dämpfungsglied), <span class="ui">Attenuator added</span> drücken. Nach 20 Bursts vergleicht das Programm: Sinkt die Burstleistung um den Dämpfungswert ±0,5 dB, ist der Empfänger linear. Sinkt sie weniger, war er vorher übersteuert – Dämpfung drinlassen und mit einem weiteren Schritt erneut prüfen. Sinkt sie mehr, hat das Funkgerät seine Leistung geändert (Leistungsregelung) oder der Dämpfungswert stimmt nicht. Die Software-Verstärkung zu senken ist kein Ersatz: Sie prüft nur die Stufen hinter dem Abschwächer.</p>
+<p><b>Sendeleistung des Funkgeräts:</b> Die absoluten Grenzen der Norm (−36 dBm für die Leistung außerhalb des Bursts und für Schalttransienten) beziehen sich auf den Antennenanschluss des Funkgeräts. Über die Luft sagt der Empfangspegel darüber nichts aus (Streckendämpfung). Unter <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> trägt man die Sendeleistung ein (z. B. 12,6 dBm für 18 mW, 32,6 dBm für 1,8 W); daraus wird die dBc-Grenze: Lmin = max(−70 dBc; −36 dBm − P). Ohne Eintrag gilt −70 dBc.</p>
+<h3>Zeitlage gegenüber dem Downlink (optional)</h3>
 <p>Mit <span class="ui">Timing vs. downlink</span> öffnet das Programm einen zweiten, abtastgenau ausgerichteten Abgriff auf dem TETRA-VFO (Downlink derselben Zelle), findet dort das Zeitschlitzraster und misst, wann jeder Burst nach Beginn seines Uplink-Zeitschlitzes ansteigt. Wichtig ist vor allem der <b>Vergleich zwischen Geräten</b> und die Streuung; der Absolutwert enthält auch die Laufzeitunterschiede (3,3 µs je km Umweg).</p>
 </div>
 <div><figure><img src="shots/win_bursts.png"><figcaption>Abb. 10 – Burst-Analyse mit Profil, Zeitlage und Rampen-Spektrum (synthetisches Testsignal).</figcaption></figure></div>
@@ -469,6 +474,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p><code>…_level_map.html</code> mit einem Doppelklick öffnen (Internetverbindung für Kartenkacheln nötig). Oben rechts lassen sich die Ebenen <i>Points</i>, <i>Heatmap</i> und <i>No service only</i> umschalten; ein Klick auf einen Punkt zeigt Zeit, Pegel, MER, BER und CRC-Fehler.</p>
 <h3>In Google Earth</h3>
 <p><code>…_level.kml</code> in Google Earth (Desktop oder Web: <i>Projekte → KML-Datei importieren</i>) öffnen. Jeder Punkt ist farbig, die Beschreibung enthält die Messwerte. In Google Earth Pro lässt sich die Datei mit Höhenprofil und Gelände kombinieren.</p>
+<h3>Ausbreitungsdiagramm (ab v0.22.2)</h3>
+<p>Unter <span class="ui">GPS &amp; coverage map</span> → <span class="ui">Propagation diagram</span> die Position der Basisstation eintragen (Dezimalgrad) oder neben ihr <span class="ui">Use GPS position</span> drücken. Während der Fahrt (GPS verbunden) sammelt das Programm 20 Pegelwerte je Sekunde und bildet alle 50 m Fahrstrecke einen Mittelwert über die Leistung: Das schnelle Fading (halbe Wellenlänge, 35 cm) mittelt sich heraus, übrig bleibt der lokale Mittelwert mit der Abschattung durch Gelände und Gebäude (Lee: 20–40 Wellenlängen genügen, 50 m sind rund 70 bei 430 MHz). Stillstand schließt keinen Punkt ab. Das Polardiagramm zeigt die Punkte um die Basisstation (Mitte, Norden oben) nach Entfernung und Richtung; der Maßstab richtet sich nach dem entferntesten Punkt, die Farbskala nach dem kleinsten und größten Wert (<span class="ui">Level</span> oder <span class="ui">MER</span>). Bei gesperrter Zelle (<span class="ui">Lock current cell</span>) zählen nur Werte dieser Zelle. Der Kreis markiert die aktuelle Position, ein Tooltip zeigt Entfernung, Richtung, Pegel und MER des Punktes unter der Maus.</p>
 <h3>Eigene Auswertungen</h3>
 <p>Der CSV-Log (Spalten <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) lässt sich direkt in QGIS (<i>Getrennte Textdatei</i>, Trennzeichen Semikolon) oder einer Tabellenkalkulation öffnen, z. B. für eigene Heatmaps oder Profile entlang einer Strecke.</p>
 </div>
@@ -522,12 +529,13 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 </ol></div>
 
 <div class="scen"><h3>E · Handfunkgerät prüfen (Uplink)</h3>
-<div class="meta">Ziel: Burstform, Zeitlage und Splatter eines Endgeräts</div>
+<div class="meta">Ziel: Burstform, Zeitmaske und Splatter eines Endgeräts</div>
 <ol class="steps">
-  <li>SDR so einstellen, dass Downlink <i>und</i> Uplink in der Bandbreite liegen; TETRA-VFO auf den Downlink, Decoder eingerastet.</li>
-  <li><span class="ui">Burst analysis</span> mit Quelle <span class="ui">Uplink (SYSINFO)</span> starten, <span class="ui">Timing vs. downlink</span> und <span class="ui">Ramp spectrum</span> an.</li>
+  <li>SDR nur auf den Uplink stellen (1–2 MS/s), Dämpfungsglied vor dem SDR (bei 18 mW in 1–3 m Abstand etwa 20–35 dB). Quelle <span class="ui">Manual frequency</span> mit der Uplink-Frequenz; Verstärkung halten (<span class="ui">Level and hold</span>).</li>
+  <li><span class="ui">Burst analysis</span> starten, <span class="ui">Ramp spectrum</span> an; unter <span class="ui">Time mask</span> die Sendeleistung des Geräts eintragen.</li>
+  <li><span class="ui">Linearity check</span> durchführen; erst wenn sie „OK – linear“ meldet, sind die Werte gültig.</li>
   <li>Mit dem Gerät einige Durchgänge sprechen (oder SDS senden); Empfänger nahe am Gerät (Dämpfung beachten!).</li>
-  <li>Burstlänge, Rampen, Welligkeit und Maske prüfen; Zeitlage und Streuung mit anderen Geräten vergleichen; Rampen-Spektrum auf Splatter ansehen.</li>
+  <li>Burstlänge, Rampen, Welligkeit und Maske prüfen; Rampen-Spektrum auf Splatter ansehen. Die Zeitlage gegenüber dem Downlink braucht SDR-Spanne über beide Frequenzen (≥ 12 MS/s) und ähnliche Pegel – meist entbehrlich.</li>
 </ol></div>
 
 <div class="scen"><h3>F · Störungssuche am Relais-Empfänger</h3>
@@ -568,6 +576,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
 <tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
 <tr><td>Burst-Analyse findet keine Bursts</td><td>Uplink liegt außerhalb der SDR-Spanne (rote Meldung im Burst-Panel). Bei 9,4 MHz Duplexabstand braucht man mindestens 12 MS/s, Mitte zwischen Downlink und Uplink. Sonst Quelle <span class="ui">Manual frequency</span> und das SDR nur auf den Uplink stellen (ohne Zeitbezug zum Downlink). Das Funkgerät muss im Netzbetrieb (TMO) angemeldet sein.</td></tr>
+<tr><td><span class="ui">Linearity check</span>: RECEIVER COMPRESSED</td><td>Die Burstleistung ist um weniger als die zusätzliche Dämpfung gesunken: Der Empfänger war übersteuert. Dämpfung drinlassen und mit einem weiteren Schritt prüfen, bis „OK – linear“ erscheint.</td></tr>
 <tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>Der Downlink wird während der Bursts schwächer: Das starke Funkgerät übersteuert den Empfänger (analog, vor dem Wandler; die Software-Verstärkung zu senken reicht oft nicht). Abstand vergrößern, Abschwächer (30–40 dB) oder Auskoppler mit Dummy-Load. Grenze: 1 dB, gemittelt über 20 Bursts; braucht den Downlink in der SDR-Spanne.</td></tr>
 <tr><td>Pluto als Laufwerk sichtbar, aber nicht in SDR++</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span>.</td></tr>
 </table>

@@ -188,6 +188,10 @@ public:
         masterclocks_ui.clear();
         samplerates.clear();
 
+        // TETRA-SCHWARTZ: "Auto" (key 0) leaves the master clock to the driver, which
+        // picks one that the requested sample rate divides into (B2xx auto tick rate)
+        masterclocks_ui.define(0.0, "Auto", "Auto");
+
         // 1. Dynamic Master Clock Discovery Pass
         try {
             uhd::meta_range_t mcr_range = dev_ptr->get_master_clock_rate_range();
@@ -360,7 +364,7 @@ public:
         }
 
         // CLEANUP: Neutral, descriptive names replace the old hardcoded hifi leftovers
-        double targetMasterClock = dev_ptr->get_master_clock_rate();
+        double targetMasterClock = 0.0;   // Auto
         double targetSampleRate = sampleRate;
 
         if (config.conf["devices"][selectedSer].contains("master_clock_rate")) {
@@ -374,7 +378,7 @@ public:
         if (masterclocks_ui.keyExists(targetMasterClock)) {
             mcrId = masterclocks_ui.keyId(targetMasterClock);
         } else if (masterclocks_ui.size() > 0) {
-            mcrId = masterclocks_ui.keyId(dev_ptr->get_master_clock_rate());
+            mcrId = 0;   // Auto
         }
 
         if (samplerates.keyExists(targetSampleRate)) {
@@ -514,15 +518,20 @@ private:
         if (_this->masterclocks_ui.size() > 0) {
             try {
                 uhd::meta_range_t range = _this->dev->get_master_clock_rate_range();
-                if (std::abs(range.start() - range.stop()) > 1.0) {
-                    double clock_hz = _this->masterclocks_ui.key(_this->mcrId);
+                double clock_hz = _this->masterclocks_ui.key(_this->mcrId);
+                if (clock_hz > 0.0 && std::abs(range.start() - range.stop()) > 1.0) {
                     _this->dev->set_master_clock_rate(clock_hz);
                 }
             } catch (...) {}
         }
 
+        _this->requestedRate = _this->sampleRate;
         _this->dev->set_rx_rate(_this->sampleRate, _this->chanId);
         _this->sampleRate = std::round(_this->dev->get_rx_rate(_this->chanId));
+        try { _this->actualMasterClock = _this->dev->get_master_clock_rate(); } catch (...) { _this->actualMasterClock = 0.0; }
+        if (std::abs(_this->sampleRate - _this->requestedRate) > 1.0) {
+            flog::warn("USRP: requested {} S/s, the device runs at {} S/s (master clock {} Hz)", _this->requestedRate, _this->sampleRate, _this->actualMasterClock);
+        }
         core::setInputSampleRate(_this->sampleRate);
         _this->dev->set_rx_antenna(_this->antennas.key(_this->antId), _this->chanId);
         _this->dev->set_rx_gain(static_cast<double>(_this->gain), _this->chanId);
@@ -647,11 +656,16 @@ private:
                 if (_this->running && _this->dev) {
                     try {
                         uhd::meta_range_t range = _this->dev->get_master_clock_rate_range();
-                        if (std::abs(range.start() - range.stop()) > 1.0) {
-                            double clock_hz = _this->masterclocks_ui.key(_this->mcrId);
+                        double clock_hz = _this->masterclocks_ui.key(_this->mcrId);
+                        if (clock_hz > 0.0 && std::abs(range.start() - range.stop()) > 1.0) {
                             _this->dev->set_master_clock_rate(clock_hz);
                         }
                     } catch (...) {}
+                }
+                if (!_this->selectedSer.empty()) {
+                    config.acquire();
+                    config.conf["devices"][_this->selectedSer]["master_clock_rate"] = _this->masterclocks_ui.key(_this->mcrId);
+                    config.release(true);
                 }
             }
         }
@@ -675,6 +689,19 @@ private:
             _this->refresh();
             _this->select(_this->selectedSer);
             core::setInputSampleRate(_this->sampleRate);
+        }
+
+        // TETRA-SCHWARTZ: the device can only divide its master clock by whole numbers;
+        // show what it really runs at instead of the requested list entry
+        if (_this->running && _this->requestedRate > 0.0 && std::abs(_this->sampleRate - _this->requestedRate) > 1.0) {
+            SmGui::Text(("Runs at " + std::to_string((int)std::lround(_this->sampleRate / 1e3)) + " kS/s (master clock "
+                         + std::to_string((int)std::lround(_this->actualMasterClock / 1e3)) + " kHz)").c_str());
+            if (_this->masterclocks_ui.size() > 0 && _this->masterclocks_ui.key(_this->mcrId) > 0.0) {
+                SmGui::Text("Set Master Clock to Auto for the selected rate.");
+            }
+            else {
+                SmGui::Text("The selected rate is not possible with this device.");
+            }
         }
 
         if (_this->channels.size() > 1) {
@@ -822,7 +849,8 @@ private:
     int antId = 0;
     int bwId = 0;
     int csId = 0;
-    int mcrId = 0; 
+    int mcrId = 0;
+    double requestedRate = 0.0, actualMasterClock = 0.0; 
     std::string selectedSer = "";
     std::string selectedChan = "";
     float gain = 0.0f;

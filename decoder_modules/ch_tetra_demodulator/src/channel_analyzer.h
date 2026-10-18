@@ -22,7 +22,7 @@
 #include <gui/style.h>
 #include <gui/main_window.h>
 #include <signal_path/signal_path.h>
-#include <dsp/sink/handler_sink.h>
+#include "analysis_tap.h"
 #include "const_view.h"
 #include "tetra_colors.h"
 #include "tetra_layout.h"
@@ -40,7 +40,7 @@ public:
     static constexpr double FS = tetra_sp::FS;
 
     ~TetraChannelAnalyzer() { stop(); }
-    void setName(const std::string& n) { name = n; }
+    void setTap(TetraAnalysisTap* t) { tap = t; }
     bool isRunning() const { return running; }
     std::string status;
 
@@ -52,11 +52,11 @@ public:
         status.clear();
         if (!enable) { stop(); return; }
         if (!sdr) { status = "SDR stopped"; stop(); return; }
-        if (!(sr > 0) || std::fabs(off) > sr / 2.0 - 20000.0) { status = "TETRA VFO outside the SDR span"; stop(); return; }
+        if (!(sr > 0) || std::fabs(off) > TetraAnalysisTap::maxOffset(sr)) { status = "TETRA VFO outside the SDR span"; stop(); return; }
         if (!running) { start(off); }
         else if (std::fabs(off - curOffset) > 0.5) {
             curOffset = off;
-            vfo->setOffset(off);
+            tap->setOffset(off);
             if (std::fabs(off - resetOffset) > 2000.0) { resetOffset = off; resetReq.store(true); }   // retuned, not AFC
         }
     }
@@ -69,9 +69,7 @@ public:
         }
         cv.notify_all();
         if (worker.joinable()) { worker.join(); }
-        sink.stop();
-        sigpath::iqFrontEnd.removeVFO(name);
-        vfo = nullptr;
+        tap->unsubscribe(this);
         running = false;
         std::lock_guard<std::mutex> lck(resMtx);
         res = TetraChannelResult();
@@ -133,8 +131,7 @@ private:
     static const size_t RING = 1 << 18;
 
     void start(double off) {
-        vfo = sigpath::iqFrontEnd.addVFO(name, FS, 125000.0, off);
-        if (!vfo) { return; }
+        if (!tap) { return; }
         curOffset = off;
         resetOffset = off;
         {
@@ -143,20 +140,18 @@ private:
             wIdx = 0;
             filter.reset();
         }
-        if (!sinkInit) { sink.init(&vfo->out, handler, this); sinkInit = true; }
-        else { sink.setInput(&vfo->out); }
-        sink.start();
+        if (!tap->subscribe(this, true, handler, off)) { return; }
         stopFlag = false;
         resetReq.store(true);
         worker = std::thread(&TetraChannelAnalyzer::work, this);
         running = true;
     }
 
-    static void handler(dsp::complex_t* data, int count, void* ctx) {
+    static void handler(const std::complex<float>* data, int count, void* ctx) {
         TetraChannelAnalyzer* _this = (TetraChannelAnalyzer*)ctx;
         std::lock_guard<std::mutex> lck(_this->ringMtx);
         for (int i = 0; i < count; i++) {
-            _this->ring[(size_t)(_this->wIdx & (RING - 1))] = _this->filter.step(std::complex<float>(data[i].re, data[i].im));
+            _this->ring[(size_t)(_this->wIdx & (RING - 1))] = _this->filter.step(data[i]);
             _this->wIdx++;
         }
     }
@@ -290,10 +285,7 @@ private:
         }
     }
 
-    std::string name = "TETRA channel";
-    dsp::channel::RxVFO* vfo = nullptr;
-    dsp::sink::Handler<dsp::complex_t> sink;
-    bool sinkInit = false;
+    TetraAnalysisTap* tap = nullptr;
     bool running = false;
     double curOffset = 0.0, resetOffset = 0.0;
     std::mutex ringMtx;
