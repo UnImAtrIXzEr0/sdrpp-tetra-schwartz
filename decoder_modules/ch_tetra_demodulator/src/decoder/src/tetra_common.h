@@ -326,6 +326,12 @@ struct tetra_display_state {
 	int subscr_class;
 	int option_field;
 	uint32_t option_value;
+	/* algorithm seen in D-LOCATION UPDATE COMMAND (ciphering parameters,
+	 * EN 300 392-7 A.8.12 / A.8.41): display only, nothing is decrypted */
+	int ksg_valid;
+	int ksg_number;			/* 0 TEA1, 1 TEA2, 2 TEA3, 3 TEA4, 8..15 proprietary */
+	int ksg_sec_class;		/* 2 or 3 */
+	int64_t ksg_rx_time;
 	/* MLE D-NWRK-BROADCAST */
 	uint32_t nwrk_count;
 	int64_t nwrk_rx_time;	/* host time of the last one */

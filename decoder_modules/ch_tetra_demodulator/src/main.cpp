@@ -2992,10 +2992,43 @@ private:
             else if (ds && ds->cck_valid) { tw::SameTextColored(tc::warn(), "offered, CCK %d in use (security class 3)", ds->cck_id); }
             else { tw::SameTextColored(tc::warn(), "offered"); }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("From the cell broadcast (BS service details, CCK identifier in SYSINFO,\n"
-                                  "EN 300 392-2). This program does NOT decrypt: encrypted messages and calls\n"
-                                  "are only marked as encrypted. The algorithm (TEA1 ... TEA4) is not sent\n"
-                                  "on the downlink in normal operation and is therefore not shown.");
+                ImGui::SetTooltip("From the cell broadcast (D-MLE-SYSINFO air interface encryption service,\n"
+                                  "CCK identifier in SYSINFO, EN 300 392-2). This program does NOT decrypt:\n"
+                                  "encrypted messages and calls are only marked as encrypted.");
+            }
+            // Security information in the extended services broadcast of SYSINFO
+            // (EN 300 392-2 table 21.67, EN 300 392-7 V3.5.1 A.8.77 table A.104)
+            if (ds && ds->option_field == 3) {
+                uint32_t si = (ds->option_value >> 12) & 0xff;
+                bool auth = si & 0x80, sc1 = si & 0x40, sc3 = si & 0x20;
+                tw::Text("Security:");
+                tw::SameTextColored(tc::val(), "authentication %s", auth ? "required" : "not required");
+                if (air) {
+                    tw::SameTextColored(tc::val(), ", class 1 MS %s, class %d MS", sc1 ? "supported" : "not supported", sc3 ? 3 : 2);
+                    if (!sc3) { tw::SameTextColored(tc::val(), " (SCKN %u)", si & 0x1f); }
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Security information element of the cell (EN 300 392-7 A.8.77):\n"
+                                      "authentication, security class 1 support, class 2 (static cipher key)\n"
+                                      "or class 3 (dynamic / common cipher keys)%s.", sc3 ? "" : ", SCK number");
+                }
+            }
+            // algorithm: only sent on the downlink in D-LOCATION UPDATE COMMAND
+            if (ds && ds->ksg_valid) {
+                long ago = (long)(time(nullptr) - ds->ksg_rx_time);
+                char alg[48];
+                if (ds->ksg_number < 4) { snprintf(alg, sizeof(alg), "TEA%d", ds->ksg_number + 1); }
+                else { snprintf(alg, sizeof(alg), "%s %d", ds->ksg_number >= 8 ? "proprietary" : "reserved", ds->ksg_number); }
+                tw::Text("Algorithm:");
+                tw::SameTextColored(tc::warn(), "%s, security class %d", alg, ds->ksg_sec_class);
+                tw::SameTextDisabled("(seen %lds ago)", ago);
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("KSG number from the ciphering parameters of a D-LOCATION UPDATE COMMAND\n"
+                                      "(EN 300 392-7 A.8.12 / A.8.41). Indication only - nothing is decrypted.");
+                }
+            }
+            else if (air) {
+                tw::Text("Algorithm:"); tw::SameTextDisabled("not seen (sent on the downlink only in D-LOCATION UPDATE COMMAND)");
             }
             if (enc > 0) {
                 tw::TextColored(tc::warn(), "Encrypted PDUs seen: %llu", (unsigned long long)enc);

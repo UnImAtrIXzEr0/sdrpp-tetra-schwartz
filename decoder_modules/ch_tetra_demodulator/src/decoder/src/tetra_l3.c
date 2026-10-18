@@ -650,6 +650,27 @@ void tetra_l3_parse_tl_sdu(struct tetra_mac_state *tms, const uint8_t *bits, int
 		snprintf(ev.pdu, sizeof(ev.pdu), "%s", mm_name(t));
 		if (t == 5 || t == 10 || t == 11)
 			parse_mm_groups(&r, t, &ev);
+		if (t == 6) {	/* D-LOCATION UPDATE COMMAND (EN 300 392-2 16.9.2.8) */
+			get(&r, 1);				/* group identity report */
+			if (get(&r, 1) && !r.err) {		/* cipher control: ciphering on */
+				int ksg = (int)get(&r, 4);	/* EN 300 392-7 A.8.12 / A.8.41 */
+				int sc = (int)get(&r, 1) ? 3 : 2;
+				get(&r, 5);			/* SCKN (class 2) / class 3 flags */
+				if (!r.err && tms->t_display_st) {
+					struct tetra_display_state *d = tms->t_display_st;
+					d->ksg_valid = 1;
+					d->ksg_number = ksg;
+					d->ksg_sec_class = sc;
+					d->ksg_rx_time = (int64_t)time(NULL);
+				}
+				if (!r.err) {
+					if (ksg < 4) snprintf(ev.text, sizeof(ev.text), "ciphering on: TEA%d, security class %d (indication only)", ksg + 1, sc);
+					else snprintf(ev.text, sizeof(ev.text), "ciphering on: %s algorithm %d, security class %d (indication only)", ksg >= 8 ? "proprietary" : "reserved", ksg, sc);
+				}
+			} else if (!r.err) {
+				snprintf(ev.text, sizeof(ev.text), "ciphering off");
+			}
+		}
 		{
 			int o = 0;
 			if (t == 5) o = snprintf(ev.text, sizeof(ev.text), "registration accepted");
