@@ -2,7 +2,7 @@
 """Render the manual (cover + body) to PDF with playwright/chromium, German and English.
 Usage: python3 build_manual.py [output folder]
 Screenshots are expected in docs/manual/shots (branch doc-shots, see e2e/doc/doc_screenshots.py)."""
-import pathlib, sys
+import os, pathlib, sys
 from playwright.sync_api import sync_playwright
 from pypdf import PdfReader, PdfWriter
 
@@ -10,7 +10,7 @@ here = pathlib.Path(__file__).resolve().parent
 outdir = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else here)
 tmp = here / "_build"
 tmp.mkdir(exist_ok=True)
-VERSION = "v0.22.2-beta"
+VERSION = "v0.23.0-beta"
 
 LANGS = {
     "de": dict(cover="manual_cover.html", body="manual_body.html",
@@ -24,7 +24,9 @@ LANGS = {
 }
 
 with sync_playwright() as p:
-    b = p.chromium.launch()
+    # MANUAL_CHROME: use an installed Chrome/Chromium instead of the playwright download (CI)
+    exe = os.environ.get("MANUAL_CHROME") or None
+    b = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
     pg = b.new_page()
     for lang, c in LANGS.items():
         footer = ('<div style="width:100%;font-family:Inter,sans-serif;font-size:7.5pt;color:#5a6774;'

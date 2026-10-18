@@ -48,6 +48,13 @@ public:
         firstMenuRender = true;
     }
 
+    // TETRA-SCHWARTZ: a module can own a tile column to the right of the waterfall
+    // and a strip below it. The size variables belong to the module (it saves them);
+    // the splitters change them. An empty function removes the panel.
+    void setSidePanel(std::function<void()> drawFunc, float* width);
+    void setBottomPanel(std::function<void()> drawFunc, float* height);
+    bool splitterActive() const { return sideDrag || bottomDrag; }
+
     void addBottomWindow(std::string name, std::function<void()> drawFunc);
     void removeBottomWindow(std::string name);
     void updateBottomWindowLayout();
@@ -121,6 +128,11 @@ protected:
     };
 
     std::vector<ButtomWindow> bottomWindows;
+
+    std::function<void()> sidePanelFn, bottomPanelFn;
+    float* sidePanelW = nullptr;
+    float* bottomPanelH = nullptr;
+    bool sideDrag = false, bottomDrag = false;
 
     void drawDebugMenu();
 

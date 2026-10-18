@@ -221,6 +221,7 @@ public:
         if (config.conf[name].contains("gpsPort")) { gpsPort = config.conf[name]["gpsPort"]; }
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
+        loadTiles();
         if (config.conf[name].contains("prop") && config.conf[name]["prop"].is_object()) {
             json& pp = config.conf[name]["prop"];
             if (pp.contains("bsValid")) { propView.bsValid = pp["bsValid"]; }
@@ -334,6 +335,7 @@ public:
     }
 
     ~TetraDemodulatorModule() {
+        removePanels();
         gui::waterfall.onFFTRedraw.unbindHandler(&fftRedrawHandler);
         meas.stop();
         txa.stop();
@@ -388,6 +390,7 @@ public:
 
     void disable() {
         if (!enabled) { return; }
+        removePanels();
         bandMon.loop(false);
         if (SourceGainInterface* gi = findGainInterface()) { gi->gainLockedExt.store(false); }
 
@@ -482,6 +485,11 @@ public:
             bool on = (args == "1" || args == "true");
             constDetached = subsDetached = netDetached = txaDetached = on;
             trendDetached = carrDetached = burstDetached = mpDetached = on;
+            return "{\"status\": \"ok\"}";
+        }
+        if (cmd == "set_layout") {
+            // layout preset 0 classic, 1 measuring station, 2 drive test (applied in the GUI thread)
+            layoutReq.store(std::clamp(atoi(args.c_str()), 0, 3));
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -1039,15 +1047,15 @@ private:
             config.release(true);
         }
         if (tw::SameSmallButton(CONCAT("Layout...##_tetra_layout_", _this->name))) { ImGui::OpenPopup(CONCAT("##_tetra_layout_pop_", _this->name)); }
-        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Layout presets: put sections into tiled windows next to the waterfall"); }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Layout presets: sections as tiles in a column next to the waterfall"); }
         if (ImGui::BeginPopup(CONCAT("##_tetra_layout_pop_", _this->name))) {
             if (ImGui::MenuItem("Measuring station")) { _this->applyLayout(1); }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Constellation, measurements and stations (or trends) as tiles on the right"); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Constellation, measurements and trends as tiles on the right,\nstations & traffic below the waterfall (amateur radio mode)"); }
             if (ImGui::MenuItem("Drive test")) { _this->applyLayout(2); }
-            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("GPS / coverage map and measurements on the right, trends below"); }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("GPS / coverage map, measurements and trends as tiles on the right"); }
             if (ImGui::MenuItem("Classic (all in the menu)")) { _this->applyLayout(0); }
             ImGui::Separator();
-            tw::TextDisabled("Tiles can be moved and resized; choosing a\npreset again puts them back in place.");
+            tw::TextDisabled("Tile content: menu in each tile header. Sizes: drag\nthe dividers. Everything is kept for the next start;\n'Reset' in the tile column restores the preset.");
             ImGui::EndPopup();
         }
         if (_this->decoder_mode != 0) {
@@ -1516,6 +1524,7 @@ private:
 
     void controlLoops() {
         if (vfo && vfo->wtfVFO) { vfo->wtfVFO->positionLocked = enabled && vfoLocked; }
+        updatePanels();
         if (!enabled) { return; }
         snapLoop();
         double propT = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -1981,6 +1990,11 @@ private:
 
     void drawSection(int id, float menuWidth) {
         if (!sectionVisible(id)) { return; }
+        if (inTiles(id)) {
+            ImGuiTreeNodeFlags fl = (id == S_MEAS || id == S_CONST || id == S_NET || id == S_SUBS) ? ImGuiTreeNodeFlags_DefaultOpen : 0;
+            if (sectionHeader(id, (sectionLabel(id) + name).c_str(), fl)) { tw::TextDisabled("Shown in a tile next to the waterfall."); }
+            return;
+        }
         TetraDemodulatorModule* _this = this;
         switch (id) {
         case S_MEAS:
@@ -2266,6 +2280,7 @@ private:
     void setDetached(int id, bool on) {
         bool* f = detachFlag(id);
         if (!f) { return; }
+        if (on && inTiles(id)) { removeFromTiles(id); }
         *f = on;
         if (id == S_MP) { saveMpConfig(); }
         else {
@@ -2302,30 +2317,397 @@ private:
 
     // layout presets: which sections get their own window and where (fractions
     // of the main window's work area); the menu and waterfall stay on the left
+    // layout presets: start assignments of the tile column (right of the
+    // waterfall) and the strip below it; 0 = classic (everything in the menu)
     void applyLayout(int preset) {
         static const int all[] = { S_CONST, S_MEAS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_NET, S_SUBS, S_GPS };
-        layoutRects.clear();
         for (int id : all) { if (bool* f = detachFlag(id)) { if (*f) { setDetached(id, false); } } }
-        struct T { int id; const char* key; float x, y, w, h; };
-        std::vector<T> tiles;
-        if (preset == 1) {   // measuring station: constellation, measurements, stations / trends on the right
-            tiles = { { S_CONST, "const", 0.64f, 0.0f, 0.36f, 0.40f }, { S_MEAS, "meas", 0.64f, 0.40f, 0.36f, 0.34f },
-                      { hamMode ? S_SUBS : S_TREND, hamMode ? "subs" : "trend", 0.64f, 0.74f, 0.36f, 0.26f } };
+        tiles.clear();
+        tileBottom = false;
+        if (preset == 1) {   // measuring station
+            tiles = { { S_CONST, 0.42f }, { S_MEAS, 0.38f }, { S_TREND, 0.20f } };
+            tileBottom = hamMode;
         }
-        else if (preset == 2) {   // drive test: GPS / map and measurements on the right, trends below
-            tiles = { { S_GPS, "gps", 0.64f, 0.0f, 0.36f, 0.50f }, { S_MEAS, "meas", 0.64f, 0.50f, 0.36f, 0.50f },
-                      { S_TREND, "trend", 0.30f, 0.62f, 0.34f, 0.38f } };
+        else if (preset == 2) {   // drive test
+            tiles = { { S_GPS, 0.45f }, { S_MEAS, 0.35f }, { S_TREND, 0.20f } };
         }
-        for (auto& t : tiles) {
-            layoutRects[t.key] = { { t.x, t.y, t.w, t.h } };
-            setDetached(t.id, true);
+        else if (preset == 3) {   // touch: big values first
+            tiles = { { S_VALUES, 1.0f }, { S_CONST, 1.0f }, { S_MEAS, 1.0f }, { S_GPS, 1.0f }, { S_NET, 1.0f } };
         }
-        layoutFrames = 3;
+        tilePreset = preset;
+        saveTiles();
+        static const char* names[] = { "classic (all in the menu)", "measuring station", "drive test", "touch" };
+        meas.addEvent(std::string("Layout: ") + names[std::clamp(preset, 0, 3)]);
+    }
+
+    // ---------------- Tile column / strip below the waterfall ----------------
+
+    static constexpr int S_VALUES = 100;   // pseudo section: big value tiles
+    struct TileCfg { int sec; float w; };
+
+    bool tileable(int sec) {
+        switch (sec) {
+        case S_VALUES: case S_CONST: case S_MEAS: case S_TXA: case S_TREND: case S_CARR:
+        case S_BURST: case S_MP: case S_GPS: return true;
+        case S_NET: return decoder_mode == 0;
+        case S_SUBS: return decoder_mode == 0 && hamMode;
+        default: return false;
+        }
+    }
+    const char* tileTitle(int sec) {
+        switch (sec) {
+        case S_VALUES: return "Values (large)";
+        case S_CONST: return "Constellation";
+        case S_MEAS: return "Measurements";
+        case S_TXA: return "TX analysis";
+        case S_TREND: return "Trends & timeslots";
+        case S_CARR: return "Carriers";
+        case S_BURST: return "Burst analysis";
+        case S_MP: return "Multipath";
+        case S_GPS: return "GPS & coverage";
+        case S_NET: return "Network & cell";
+        case S_SUBS: return "Stations & Traffic";
+        default: return "?";
+        }
+    }
+    // menu header labels (same IDs as in drawSection)
+    std::string sectionLabel(int id) {
+        switch (id) {
+        case S_MEAS: return "Measurements##_tetra_meas_";
+        case S_CONST: return "Constellation##_tetra_const_";
+        case S_TXA: return "TX analysis (spectrum)##_tetra_txa_";
+        case S_TREND: return "Trends & timeslots##_tetra_trend_";
+        case S_CARR: return "Carriers (multi-carrier)##_tetra_carr_";
+        case S_BURST: return "Burst analysis (uplink)##_tetra_burst_";
+        case S_MP: return "Multipath (downlink)##_tetra_mp_";
+        case S_GPS: return "GPS & coverage map##_tetra_gps_";
+        case S_NET: return "Network & cell##_tetra_net_";
+        case S_SUBS: return "Stations & Traffic##_tetra_subs_";
+        default: return "?##_tetra_unk_";
+        }
+    }
+    bool bottomActive() { return tileBottom && tileable(S_SUBS); }
+    bool tilesActive() { return enabled && (!tiles.empty() || touch::enabled()); }
+    bool inTiles(int sec) {
+        if (!enabled) { return false; }
+        if (sec == S_SUBS && bottomActive()) { return true; }
+        if (tiles.empty() && !touch::enabled()) { return false; }
+        for (auto& t : tiles) { if (t.sec == sec && tileable(sec)) { return true; } }
+        return false;
+    }
+    void removeFromTiles(int sec) {
+        tiles.erase(std::remove_if(tiles.begin(), tiles.end(), [sec](const TileCfg& t) { return t.sec == sec; }), tiles.end());
+        if (sec == S_SUBS) { tileBottom = false; }
+        saveTiles();
+    }
+
+    void saveTiles() {
         config.acquire();
-        config.conf[name]["layoutPreset"] = preset;
+        json& t = config.conf[name]["tiles"];
+        t = json::object();
+        json arr = json::array();
+        for (auto& x : tiles) {
+            json e;
+            e["sec"] = x.sec == S_VALUES ? std::string("values") : std::string(sectionKey(x.sec));
+            e["w"] = x.w;
+            arr.push_back(e);
+        }
+        t["column"] = arr;
+        t["width"] = tileColW / style::uiScale;
+        t["bottom"] = tileBottom;
+        t["bottomHeight"] = tileBottomH / style::uiScale;
+        t["preset"] = tilePreset;
+        t["touchStep"] = touchStepIdx;
+        config.conf[name]["layoutPreset"] = tilePreset;
         config.release(true);
-        static const char* names[] = { "classic (all in the menu)", "measuring station", "drive test" };
-        meas.addEvent(std::string("Layout: ") + names[std::clamp(preset, 0, 2)]);
+        tilesDirty = false;
+    }
+
+    void loadTiles() {
+        json& c = config.conf[name];
+        if (!c.contains("tiles") || !c["tiles"].is_object()) {
+            // from v0.22: the presets opened own windows - turn them into tiles once
+            if (c.contains("layoutPreset")) {
+                int p = c["layoutPreset"];
+                if (p == 1 || p == 2) { tilesMigrate = p; }
+            }
+            return;
+        }
+        json& t = c["tiles"];
+        tiles.clear();
+        if (t.contains("column") && t["column"].is_array()) {
+            for (auto& e : t["column"]) {
+                if (!e.contains("sec")) { continue; }
+                std::string k = e["sec"];
+                int sec = -1;
+                if (k == "values") { sec = S_VALUES; }
+                for (int i = 0; i < S_COUNT; i++) { if (k == sectionKey(i)) { sec = i; } }
+                if (sec < 0) { continue; }
+                float w = e.contains("w") ? (float)e["w"] : 1.0f;
+                tiles.push_back({ sec, std::clamp(w, 0.02f, 50.0f) });
+            }
+        }
+        if (t.contains("width")) { tileColW = (float)t["width"] * style::uiScale; }
+        if (t.contains("bottom")) { tileBottom = t["bottom"]; }
+        if (t.contains("bottomHeight")) { tileBottomH = (float)t["bottomHeight"] * style::uiScale; }
+        if (t.contains("preset")) { tilePreset = t["preset"]; }
+        if (t.contains("touchStep")) { touchStepIdx = std::clamp((int)t["touchStep"], 0, 4); }
+    }
+
+    // every frame (GUI thread): register / remove the panels in the main window
+    void updatePanels() {
+        if (tilesMigrate > 0) { int p = tilesMigrate; tilesMigrate = 0; applyLayout(p); }
+        { int lr = layoutReq.exchange(-1); if (lr >= 0) { applyLayout(lr); } }
+        if (touch::enabled() && enabled && tiles.empty()) { applyLayout(3); }
+        bool side = tilesActive();
+        bool bottom = enabled && bottomActive() && !touch::enabled();
+        if (side != sideRegistered) {
+            if (side) { gui::mainWindow.setSidePanel([this]() { drawSidePanel(); }, &tileColW); }
+            else { gui::mainWindow.setSidePanel(nullptr, nullptr); }
+            sideRegistered = side;
+        }
+        if (bottom != bottomRegistered) {
+            if (bottom) { gui::mainWindow.setBottomPanel([this]() { drawBottomPanel(); }, &tileBottomH); }
+            else { gui::mainWindow.setBottomPanel(nullptr, nullptr); }
+            bottomRegistered = bottom;
+        }
+        // splitters of the main window changed a size: save once the mouse is released
+        if ((side || bottom) && gui::mainWindow.splitterActive()) { tilesDirty = true; }
+        if (tilesDirty && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) { saveTiles(); }
+    }
+    void removePanels() {
+        if (sideRegistered) { gui::mainWindow.setSidePanel(nullptr, nullptr); sideRegistered = false; }
+        if (bottomRegistered) { gui::mainWindow.setBottomPanel(nullptr, nullptr); bottomRegistered = false; }
+    }
+
+    void drawTileBody(int sec, float w, float h) {
+        switch (sec) {
+        case S_VALUES: drawBigValues(w); break;
+        case S_CONST: {
+            drawConstellationOptions("t");
+            float side = (std::min)(w, (std::max)(80.0f * style::uiScale, h - ImGui::GetFrameHeightWithSpacing() * 1.5f));
+            float x0 = ImGui::GetCursorPosX();
+            if (w > side) { ImGui::SetCursorPosX(x0 + (w - side) * 0.5f); }
+            drawConstellation(side);
+            break;
+        }
+        case S_MEAS: drawMeasWindow(w); break;
+        case S_TXA: drawTxAnalysis(w); break;
+        case S_TREND: drawTrends(w); break;
+        case S_CARR: drawCarriers(w); break;
+        case S_BURST: drawBursts(w); break;
+        case S_MP: { bool was = mpRun; drawMultipath(w); if (was != mpRun) { saveMpConfig(); } break; }
+        case S_GPS: drawGpsCoverage(w); break;
+        case S_NET: drawNetworkBody(w); break;
+        case S_SUBS: drawSubscribersBody(w, 0); break;
+        default: break;
+        }
+    }
+
+    // tile header: section choice, close; returns false if the tile was closed
+    bool tileHeader(int i) {
+        std::string id = std::to_string(i) + "_" + name;
+        float bw = ImGui::GetFrameHeight();
+        ImGui::SetNextItemWidth((std::max)(60.0f, ImGui::GetContentRegionAvail().x - bw - ImGui::GetStyle().ItemSpacing.x));
+        if (ImGui::BeginCombo(("##_tile_sec_" + id).c_str(), tileTitle(tiles[i].sec))) {
+            static const int order[] = { S_VALUES, S_CONST, S_MEAS, S_NET, S_SUBS, S_TXA, S_TREND, S_CARR, S_BURST, S_MP, S_GPS };
+            for (int sec : order) {
+                if (!tileable(sec)) { continue; }
+                bool used = false;
+                for (size_t k = 0; k < tiles.size(); k++) { if (k != (size_t)i && tiles[k].sec == sec) { used = true; } }
+                if (sec == S_SUBS && bottomActive()) { used = true; }
+                if (ImGui::Selectable(tileTitle(sec), tiles[i].sec == sec, used ? ImGuiSelectableFlags_Disabled : 0)) {
+                    if (bool* f = detachFlag(sec)) { if (*f) { setDetached(sec, false); } }
+                    tiles[i].sec = sec;
+                    saveTiles();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(("x##_tile_close_" + id).c_str(), ImVec2(bw, bw))) {
+            tiles.erase(tiles.begin() + i);
+            saveTiles();
+            return false;
+        }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Close this tile (the section goes back into the menu)"); }
+        return true;
+    }
+
+    void addTile() {
+        static const int order[] = { S_CONST, S_MEAS, S_NET, S_TREND, S_GPS, S_TXA, S_CARR, S_BURST, S_MP, S_SUBS, S_VALUES };
+        for (int sec : order) {
+            if (!tileable(sec) || inTiles(sec)) { continue; }
+            if (bool* f = detachFlag(sec)) { if (*f) { setDetached(sec, false); } }
+            float w = 0.0f;
+            for (auto& t : tiles) { w += t.w; }
+            tiles.push_back({ sec, tiles.empty() ? 1.0f : w / tiles.size() });
+            saveTiles();
+            return;
+        }
+    }
+
+    void drawSidePanel() {
+        if (touch::enabled()) { drawTouchPanel(); return; }
+        const float split = 6.0f * style::uiScale;
+        // tool row
+        if (ImGui::SmallButton(CONCAT("+ Tile##_tile_add_", name))) { addTile(); }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Add a tile below (choose its content in the tile header)"); }
+        if (hamMode && decoder_mode == 0) {
+            ImGui::SameLine();
+            bool b = tileBottom;
+            if (ImGui::Checkbox(CONCAT("Stations below##_tile_bottom_", name), &b)) {
+                if (b) { removeFromTiles(S_SUBS); if (subsDetached) { setDetached(S_SUBS, false); } }
+                tileBottom = b;
+                saveTiles();
+            }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Stations & Traffic as a wide strip below the waterfall"); }
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton(CONCAT("Reset##_tile_reset_", name))) { applyLayout(tilePreset); }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Back to the chosen layout preset (Layout... in the TETRA menu)"); }
+        // drop sections that are not available in the current mode (e.g. NETSYMS)
+        std::vector<int> vis;
+        for (size_t i = 0; i < tiles.size(); i++) { if (tileable(tiles[i].sec)) { vis.push_back((int)i); } }
+        if (vis.empty()) {
+            tw::TextDisabled("No tiles. Add one with '+ Tile' or choose a\nlayout preset (Layout... in the TETRA menu).");
+            return;
+        }
+        float avail = ImGui::GetContentRegionAvail().y - split * (vis.size() - 1);
+        float wsum = 0.0f;
+        for (int i : vis) { wsum += tiles[i].w; }
+        const float minH = ImGui::GetFrameHeightWithSpacing() * 2.0f;
+        for (size_t n = 0; n < vis.size(); n++) {
+            int i = vis[n];
+            float h = (std::max)(minH, avail * tiles[i].w / wsum);
+            if (n + 1 == vis.size()) { h = 0.0f; }   // last one takes the rest
+            std::string cid = "##_tile_" + std::to_string(i) + "_" + name;
+            ImGui::BeginChild(cid.c_str(), ImVec2(0, h), true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            bool alive = tileHeader(i);
+            if (alive) {
+                ImGui::BeginChild((cid + "_body").c_str(), ImVec2(0, 0), false);
+                ImVec2 a = ImGui::GetContentRegionAvail();
+                drawTileBody(tiles[i].sec, a.x, a.y);
+                touch::dragScroll();
+                ImGui::EndChild();
+            }
+            ImGui::EndChild();
+            if (!alive) { return; }   // indices changed: redraw next frame
+            if (n + 1 < vis.size()) {
+                int j = vis[n + 1];
+                ImGui::InvisibleButton((cid + "_split").c_str(), ImVec2(ImGui::GetContentRegionAvail().x, split));
+                bool hov = ImGui::IsItemHovered(), act = ImGui::IsItemActive();
+                if (hov || act) { ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS); }
+                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                                                         ImGui::GetColorU32(act ? ImGuiCol_SeparatorActive : hov ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+                if (act) {
+                    float dy = ImGui::GetIO().MouseDelta.y;
+                    float dw = dy / (std::max)(1.0f, avail) * wsum;
+                    float lo = minH / (std::max)(1.0f, avail) * wsum;
+                    if (tiles[i].w + dw < lo) { dw = lo - tiles[i].w; }
+                    if (tiles[j].w - dw < lo) { dw = tiles[j].w - lo; }
+                    tiles[i].w += dw;
+                    tiles[j].w -= dw;
+                    tilesDirty = true;
+                }
+            }
+        }
+    }
+
+    void drawBottomPanel() {
+        ImVec2 a = ImGui::GetContentRegionAvail();
+        tw::Text("Stations & Traffic");
+        ImGui::SameLine();
+        if (ImGui::SmallButton(CONCAT("x##_tile_bclose_", name))) { tileBottom = false; saveTiles(); return; }
+        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Close the strip (back into the menu)"); }
+        ImGui::BeginChild(CONCAT("##_tile_bottom_body_", name), ImVec2(0, 0), false);
+        drawSubscribersBody(a.x, 0);
+        touch::dragScroll();
+        ImGui::EndChild();
+    }
+
+    // ---------------- Touch layout: tabs, large values, frequency keys ----------------
+
+    void drawBigValues(float w) {
+        TetraMeasSnapshot m = meas.get();
+        bool cal = levelCalEff != 0.0f;
+        GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
+        char v[6][48];
+        snprintf(v[0], 48, m.valid ? (cal ? "%.1f dBm" : "%.1f dBFS") : "--", m.levelDbfs + (cal ? levelCalEff : 0.0f));
+        snprintf(v[1], 48, (m.valid && m.symSync) ? "%.1f dB" : "--", m.merDb);
+        snprintf(v[2], 48, (m.valid && m.symSync) ? "%.1f %%" : "--", m.evmPct);
+        if (m.absErrValid) { snprintf(v[3], 48, "%+.0f Hz", m.absErrHz); }
+        else if (m.valid && m.symSync) { snprintf(v[3], 48, "%+.0f Hz*", m.carrierOffsetHz); }
+        else { snprintf(v[3], 48, "--"); }
+        snprintf(v[4], 48, "%d", (int)subscribers.snapshot().size());
+        if (!gps.isRunning()) { snprintf(v[5], 48, "off"); }
+        else if (!g.valid) { snprintf(v[5], 48, "no fix (%d sat)", g.sats); }
+        else { snprintf(v[5], 48, "fix, %d sat", g.sats); }
+        static const char* keys[6] = { "Level", "MER", "Decoder EVM", "Freq. error", "Stations", "GPS" };
+        static const char* tips[6] = { nullptr, nullptr, nullptr,
+                                       "Carrier frequency against the frequency announced by the cell (SYSINFO).\n* = against the TETRA VFO only (no SYSINFO yet).",
+                                       "Stations seen since the start (amateur radio mode).",
+                                       "GPS receiver: fix and satellites." };
+        int cols = w > 360.0f * style::uiScale ? 2 : 1;
+        float cw = (w - (cols - 1) * ImGui::GetStyle().ItemSpacing.x) / cols;
+        for (int k = 0; k < 6; k++) {
+            if (k % cols != 0) { ImGui::SameLine(); }
+            ImGui::BeginChild((std::string("##_bigv_") + std::to_string(k) + name).c_str(), ImVec2(cw, ImGui::GetFontSize() * 4.2f), true, ImGuiWindowFlags_NoScrollbar);
+            tw::TextDisabled("%s", keys[k]);
+            float bs = ImGui::GetFrameHeight() * 1.2f;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - bs - ImGui::GetStyle().ItemSpacing.x);
+            ImGui::SmallButton((std::string("i##_bigvi_") + std::to_string(k) + name).c_str());
+            bool tipHere = ImGui::IsItemHovered() || ImGui::IsItemActive();
+            if (tipHere) {
+                if (k == 0) { ImGui::SetTooltip("%s", tetra_help::text(tetra_help::LEVEL)); }
+                else if (k == 1 || k == 2) { ImGui::SetTooltip("%s", tetra_help::text(tetra_help::MER)); }
+                else { ImGui::SetTooltip("%s", tips[k]); }
+            }
+            ImGui::PushFont(style::bigFont);
+            ImGui::TextColored(tc::val(), "%s", v[k]);
+            ImGui::PopFont();
+            ImGui::EndChild();
+        }
+    }
+
+    void drawTouchPanel() {
+        static const double steps[5] = { 6250.0, 12500.0, 25000.0, 100000.0, 1000000.0 };
+        static const char* stepTxt = "6.25 kHz\0" "12.5 kHz\0" "25 kHz\0" "100 kHz\0" "1 MHz\0";
+        float bh = ImGui::GetFrameHeight() * 1.6f;
+        // frequency keys
+        if (vfo) {
+            double f = mainVfoFreq();
+            double st = steps[std::clamp(touchStepIdx, 0, 4)];
+            if (ImGui::Button(CONCAT("-##_touch_fdn_", name), ImVec2(bh * 1.3f, bh))) { tuner::tune(tuner::TUNER_MODE_NORMAL, name, std::round(f / st) * st - st); }
+            ImGui::SameLine();
+            ImGui::PushFont(style::bigFont);
+            ImGui::Text("%.4f", f / 1e6);
+            ImGui::PopFont();
+            ImGui::SameLine();
+            if (ImGui::Button(CONCAT("+##_touch_fup_", name), ImVec2(bh * 1.3f, bh))) { tuner::tune(tuner::TUNER_MODE_NORMAL, name, std::round(f / st) * st + st); }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth((std::max)(70.0f * style::uiScale, ImGui::GetContentRegionAvail().x));
+            if (ImGui::Combo(CONCAT("##_touch_step_", name), &touchStepIdx, stepTxt)) { saveTiles(); }
+        }
+        std::vector<int> vis;
+        for (size_t i = 0; i < tiles.size(); i++) { if (tileable(tiles[i].sec)) { vis.push_back((int)i); } }
+        if (vis.empty()) { return; }
+        touchTab = std::clamp(touchTab, 0, (int)vis.size() - 1);
+        float tabH = ImGui::GetFrameHeight() * 1.8f;
+        ImGui::BeginChild(CONCAT("##_touch_body_", name), ImVec2(0, -(tabH + ImGui::GetStyle().ItemSpacing.y)), true);
+        ImVec2 a = ImGui::GetContentRegionAvail();
+        drawTileBody(tiles[vis[touchTab]].sec, a.x, a.y);
+        touch::dragScroll();
+        ImGui::EndChild();
+        // tabs at the bottom
+        float tw_ = (ImGui::GetContentRegionAvail().x - (vis.size() - 1) * ImGui::GetStyle().ItemSpacing.x) / vis.size();
+        for (size_t n = 0; n < vis.size(); n++) {
+            if (n > 0) { ImGui::SameLine(); }
+            bool act = (int)n == touchTab;
+            if (act) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+            if (ImGui::Button((std::string(tileTitle(tiles[vis[n]].sec)) + "##_touch_tab_" + std::to_string(n) + name).c_str(), ImVec2(tw_, tabH))) { touchTab = (int)n; }
+            if (act) { ImGui::PopStyleColor(); }
+        }
     }
 
     void drawConstellation(float width) {
@@ -3525,6 +3907,10 @@ private:
     // ---------------- Subscribers (amateur radio mode) ----------------
 
     void drawSubscribers(float menuWidth) {
+        if (inTiles(S_SUBS)) {
+            if (sectionHeader(S_SUBS, (sectionLabel(S_SUBS) + name).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) { tw::TextDisabled("Shown in a tile."); }
+            return;
+        }
         if (!sectionHeader(S_SUBS, CONCAT("Stations & Traffic##_tetra_subs_", name), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
         if (subsDetached) {
             tw::TextDisabled("Shown in its own window.");
@@ -4036,6 +4422,15 @@ private:
     std::vector<std::string> gpsPorts;
     CoverageMapExporter mapExport;
     int mapMetric = 0;
+    std::vector<TileCfg> tiles;   // tile column right of the waterfall, top to bottom
+    float tileColW = 440.0f;      // px (saved without the UI scale)
+    bool tileBottom = false;      // Stations & Traffic as a strip below the waterfall
+    float tileBottomH = 220.0f;
+    int tilePreset = 0;
+    int tilesMigrate = 0;
+    bool tilesDirty = false, sideRegistered = false, bottomRegistered = false;
+    int touchTab = 0, touchStepIdx = 2;
+    std::atomic<int> layoutReq { -1 };
     TetraPropagationView propView;
     RadioIdDb radioid;
     float levelCalDb = 0.0f;

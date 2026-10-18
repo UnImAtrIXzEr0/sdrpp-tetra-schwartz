@@ -123,6 +123,27 @@ jobs:
             git -c user.name=UnImAtrIXzEr0 -c user.email=UnImAtrIXzEr0@users.noreply.github.com commit -qm "Screenshots for the manual"
             git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" doc-shots
 
+        - name: Manuals (PDF, German and English)
+          continue-on-error: true
+          run: |
+            python3 -m pip install -q --break-system-packages playwright pypdf || python3 -m pip install -q playwright pypdf
+            mkdir -p docs/manual/shots manuals
+            if ls docshots/*.png > /dev/null 2>&1; then cp docshots/*.png docs/manual/shots/
+            else
+              git fetch -q origin doc-shots:refs/remotes/origin/doc-shots && git archive refs/remotes/origin/doc-shots | tar -x -C docs/manual/shots || true
+            fi
+            MANUAL_CHROME="$(command -v google-chrome || command -v chromium || true)" python3 docs/manual/build_manual.py "$PWD/manuals"
+            ls -la manuals
+
+        - name: Save manuals
+          if: always()
+          continue-on-error: true
+          uses: actions/upload-artifact@v4
+          with:
+              name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_manuals_pdf
+              path: manuals/*.pdf
+              if-no-files-found: ignore
+
     build_windows:
         if: ${{ !contains(github.ref_name, 'macos') }}
         runs-on: windows-2022

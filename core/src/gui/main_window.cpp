@@ -808,11 +808,23 @@ void MainWindow::draw() {
     displaymenu::checkKeybinds();
 
     // Left Column
+    // TETRA-SCHWARTZ: optional tile column on the right (4th column after the sliders)
+    const float splitW = 6.0f * style::uiScale;
+    bool haveSide = sidePanelFn && sidePanelW;
+    float sideW = 0.0f;
+    if (haveSide) {
+        float leftW = (showMenu ? menuWidth : 8.0f * style::uiScale) + 60.0f * style::uiScale;
+        float maxW = (std::max)(160.0f * style::uiScale, (float)winSize.x - leftW - 250.0f * style::uiScale);
+        *sidePanelW = std::clamp<float>(*sidePanelW, 160.0f * style::uiScale, maxW);
+        sideW = *sidePanelW + splitW;
+    }
+    const int nCols = haveSide ? 4 : 3;
     if (showMenu) {
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(nCols, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
+        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (60.0f * style::uiScale) - sideW, 100.0f * style::uiScale));
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
 
         ImGui::BeginChild("Left Column");
 
@@ -850,10 +862,11 @@ void MainWindow::draw() {
     }
     else {
         // When hiding the menu bar
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(nCols, "WindowColumns", false);
         ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - ((8 + 60) * style::uiScale));
+        ImGui::SetColumnWidth(1, winSize.x - ((8 + 60) * style::uiScale) - sideW);
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
     }
 
     // Right Column
@@ -864,10 +877,32 @@ void MainWindow::draw() {
     this->displayVariousWindows();
 
 
+    // TETRA-SCHWARTZ: optional strip below the waterfall
+    bool haveBottom = bottomPanelFn && bottomPanelH;
+    float bottomH = 0.0f;
+    if (haveBottom) {
+        float hAvail = ImGui::GetContentRegionAvail().y;
+        *bottomPanelH = std::clamp<float>(*bottomPanelH, 60.0f * style::uiScale, (std::max)(60.0f * style::uiScale, hAvail - 200.0f * style::uiScale));
+        bottomH = *bottomPanelH;
+    }
+    auto splitter = [&](const char* id, ImVec2 size, bool vertical, bool& drag, float* value, float sign) {
+        ImGui::InvisibleButton(id, size);
+        bool hov = ImGui::IsItemHovered(), act = ImGui::IsItemActive();
+        if (hov || act) { ImGui::SetMouseCursor(vertical ? ImGuiMouseCursor_ResizeNS : ImGuiMouseCursor_ResizeEW); }
+        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddRectFilled(a, b, ImGui::GetColorU32(act ? ImGuiCol_SeparatorActive : hov ? ImGuiCol_SeparatorHovered : ImGuiCol_Separator));
+        drag = act;
+        if (act) {
+            ImVec2 d = ImGui::GetIO().MouseDelta;
+            *value += sign * (vertical ? d.y : d.x);
+        }
+    };
+
     ImVec2 wfSize = ImVec2(0, 0);
     if (!bottomWindows.empty()) {
         wfSize.y -= bottomWindows[0].size.y;
     }
+    if (haveBottom) { wfSize.y -= bottomH + splitW; }
     ImGui::BeginChild("Waterfall", wfSize);
 
     gui::waterfall.draw();
@@ -876,6 +911,16 @@ void MainWindow::draw() {
     ImGui::EndChild();
 
     this->handleWaterfallInput(vfo);
+
+    if (haveBottom) {
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+        splitter("##_bottom_panel_split", ImVec2(ImGui::GetContentRegionAvail().x, splitW), true, bottomDrag, bottomPanelH, -1.0f);
+        ImGui::PopStyleVar();
+        ImGui::BeginChild("BottomPanel", ImVec2(0, 0), false);
+        bottomPanelFn();
+        ImGui::EndChild();
+    }
+    else { bottomDrag = false; }
 
     ImGui::NextColumn();
     ImGui::BeginChild("WaterfallControls");
@@ -965,6 +1010,17 @@ void MainWindow::draw() {
     }
 
     ImGui::EndChild();
+
+    if (haveSide) {
+        ImGui::NextColumn();
+        float h = ImGui::GetContentRegionAvail().y;
+        splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW, -1.0f);
+        ImGui::SameLine(0, 0);
+        ImGui::BeginChild("SidePanel", ImVec2(0, h), false);
+        sidePanelFn();
+        ImGui::EndChild();
+    }
+    else { sideDrag = false; }
 
     this->drawBottomWindows(0);
 
@@ -1264,6 +1320,16 @@ void MainWindow::handleWaterfallInput(ImGui::WaterfallVFO* vfo) {
             core::configManager.release(true);
         }
     }
+}
+
+void MainWindow::setSidePanel(std::function<void()> drawFunc, float* width) {
+    sidePanelFn = drawFunc;
+    sidePanelW = drawFunc ? width : nullptr;
+}
+
+void MainWindow::setBottomPanel(std::function<void()> drawFunc, float* height) {
+    bottomPanelFn = drawFunc;
+    bottomPanelH = drawFunc ? height : nullptr;
 }
 
 void MainWindow::drawBottomWindows(int dy) {
