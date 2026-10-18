@@ -9,6 +9,7 @@
 #include <complex>
 #include <cstdint>
 #include <deque>
+#include <map>
 #include <vector>
 #include "tx_analysis_math.h"
 
@@ -45,6 +46,13 @@ struct TetraBurstResult {
     int transN = 0;
     float transDbc[3][5] = {};
     float transFloorDbc[5] = {};
+    // switching transients as in EN 300 392-2 6.4.2.2.2 / EN 300 394-1 7.1.4:
+    // peak power through the TETRA filter at -25 / +25 kHz over the ramp-up
+    // [0] and ramp-down [1] period, maximum hold since the last reset (dBc
+    // relative to the mean channel power of the useful part)
+    bool transPeakValid = false;
+    float transPeakDbc[2][2] = { { NAN, NAN }, { NAN, NAN } };
+    float transPeakFloorDbc = NAN;   // the same detector on a quiet stretch
     // receiver overload check (needs the DL tap): downlink power during the
     // bursts relative to just before / after them. A continuous downlink must
     // not change; a drop means the strong burst compresses the receiver.
@@ -69,6 +77,10 @@ public:
         for (auto& v : transFloorAcc) { v = 0.0; }
         transCount = 0;
         transFloorCount = 0;
+        for (auto& w : peakHold) { for (auto& v : w) { v = 0.0; } }
+        peakFloor = 0.0;
+        peakRef = 0.0;
+        peakN = 0;
         desenseDbAvg = 0.0;
         desenseCount = 0;
         acc = TetraBurstResult();
@@ -141,6 +153,10 @@ public:
                     if (!chanPowers(k, cp)) { break; }
                     for (int o = 0; o < 5; o++) { transFloorAcc[o] += cp[o]; }
                     transFloorCount++;
+                    {
+                        double pf = (std::max)(peakPower(k, k + TRANS_N, -25000.0), peakPower(k, k + TRANS_N, 25000.0));
+                        peakFloor = (std::max)(peakFloor, pf);
+                    }
                     break;
                 }
             }
@@ -201,6 +217,11 @@ public:
             acc.desenseValid = desenseCount >= 3;
             acc.desenseN = desenseCount;
             acc.desenseDb = (float)desenseDbAvg;
+        }
+        if (peakN > 0) {
+            acc.transPeakValid = true;
+            for (int r = 0; r < 2; r++) { for (int o = 0; o < 2; o++) { acc.transPeakDbc[r][o] = (float)(10.0 * std::log10((std::max)(peakHold[r][o], 1e-30))); } }
+            acc.transPeakFloorDbc = (peakFloor > 0.0 && peakRef > 0.0) ? (float)(10.0 * std::log10(peakFloor / peakRef)) : NAN;
         }
         if (transCount > 0) {
             acc.transValid = true;
@@ -281,6 +302,23 @@ private:
                 for (int w = 0; w < 3; w++) { for (int o = 0; o < 5; o++) { transAcc[w][o] += cp[w][o]; } }
                 transCount++;
             }
+            // peak (max hold) through the TETRA filter over t1 / t3 (16 / 15
+            // symbols, table 6.8) plus 2 symbols, and the mean channel power of
+            // the useful part as reference
+            {
+                const size_t s8 = (size_t)(FS / SYM);
+                double ref = meanPower(a50 + 4 * s8, b50 > 4 * s8 ? b50 - 4 * s8 : b50);
+                if (ref > 0.0 && a50 > 18 * s8) {
+                    size_t u0 = a50 - 18 * s8, u1 = a50 + 2 * s8, d0 = b50 > 2 * s8 ? b50 - 2 * s8 : b50, d1 = b50 + 17 * s8;
+                    double pk[2][2] = { { peakPower(u0, u1, -25000.0), peakPower(u0, u1, 25000.0) },
+                                        { peakPower(d0, d1, -25000.0), peakPower(d0, d1, 25000.0) } };
+                    if (pk[0][0] >= 0.0 && pk[1][1] >= 0.0) {
+                        for (int r = 0; r < 2; r++) { for (int o = 0; o < 2; o++) { peakHold[r][o] = (std::max)(peakHold[r][o], pk[r][o] / ref); } }
+                        peakRef = peakN ? peakRef + (ref - peakRef) / (peakN + 1) : ref;
+                        peakN++;
+                    }
+                }
+            }
         }
     }
 
@@ -348,6 +386,65 @@ private:
 
     // channel powers (TETRA filter weighting) at TRANS_OFF in a TRANS_N window
     // starting at filtered index k (raw samples)
+    // TETRA filter (root raised cosine 0.35, 33 symbols) for the peak detector
+    const std::vector<float>& rrc() {
+        if (rrcTaps.empty()) {
+            const int sps = 8, n = 33 * sps + 1;
+            const double a = 0.35;
+            rrcTaps.resize(n);
+            double sum = 0.0;
+            for (int i = 0; i < n; i++) {
+                double t = (double)(i - n / 2) / sps, v;
+                if (std::fabs(t) < 1e-9) { v = 1.0 - a + 4.0 * a / TxMath::PI; }
+                else if (std::fabs(std::fabs(t) - 1.0 / (4.0 * a)) < 1e-9) {
+                    v = a / std::sqrt(2.0) * ((1 + 2 / TxMath::PI) * std::sin(TxMath::PI / (4 * a)) + (1 - 2 / TxMath::PI) * std::cos(TxMath::PI / (4 * a)));
+                }
+                else { v = (std::sin(TxMath::PI * t * (1 - a)) + 4 * a * t * std::cos(TxMath::PI * t * (1 + a))) / (TxMath::PI * t * (1 - (4 * a * t) * (4 * a * t))); }
+                rrcTaps[i] = (float)v;
+                sum += v;
+            }
+            for (auto& v : rrcTaps) { v = (float)(v / sum); }
+        }
+        return rrcTaps;
+    }
+    // |y|^2 through the TETRA filter centred at offset 'f' at the filtered-sample position k (x indices)
+    double filtPower(long r, double f) {
+        // taps shifted to the offset (the common phase drops out of |y|^2)
+        int key = (int)std::lround(f);
+        std::vector<std::complex<float>>& hc = rrcShift[key];
+        if (hc.empty()) {
+            const std::vector<float>& h = rrc();
+            hc.resize(h.size());
+            for (size_t j = 0; j < h.size(); j++) { hc[j] = std::polar(h[j], (float)(-2.0 * TxMath::PI * f * (double)j / FS)); }
+        }
+        const long n = (long)hc.size(), half = n / 2;
+        if (r - half < 0 || r + half >= (long)curRaw->size()) { return -1.0; }
+        std::complex<float> acc(0.0f, 0.0f);
+        const std::complex<float>* x = &(*curRaw)[(size_t)(r - half)];
+        for (long j = 0; j < n; j++) { acc += hc[j] * x[j]; }
+        return (double)std::norm(acc);
+    }
+    // maximum over x indices [k0, k1) (every sample), -1 if outside the raw buffer
+    double peakPower(size_t k0, size_t k1, double f) {
+        if (!curRaw) { return -1.0; }
+        double mx = -1.0;
+        for (size_t k = k0; k < k1; k++) { mx = (std::max)(mx, filtPower((long)k - curRawDelay, f)); }
+        return mx;
+    }
+    // mean at offset 0 over x indices [k0, k1), every symbol
+    double meanPower(size_t k0, size_t k1) {
+        if (!curRaw || k1 <= k0) { return -1.0; }
+        double s = 0.0;
+        int n = 0;
+        for (size_t k = k0; k < k1; k += 8) {
+            double p = filtPower((long)k - curRawDelay, 0.0);
+            if (p < 0.0) { return -1.0; }
+            s += p;
+            n++;
+        }
+        return n ? s / n : -1.0;
+    }
+
     bool chanPowers(size_t k, double out[5]) {
         if (!curRaw) { return false; }
         long r0 = (long)k - curRawDelay;
@@ -386,6 +483,11 @@ private:
     double transFloorAcc[5] = {};
     int transCount = 0, transFloorCount = 0;
     std::vector<float> transWin;
+    std::vector<float> rrcTaps;
+    std::map<int, std::vector<std::complex<float>>> rrcShift;
+    double peakHold[2][2] = {};
+    double peakFloor = 0.0, peakRef = 0.0;
+    int peakN = 0;
 
     std::vector<double> prof[2];   // 0 full slot, 1 half slot (linear, normalised per burst)
     double pbAvg[2] = { 0.0, 0.0 };

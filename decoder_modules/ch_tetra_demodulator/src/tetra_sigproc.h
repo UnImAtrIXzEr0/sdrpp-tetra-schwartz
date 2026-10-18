@@ -54,6 +54,49 @@ namespace tetra_sp {
         int pos = 0;
     };
 
+    // TETRA filter of the sampling system (EN 300 394-1 B.1.2.2): root raised
+    // cosine 0.35, 'span' symbols (>= 30), unity DC gain
+    inline std::vector<float> rrcTaps(int span = 33, int sps = SPS) {
+        const double a = 0.35;
+        int n = span * sps + 1;
+        std::vector<float> h(n);
+        double sum = 0.0;
+        for (int i = 0; i < n; i++) {
+            double t = (double)(i - n / 2) / sps, v;
+            if (std::fabs(t) < 1e-9) { v = 1.0 - a + 4.0 * a / PI_D; }
+            else if (std::fabs(std::fabs(t) - 1.0 / (4.0 * a)) < 1e-9) {
+                v = a / std::sqrt(2.0) * ((1 + 2 / PI_D) * std::sin(PI_D / (4 * a)) + (1 - 2 / PI_D) * std::cos(PI_D / (4 * a)));
+            }
+            else { v = (std::sin(PI_D * t * (1 - a)) + 4 * a * t * std::cos(PI_D * t * (1 + a))) / (PI_D * t * (1 - (4 * a * t) * (4 * a * t))); }
+            h[i] = (float)v;
+            sum += v;
+        }
+        for (auto& v : h) { v = (float)(v / sum); }
+        return h;
+    }
+
+    // streaming FIR with real taps (keeps its state), delay = half the length
+    class StreamFir {
+    public:
+        explicit StreamFir(std::vector<float> t) : taps(std::move(t)) { hist.assign(2 * taps.size(), std::complex<float>(0.0f, 0.0f)); }
+        int delay() const { return (int)taps.size() / 2; }
+        void reset() { std::fill(hist.begin(), hist.end(), std::complex<float>(0.0f, 0.0f)); pos = 0; }
+        std::complex<float> step(std::complex<float> x) {
+            const int n = (int)taps.size();
+            hist[pos] = x;
+            hist[pos + n] = x;
+            pos = (pos + 1) % n;
+            float re = 0.0f, im = 0.0f;
+            const std::complex<float>* h = &hist[pos];
+            for (int i = 0; i < n; i++) { re += taps[n - 1 - i] * h[i].real(); im += taps[n - 1 - i] * h[i].imag(); }
+            return std::complex<float>(re, im);
+        }
+    private:
+        std::vector<float> taps;
+        std::vector<std::complex<float>> hist;
+        int pos = 0;
+    };
+
     // pi/4-DQPSK phase change for a dibit (EN 300 392-2: 00 +pi/4, 01 +3pi/4, 11 -3pi/4, 10 -pi/4)
     inline double dphi(int b1, int b2) {
         if (!b1 && !b2) { return PI_D / 4; }

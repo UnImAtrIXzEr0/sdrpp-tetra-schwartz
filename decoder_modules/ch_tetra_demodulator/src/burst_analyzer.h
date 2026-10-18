@@ -36,13 +36,16 @@
 struct TetraBurstSettings {
     int source = 0;            // 0 uplink from SYSINFO, 1 manual frequency, 2 TETRA VFO frequency
     double manualMHz = 430.0;
-    int averages = 20;
+    int averages = 200;        // EN 300 394-1 8.4: average power vs. time over 200 bursts
     float maskRippleDb = 1.0f; // useful part within +-ripple of the burst power
     float maskOffDbc = -40.0f; // before the ramp-up and after the ramp-down
     float maskRampSym = 5.0f;  // max. ramp time (-20 dBc ... -1 dBc) in symbols
     bool timing = true;        // burst timing against the downlink slot grid (2nd tap on the TETRA VFO)
     bool transients = true;    // spectrum during the ramps
     int floorSpan = 0;         // history of the uplink noise: 0 10 min, 1 1 h, 2 6 h, 3 24 h
+    bool stdMask = true;       // time mask of EN 300 392-2 6.4.5 (table 6.8) instead of the user mask
+    int station = 0;           // 0 mobile station (uplink), 1 base station in discontinuous mode
+    bool msClass4 = false;     // MS power class 4 / 4L (transient limit -45 dBc instead of -50 dBc)
 };
 
 class TetraBurstAnalyzer {
@@ -225,6 +228,7 @@ public:
             tw::SameTextColored(val, "%.1f sym = %.2f ms", r.lengthSym, r.lengthSym / SYM * 1e3);
             tw::SameTextDisabled("(nominal %.0f sym)", nominal);
         }
+        if (st.stdMask) { drawStdMask(id, r, st, levelCal); }
         tw::Text("Ramp up:");
         if (!std::isnan(r.riseSym)) { tw::SameTextColored(mark(r.riseSym <= st.maskRampSym), "%.1f sym (%.0f us)", r.riseSym, r.riseSym / SYM * 1e6); }
         else { tw::SameTextDisabled("--"); }
@@ -246,7 +250,7 @@ public:
         }
         drawProfile(id, width, pal, r, st);
         if (st.timing) { drawTiming(id, width, pal, r); }
-        if (st.transients) { drawTransients(id, width, r); }
+        if (st.transients) { drawTransientPeak(r, st); drawTransients(id, width, r); }
         if (ImGui::TreeNode(("Time mask##_ba_mask_" + id).c_str())) {
             ImGui::SetNextItemWidth(90.0f * style::uiScale);
             if (ImGui::InputFloat(("Ripple +- dB##_ba_mr_" + id).c_str(), &st.maskRippleDb, 0.1f, 0.5f, "%.1f")) { st.maskRippleDb = std::clamp(st.maskRippleDb, 0.1f, 10.0f); changed = true; }
@@ -254,7 +258,11 @@ public:
             if (ImGui::InputFloat(("Outside dBc##_ba_mo_" + id).c_str(), &st.maskOffDbc, 1.0f, 5.0f, "%.0f")) { st.maskOffDbc = std::clamp(st.maskOffDbc, -90.0f, -10.0f); changed = true; }
             ImGui::SetNextItemWidth(90.0f * style::uiScale);
             if (ImGui::InputFloat(("Ramp max. sym##_ba_mrs_" + id).c_str(), &st.maskRampSym, 0.5f, 2.0f, "%.1f")) { st.maskRampSym = std::clamp(st.maskRampSym, 0.5f, 40.0f); changed = true; }
-            tw::TextDisabled("User mask. The defaults are guide values only -\nplease check them against the standard.");
+            tw::TextDisabled("User mask (ripple, outside level, -20/-1 dBc ramp time).");
+            if (ImGui::Checkbox(("Check against EN 300 392-2 6.4.5##_ba_std_" + id).c_str(), &st.stdMask)) { changed = true; }
+            ImGui::SetNextItemWidth(200.0f * style::uiScale);
+            if (ImGui::Combo(("Station##_ba_sta_" + id).c_str(), &st.station, "Mobile station (uplink)\0Base station, discontinuous\0")) { changed = true; }
+            if (ImGui::Checkbox(("MS power class 4 / 4L##_ba_c4_" + id).c_str(), &st.msClass4)) { changed = true; }
             ImGui::TreePop();
         }
         return changed;
@@ -262,6 +270,88 @@ public:
 
 private:
     static const size_t RING = 1 << 18;   // 1.8 s
+
+    // time mask of EN 300 392-2 V3.8.1 6.4.5 (figure 6.3, table 6.8) on the
+    // averaged profile (EN 300 394-1 8.4: average power vs. time over the bursts)
+    void drawStdMask(const std::string& id, const TetraBurstResult& r, const TetraBurstSettings& st, float levelCal) {
+        (void)id;
+        ImVec4 val = tc::val(), good = tc::good(), bad = tc::bad();
+        const auto& p = r.profileDbc;
+        const int n = (int)p.size();
+        if (n < 100) { return; }
+        const double s8 = r.fs / SYM;
+        // durations in symbols: t1, t2, t3
+        int t1 = 16, t2 = r.fromHalf ? 103 : 231, t3 = 15;
+        if (st.station == 1) { t1 = 7; t2 = 246; t3 = 7; }
+        // -3 dB points of the averaged profile, burst centre, SN0 / SNmax
+        int a = (int)std::lround(r.preS * r.fs);
+        a = std::clamp(a, 1, n - 2);
+        int b = n - 1;
+        while (b > a && p[b] < -3.0f) { b--; }
+        if (b <= a + 20) { return; }
+        double c = 0.5 * (a + b);
+        double sn0 = c - 0.5 * t2 * s8, snmax = c + 0.5 * t2 * s8;
+        int i1 = (int)std::floor(sn0 - t1 * s8), i3 = (int)std::ceil(snmax + t3 * s8);
+        // Lmin: BS -40 dBc; MS -70 dBc or -36 dBm, whichever is greater (needs dBm)
+        float lmin = st.station == 1 ? -40.0f : -70.0f;
+        if (st.station == 0 && levelCal != 0.0f) { lmin = (std::max)(lmin, -36.0f - (r.powerDbfs + levelCal)); }
+        float pkT1 = -200.0f, pkT3 = -200.0f, outBefore = -200.0f, outAfter = -200.0f;
+        for (int k = 0; k < n; k++) {
+            if (k < i1) { outBefore = (std::max)(outBefore, p[k]); }
+            else if (k < (int)sn0) { pkT1 = (std::max)(pkT1, p[k]); }
+            else if (k > (int)snmax && k <= i3) { pkT3 = (std::max)(pkT3, p[k]); }
+            else if (k > i3) { outAfter = (std::max)(outAfter, p[k]); }
+        }
+        bool haveAfter = i3 < n - 1, haveBefore = i1 > 0;
+        float fl = std::isnan(r.floorDbc) ? -200.0f : r.floorDbc;
+        bool floorLimited = fl + 3.0f > lmin;
+        tw::Text("Time mask (EN 300 392-2 6.4.5):");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Table 6.8 / figure 6.3: ramp-up within t1 = %d symbols before SN0, ramp-down\n"
+                              "within t3 = %d symbols after SNmax (useful part t2 = %d symbols). During t1\n"
+                              "at most +6 dBc, during t3 at most +3 dBc, outside the mask at most Lmin\n"
+                              "(%s). Averaged power profile through the TETRA filter.",
+                              t1, t3, t2, st.station == 1 ? "BS: -40 dBc" : "MS: -70 dBc or -36 dBm, whichever is greater");
+        }
+        bool okT1 = pkT1 <= 6.0f, okT3 = pkT3 <= 3.0f;
+        tw::Text("  during t1:"); tw::SameTextColored(okT1 ? good : bad, "%+.1f dBc", pkT1); tw::SameTextDisabled("(<= +6)");
+        tw::SameText(" t3:"); tw::SameTextColored(okT3 ? good : bad, "%+.1f dBc", pkT3); tw::SameTextDisabled("(<= +3)");
+        tw::Text("  outside:");
+        auto out = [&](bool have, float v, const char* what) {
+            if (!have) { tw::SameTextDisabled("%s --", what); return; }
+            if (floorLimited && v <= fl + 3.0f) { tw::SameTextColored(val, "%s %.1f dBc", what, v); tw::SameTextDisabled("(floor)"); }
+            else { tw::SameTextColored(v <= lmin ? good : bad, "%s %.1f dBc", what, v); }
+        };
+        out(haveBefore, outBefore, "before");
+        out(haveAfter, outAfter, " after");
+        tw::SameTextDisabled("(Lmin %.0f dBc)", lmin);
+        if (floorLimited) {
+            tw::TextDisabled("  Measurement floor %.0f dBc is above Lmin: 'outside' can only be checked down to the floor.", fl);
+        }
+    }
+
+    // peak at +-25 kHz over the ramps (EN 300 394-1 7.1.4, max hold)
+    void drawTransientPeak(const TetraBurstResult& r, const TetraBurstSettings& st) {
+        if (!r.transPeakValid) { return; }
+        ImVec4 good = tc::good(), bad = tc::bad(), val = tc::val();
+        float lim = (st.station == 0 && st.msClass4) ? -45.0f : -50.0f;
+        float fl = r.transPeakFloorDbc;
+        tw::Text("Switching transients (peak, +-25 kHz):");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Peak power through the TETRA filter at -25 / +25 kHz over the ramp-up and\n"
+                              "ramp-down periods, maximum hold since the last reset, relative to the\n"
+                              "channel power of the useful part (EN 300 394-1 7.1.4).\n"
+                              "Limit: -45 dBc for MS power classes 4 / 4L, -50 dBc otherwise\n"
+                              "(never stricter than -36 dBm).");
+        }
+        auto cell = [&](float v) {
+            bool atFloor = !std::isnan(fl) && v <= fl + 3.0f;
+            tw::SameTextColored(atFloor ? val : (v <= lim ? good : bad), "%.1f", v);
+        };
+        tw::Text("  up:"); cell(r.transPeakDbc[0][0]); tw::SameText("/"); cell(r.transPeakDbc[0][1]);
+        tw::SameText(" down:"); cell(r.transPeakDbc[1][0]); tw::SameText("/"); cell(r.transPeakDbc[1][1]);
+        tw::SameTextDisabled("dBc (limit %.0f, floor %.0f)", lim, std::isnan(fl) ? 0.0f : fl);
+    }
 
     void drawFloor(const std::string& id, float width, const TetraConstellationView::Palette& pal, const TetraBurstResult& r,
                    TetraBurstSettings& st, float levelCal, bool& changed) {
@@ -631,7 +721,10 @@ private:
     std::mutex ringMtx;
     std::vector<std::complex<float>> ringRaw, ringFilt, ringDl;
     uint64_t wIdx = 0, dlIdx = 0;
-    tetra_sp::ChanFilter ulFilter, dlFilter;
+    // uplink envelope through the TETRA filter (EN 300 392-2 6.4.5: power vs. time
+    // is measured through the root raised cosine filter 0.35); downlink for the slot grid
+    tetra_sp::StreamFir ulFilter { tetra_sp::rrcTaps(33) };
+    tetra_sp::ChanFilter dlFilter;
     std::atomic<float> dlQuality { 0.0f };
     std::atomic<bool> transReq { true };
     std::deque<std::pair<time_t, float>> floorHist;

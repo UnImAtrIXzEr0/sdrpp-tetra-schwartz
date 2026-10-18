@@ -78,7 +78,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 21, 0,
+    /* Version:         */ 0, 21, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -185,6 +185,9 @@ public:
             json& b = config.conf[name]["burst"];
             if (b.contains("timing")) { burstSt.timing = b["timing"]; }
             if (b.contains("transients")) { burstSt.transients = b["transients"]; }
+            if (b.contains("stdMask")) { burstSt.stdMask = b["stdMask"]; }
+            if (b.contains("station")) { burstSt.station = std::clamp((int)b["station"], 0, 1); }
+            if (b.contains("msClass4")) { burstSt.msClass4 = b["msClass4"]; }
             if (b.contains("floorSpan")) { burstSt.floorSpan = b["floorSpan"]; }
         }
         if (config.conf[name].contains("alarms") && config.conf[name]["alarms"].is_object()) {
@@ -2663,8 +2666,18 @@ private:
             ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("25 kHz##_tetra_l25_", name), &txaLimit[0], 0, 0, "%.0f dBc");
             ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("50 kHz##_tetra_l50_", name), &txaLimit[1], 0, 0, "%.0f dBc");
             ImGui::SetNextItemWidth(menuWidth * 0.3f); ch |= ImGui::InputFloat(CONCAT("75 kHz##_tetra_l75_", name), &txaLimit[2], 0, 0, "%.0f dBc");
+            // presets: EN 300 394-1 7.1.3.2, tables 7.1 to 7.3 (normal test conditions)
+            tw::Text("Preset:");
+            if (tw::SameSmallButton(CONCAT("BS / MS class 1-3##_tetra_lp1_", name))) { txaLimit[0] = -60.0f; txaLimit[1] = -70.0f; txaLimit[2] = -70.0f; ch = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Table 7.2 (below 700 MHz): -60 / -70 / -70 dBc"); }
+            if (tw::SameSmallButton(CONCAT("MS class 4/4L##_tetra_lp2_", name))) { txaLimit[0] = -55.0f; txaLimit[1] = -70.0f; txaLimit[2] = -70.0f; ch = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Table 7.1 (below 700 MHz): -55 / -70 / -70 dBc"); }
+            if (tw::SameSmallButton(CONCAT("> 700 MHz##_tetra_lp3_", name))) { txaLimit[0] = -55.0f; txaLimit[1] = -65.0f; txaLimit[2] = -65.0f; ch = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Table 7.3: -55 / -65 / -65 dBc (75 kHz: -70 dBc for BS classes 1-3 and MS 1/1L)"); }
             if (ch) { saveTxaConfig(); }
-            tw::TextDisabled("Measured through the TETRA filter (RRC, 18 ksym/s, a=0.35)\nin the adjacent channel and in the own channel.\nDefaults: typical ETSI TETRA values, please check against the standard.");
+            tw::TextDisabled("Average power over the useful part through the TETRA filter (RRC 0.35)\n"
+                             "at +-25 / 50 / 75 kHz (EN 300 394-1 7.1.3). Never stricter than -36 dBm.\n"
+                             "Own floor of the test system must be below -70 / -80 / -80 dBc (B.1.2.3).");
             ImGui::TreePop();
         }
 
@@ -2770,6 +2783,9 @@ private:
         b["ripple"] = burstSt.maskRippleDb;
         b["off"] = burstSt.maskOffDbc;
         b["ramp"] = burstSt.maskRampSym;
+        b["stdMask"] = burstSt.stdMask;
+        b["station"] = burstSt.station;
+        b["msClass4"] = burstSt.msClass4;
         b["timing"] = burstSt.timing;
         b["transients"] = burstSt.transients;
         b["floorSpan"] = burstSt.floorSpan;
