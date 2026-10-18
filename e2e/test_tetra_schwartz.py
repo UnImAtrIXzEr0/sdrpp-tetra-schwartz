@@ -174,6 +174,16 @@ def test_tetra_chain():
                 break
         stats.info(f"last measurements: {best}")
 
+        # layout presets: switching removes tile panels while the main window draws
+        # (v0.23.3 crashed with bad_function_call going from a layout with the strip
+        # below the waterfall to touch / classic)
+        for lay in ("1", "3", "1", "0", "2", "3", "0"):
+            ctx.module_cmd("TETRA Demodulator", "set_layout", lay)
+            ctx.sleep(0.6)
+            if not alive(ctx):
+                stats.test_fail("test_tetra_chain", f"SDR++ stopped after switching to layout {lay}")
+                return False
+
         # windows off again and analysis off: must not block either
         ctx.module_cmd("TETRA Demodulator", "set_windows", "0")
         ctx.module_cmd("TETRA Demodulator", "set_txa", "0")

@@ -914,10 +914,13 @@ void MainWindow::draw() {
 
     if (haveBottom) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-        splitter("##_bottom_panel_split", ImVec2(ImGui::GetContentRegionAvail().x, splitW), true, bottomDrag, bottomPanelH, -1.0f);
+        // a module may remove its panel while the waterfall is drawn (onWaterfallDrawn):
+        // the space is already reserved for this frame, so only skip the content
+        float dummyH = bottomH;
+        splitter("##_bottom_panel_split", ImVec2(ImGui::GetContentRegionAvail().x, splitW), true, bottomDrag, bottomPanelH ? bottomPanelH : &dummyH, -1.0f);
         ImGui::PopStyleVar();
         ImGui::BeginChild("BottomPanel", ImVec2(0, 0), false);
-        bottomPanelFn();
+        if (bottomPanelFn) { bottomPanelFn(); }
         ImGui::EndChild();
     }
     else { bottomDrag = false; }
@@ -1014,10 +1017,12 @@ void MainWindow::draw() {
     if (haveSide) {
         ImGui::NextColumn();
         float h = ImGui::GetContentRegionAvail().y;
-        splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW, -1.0f);
+        // see the bottom panel: the module may have removed the panel during this frame
+        float dummyW = sideW - splitW;
+        splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW ? sidePanelW : &dummyW, -1.0f);
         ImGui::SameLine(0, 0);
         ImGui::BeginChild("SidePanel", ImVec2(0, h), false);
-        sidePanelFn();
+        if (sidePanelFn) { sidePanelFn(); }
         ImGui::EndChild();
     }
     else { sideDrag = false; }
