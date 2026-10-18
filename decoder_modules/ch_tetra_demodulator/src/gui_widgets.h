@@ -17,8 +17,9 @@ namespace ImGui {
         ImGuiWindow* window = GetCurrentWindow();
         ImGuiStyle& style = GetStyle();
 
+        (void)menuWidth;
+        // at the cursor, so the text after SameLine() follows it directly (menu and own windows)
         ImVec2 min = window->DC.CursorPos;
-        min.x = window->Pos.x + menuWidth - (GetFontSize());   // relative to the window (also in own windows)
         ImVec2 size = CalcItemSize(size_arg, (GetFontSize()), (GetFontSize()));
         ImRect bb(min, min+size);
 

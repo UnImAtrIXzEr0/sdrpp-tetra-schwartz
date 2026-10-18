@@ -38,6 +38,7 @@
 #include "trend_view.h"
 #include "carrier_monitor.h"
 #include "band_monitor.h"
+#include "open_ext.h"
 #include "burst_analyzer.h"
 #include "channel_analyzer.h"
 #include "eval_view.h"
@@ -101,8 +102,20 @@ public:
         if (config.conf[name].contains("levelCalDb")) {
             levelCalDb = config.conf[name]["levelCalDb"];
         }
-        if (config.conf[name].contains("logPath")) {
-            logFolder.setPath(config.conf[name]["logPath"]);
+        {
+            // log folder: visible default on Linux (AppImage config is hidden),
+            // created at start so logging works at once
+            std::string def = tetraDefaultLogDir(logFolder.expandString("%ROOT%"));
+            std::string lp = (config.conf[name].contains("logPath") && config.conf[name]["logPath"].is_string()) ? config.conf[name]["logPath"].get<std::string>() : def;
+            if (!config.conf[name].contains("logPathV21")) {
+                if (lp == "%ROOT%/tetra_logs") { lp = def; }
+                config.conf[name]["logPathV21"] = true;
+            }
+            config.conf[name]["logPath"] = lp;
+            std::error_code ec;
+            std::filesystem::create_directories(logFolder.expandString(lp), ec);
+            logFolder.setPath(lp);
+            trendFile.setPath(lp);
         }
         if (config.conf[name].contains("constellation8")) {
             constellation8 = config.conf[name]["constellation8"];
@@ -1825,7 +1838,7 @@ private:
         else {
             TetraMeasSnapshot m = meas.get();
             tw::Text("Cell lock:");
-            tw::SameTextColored(m.cellMatch == 1 ? good : bad, "%03d/%03d CC 0x%02x %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
+            tw::SameTextColored(m.cellMatch == 1 ? good : bad, "%03d/%03d CC %d %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
             if (ImGui::Button(CONCAT("Unlock cell##_tetra_unlock_", name), ImVec2(menuWidth, 0))) {
                 lock.active = false;
                 meas.setCellLock(lock);
@@ -1965,7 +1978,7 @@ private:
                     row("Main carrier", "Carrier number of the main carrier (MCCH), from SYSINFO.", "%d (band %d, offset %+.2f kHz)",
                         d->main_carrier, d->freq_band, offKHz[d->freq_offset & 3]);
                     row("Location area (LA)", "Location area of this cell. Moving to a cell with another LA\nmakes the radios register again.", "%d", d->la);
-                    row("Subscriber classes", "16-bit mask of subscriber classes allowed to access this cell.", "0x%04X", d->subscr_class);
+                    row("Subscriber classes", "16-bit mask of subscriber classes allowed to access this cell (decimal).", "%u", (unsigned)d->subscr_class);
                     row("MS max TX power", "Maximum transmit power a radio may use in this cell.", "%d dBm", d->ms_txpwr_max ? 10 + 5 * d->ms_txpwr_max : 0);
                     row("Min RX access level", "A radio needs at least this downlink level to use the cell\n(RXLEV_ACCESS_MIN).", "%d dBm", -125 + 5 * d->rxlev_access_min);
                     row("Access parameter", "Reference for open-loop power control of the radios on access\n(ACCESS_PARAMETER).", "%d dBm", -53 + 2 * d->access_parameter);
@@ -2122,7 +2135,7 @@ private:
         tw::Text("Access1: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess1Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess1());tw::SameText("| Access2: ");tw::SameTextColored(tc::val(), "%c", _this->osmotetradecoder.getAccess2Code());tw::SameText("/");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getAccess2());
         tw::Text("MCC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMcc());tw::SameText("| MNC: ");tw::SameTextColored(tc::val(), "%03d", _this->osmotetradecoder.getMnc());tw::SameText("| CC: ");tw::SameTextColored(tc::val(), "%d", _this->osmotetradecoder.getCc());
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Colour code (decimal, 0..63) from the SYNC PDU = 0x%02X.\nIt is part of the scrambling code: if it were wrong,\nno other channel would pass its CRC.", _this->osmotetradecoder.getCc());
+            ImGui::SetTooltip("Colour code (0..63) from the SYNC PDU = %d.\nIt is part of the scrambling code: if it were wrong,\nno other channel would pass its CRC.", _this->osmotetradecoder.getCc());
         }
         ImVec4 on_color = tc::good();
         ImVec4 off_color = tc::bad();
@@ -2799,7 +2812,9 @@ private:
     }
 
     void drawReport(float width) {
-        tw::TextDisabled("One HTML file with the results of the session (summary,\ntrends, timeslots, TX and burst analysis, multipath,\ncarriers, events) in the log folder. Print it to PDF from\nthe browser.");
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+        ImGui::TextDisabled("%s", "One HTML file with the results of the session (summary, trends, timeslots, TX and burst analysis, multipath, carriers, events) in the log folder. Print it to PDF from the browser.");
+        ImGui::PopTextWrapPos();
         tw::Text("Notes:");
         ImGui::SetNextItemWidth(width);
         if (ImGui::InputText(CONCAT("##_tetra_rep_notes_", name), reportNotes, sizeof(reportNotes))) {
@@ -2810,14 +2825,31 @@ private:
         tw::TextDisabled("Period: the time span chosen under Trends.");
         if (ImGui::Button(CONCAT("Create report##_tetra_rep_", name), ImVec2(width, 0))) {
             reportPath = makeReport();
-            if (!reportPath.empty() && reportPath[0] != '!') { TetraReport::openInBrowser(reportPath); }
+            if (!reportPath.empty() && reportPath[0] != '!') { opener.open(reportPath); }
         }
         if (!reportPath.empty()) {
             if (reportPath[0] == '!') { tw::TextColored(tc::bad(), "%s", reportPath.c_str() + 1); }
             else {
-                tw::TextDisabled("%s", reportPath.c_str());
-                if (tw::SameSmallButton(CONCAT("Open##_tetra_rep_open_", name))) { TetraReport::openInBrowser(reportPath); }
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+                ImGui::TextDisabled("%s", reportPath.c_str());
+                ImGui::PopTextWrapPos();
+                if (ImGui::SmallButton(CONCAT("Open##_tetra_rep_open_", name))) { opener.open(reportPath); }
+                if (tw::SameSmallButton(CONCAT("Open folder##_tetra_rep_dir_", name))) {
+                    opener.open(std::filesystem::path(reportPath).parent_path().string());
+                }
+                if (tw::SameSmallButton(CONCAT("Copy path##_tetra_rep_copy_", name))) { ImGui::SetClipboardText(reportPath.c_str()); }
             }
+        }
+        drawOpenerStatus(width);
+    }
+
+    void drawOpenerStatus(float width) {
+        ExternalOpener::State os = opener.getState();
+        if (os == ExternalOpener::RUNNING) { tw::TextDisabled("Opening ..."); }
+        else if (os == ExternalOpener::FAILED) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+            ImGui::TextColored(tc::bad(), "%s", (opener.message() + " - open the file by hand: Copy path, then paste it into the browser's address bar.").c_str());
+            ImGui::PopTextWrapPos();
         }
     }
 
@@ -3441,6 +3473,7 @@ private:
     RadioIdDb radioid;
     float levelCalDb = 0.0f;
     FolderSelect logFolder;
+    ExternalOpener opener;
     std::string logError;
     TetraMeasurements meas;
     int rotIdx = 0;

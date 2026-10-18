@@ -77,19 +77,6 @@ public:
         return path;
     }
 
-    static void openInBrowser(const std::string& path) {
-#ifdef _WIN32
-        ShellExecuteA(NULL, "open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
-#elif defined(__APPLE__)
-        std::string cmd = "open '" + path + "' &";
-        if (system(cmd.c_str())) {}
-#else
-        // without the AppImage's library path, so the browser uses its own libraries
-        std::string cmd = "env -u LD_LIBRARY_PATH xdg-open '" + path + "' >/dev/null 2>&1 &";
-        if (system(cmd.c_str())) {}
-#endif
-    }
-
     static std::string build(const TetraReportData& d, time_t now) {
         std::ostringstream o;
         const char* unit = d.levelCalibrated ? "dBm" : "dBFS";
@@ -140,7 +127,7 @@ public:
             char b[64];
             snprintf(b, sizeof(b), "%03d / %03d", d.mcc, d.mnc);
             row(o, "MCC / MNC", b);
-            snprintf(b, sizeof(b), "0x%02X (%d)", d.cc, d.cc);
+            snprintf(b, sizeof(b), "%d", d.cc);
             row(o, "Colour code", b);
         }
         if (d.dlFreq > 1e6) { row(o, "Downlink (SYSINFO)", num(d.dlFreq / 1e6, 5) + " MHz"); }

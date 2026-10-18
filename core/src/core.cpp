@@ -563,7 +563,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["frequency"] = 439000000.0; // TETRA edition: TMO cells on 70 cm (438-440 MHz)
     defConfig["fullWaterfallUpdate"] = false;
     defConfig["zoomBw"] = 1.0;
-    defConfig["max"] = 0.0;
+    defConfig["max"] = -40.0;
     defConfig["maximized"] = false;
     defConfig["fullscreen"] = false;
     defConfig["theme"] = "RoSc 2"; // HAM-TETRA edition default
@@ -628,7 +628,7 @@ int sdrpp_main(int argc, char* argv[]) {
 #else
     defConfig["menuWidth"] = 300;
 #endif
-    defConfig["min"] = -120.0;
+    defConfig["min"] = -110.0;
 
     // Module instances
     defConfig["moduleInstances"]["Airspy Source"]["module"] = "airspy_source";
@@ -914,6 +914,13 @@ int sdrpp_main(int argc, char* argv[]) {
             c["frequency"] = 439000000.0;
         }
         c["hamTetraDefaults7"] = 1;
+    }
+    // v0.21: spectrum/waterfall range -110 ... -40 dB (PlutoSDR/BladeRF levels
+    // are 24 dB higher since v0.20, the old range showed a saturated waterfall)
+    if (!core::configManager.conf.contains("hamTetraDefaults8")) {
+        core::configManager.conf["min"] = -110.0;
+        core::configManager.conf["max"] = -40.0;
+        core::configManager.conf["hamTetraDefaults8"] = 1;
     }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&

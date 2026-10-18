@@ -200,7 +200,32 @@ static const char *sds_pid_name(int pid)
 	}
 }
 
-/* remaining bytes: printable text if it mostly is, otherwise hex */
+/* bytes as decimal numbers; runs of at least 3 printable ASCII characters as
+ * quoted text, e.g. 0 156 1 181 "Nexus-BS" */
+static int bytes_dec_text(const uint8_t *b, int n, char *out, int max)
+{
+	int o = 0;
+	out[0] = 0;
+	int i = 0;
+	while (i < n && o < max - 6) {
+		int j = i;
+		while (j < n && b[j] >= 0x20 && b[j] < 0x7F) j++;
+		if (j - i >= 3) {
+			o += snprintf(out + o, max - o, "%s\"", o ? " " : "");
+			for (int k = i; k < j && o < max - 3; k++) out[o++] = (char)b[k];
+			if (o < max - 1) { out[o++] = '"'; out[o] = 0; }
+			i = j;
+		} else {
+			o += snprintf(out + o, max - o, "%s%u", o ? " " : "", (unsigned)b[i]);
+			i++;
+		}
+	}
+	if (o >= max) o = max - 1;
+	return o;
+}
+
+/* remaining bytes: printable text if it mostly is, otherwise decimal bytes
+ * with embedded text runs */
 static void bytes_text(struct br *r, char *out, int max)
 {
 	uint8_t b[96];
@@ -216,28 +241,24 @@ static void bytes_text(struct br *r, char *out, int max)
 		for (int i = 0; i < n && o < max - 2; i++) put_utf8(out, &o, max - 1, b[i]);
 		if (o < max - 1) { out[o++] = '"'; out[o] = 0; }
 	} else {
-		for (int i = 0; i < n && o < max - 4; i++)
-			o += snprintf(out + o, max - o, "%s%02X", i ? " " : "", b[i]);
+		o = bytes_dec_text(b, n, out, max - 4);
 		if (left(r) >= 8 && o < max - 4) snprintf(out + o, max - o, " ...");
 	}
 }
 
-/* user defined data of SDS types 1-3: hex, plus text if printable */
+/* user defined data of SDS types 1-3: value in decimal, the bytes in decimal
+ * with text runs if there are any */
 static void udata_text(uint32_t hi, uint32_t lo, int bits, char *out, int max)
 {
 	uint8_t b[8];
 	int n = bits / 8;
 	uint64_t v = ((uint64_t)hi << 32) | lo;
 	for (int i = 0; i < n; i++) b[i] = (uint8_t)(v >> (8 * (n - 1 - i)));
-	int o = snprintf(out, max, "0x");
-	for (int i = 0; i < n; i++) o += snprintf(out + o, max - o, "%02X", b[i]);
-	int pr = 1;
-	for (int i = 0; i < n; i++) if (b[i] < 0x20 || b[i] >= 0x7F) pr = 0;
-	if (pr && o < max - n - 4) {
-		o += snprintf(out + o, max - o, " \"");
-		for (int i = 0; i < n; i++) out[o++] = (char)b[i];
-		out[o++] = '"';
-		out[o] = 0;
+	int o = snprintf(out, max, "%llu", (unsigned long long)(n >= 8 ? v : (v & ((1ULL << (8 * n)) - 1))));
+	if (n > 1 && o < max - 8) {
+		o += snprintf(out + o, max - o, " (");
+		o += bytes_dec_text(b, n, out + o, max - o - 2);
+		if (o < max - 1) { out[o++] = ')'; out[o] = 0; }
 	}
 }
 
@@ -265,7 +286,7 @@ static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
 			if (mtype == 1 || mtype == 2) {
 				if (mtype == 1) { get(r, 1); get(r, 2); get(r, 1); }	/* ack req, reserved, storage */
 				uint32_t st = get(r, 8), ref = get(r, 8);
-				snprintf(ev->text, sizeof(ev->text), "SDS-TL %s for message %u: %s (0x%02X)", mtype == 1 ? "report" : "acknowledge", ref,
+				snprintf(ev->text, sizeof(ev->text), "SDS-TL %s for message %u: %s (%u)", mtype == 1 ? "report" : "acknowledge", ref,
 					 st == 0x00 ? "received" : st == 0x02 ? "consumed" : st < 0x20 ? "delivered" :
 					 st < 0x40 ? "temporary error" : "failed", st);
 			} else {
@@ -312,7 +333,7 @@ static void decode_sds4(struct br *r, struct tetra_l3_event *ev)
 	default: {
 		char t[240];
 		bytes_text(r, t, sizeof(t));
-		snprintf(ev->text, sizeof(ev->text), "SDS %s (PID 0x%02X): %s", sds_pid_name(pid), pid, t);
+		snprintf(ev->text, sizeof(ev->text), "SDS %s (PID %d): %s", sds_pid_name(pid), pid, t);
 		break;
 	}
 	}
@@ -404,7 +425,7 @@ static void parse_cmce(struct tetra_mac_state *tms, struct br *r, struct tetra_l
 			const char *sn = ev->status == 0 ? "EMERGENCY" :
 					 ev->status < 0x8000 ? "reserved" :
 					 ev->status < 0xFF00 ? "network/user defined" : "reserved";
-			snprintf(ev->text, sizeof(ev->text), "Status %d (0x%04X, %s)", ev->status, ev->status, sn);
+			snprintf(ev->text, sizeof(ev->text), "Status %d (%s)", ev->status, sn);
 		}
 		break;
 	}
