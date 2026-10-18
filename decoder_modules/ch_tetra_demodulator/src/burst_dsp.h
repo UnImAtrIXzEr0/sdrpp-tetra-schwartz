@@ -45,6 +45,12 @@ struct TetraBurstResult {
     int transN = 0;
     float transDbc[3][5] = {};
     float transFloorDbc[5] = {};
+    // receiver overload check (needs the DL tap): downlink power during the
+    // bursts relative to just before / after them. A continuous downlink must
+    // not change; a drop means the strong burst compresses the receiver.
+    bool desenseValid = false;
+    int desenseN = 0;
+    float desenseDb = NAN;   // > 0: downlink weaker during the bursts
 };
 
 class TetraBurstDsp {
@@ -63,6 +69,8 @@ public:
         for (auto& v : transFloorAcc) { v = 0.0; }
         transCount = 0;
         transFloorCount = 0;
+        desenseDbAvg = 0.0;
+        desenseCount = 0;
         acc = TetraBurstResult();
         recent.clear();
         processedValid = false;
@@ -76,8 +84,10 @@ public:
     // (wide, for the switching transients; raw[k] belongs to x[k + rawDelay]),
     // slotPhase: downlink slot grid (absolute index mod 2040 of symbol 0) or NaN.
     void process(const std::vector<std::complex<float>>& x, uint64_t base, double nowS, int avgN,
-                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0, double slotPhase = NAN) {
+                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0, double slotPhase = NAN,
+                 const std::vector<std::complex<float>>* dl = nullptr) {
         curRaw = raw;
+        curDl = (dl && dl->size() == x.size()) ? dl : nullptr;
         curRawDelay = rawDelay;
         curBase = base;
         curSlotPhase = slotPhase;
@@ -187,6 +197,11 @@ public:
             acc.timingStdSym = (float)std::sqrt(v / cnt);
             acc.timingN = (int)cnt;
         }
+        if (desenseCount > 0) {
+            acc.desenseValid = desenseCount >= 3;
+            acc.desenseN = desenseCount;
+            acc.desenseDb = (float)desenseDbAvg;
+        }
         if (transCount > 0) {
             acc.transValid = true;
             acc.transN = transCount;
@@ -225,6 +240,22 @@ private:
         pbAvg[cls] = n == 1 ? pb : pbAvg[cls] + a * (pb - pbAvg[cls]);
         if (cls == 0) { acc.nFull++; } else { acc.nHalf++; }
         recent.push_back(nowS);
+        // overload check: downlink power in the useful part of the burst vs.
+        // 1..3 ms before and after it (the downlink is continuous)
+        if (curDl && i >= 3 * ms1 && j + 3 * ms1 < W) {
+            const std::vector<std::complex<float>>& d = *curDl;
+            double in = 0.0, out = 0.0;
+            size_t nIn = 0, nOut = 0;
+            for (size_t k = i + ms05; k < j - ms05; k++) { in += std::norm(d[k]); nIn++; }
+            for (size_t k = i - 3 * ms1; k < i - ms1; k++) { out += std::norm(d[k]); nOut++; }
+            for (size_t k = j + ms1; k < j + 3 * ms1; k++) { out += std::norm(d[k]); nOut++; }
+            if (nIn && nOut && in > 0.0 && out > 0.0) {
+                double db = 10.0 * std::log10((out / nOut) / (in / nIn));
+                desenseCount = (std::min)(desenseCount + 1, 1000000);
+                int nn = (std::min)(desenseCount, 20);
+                desenseDbAvg += (db - desenseDbAvg) / nn;
+            }
+        }
         // timing against the downlink slot grid; the one-symbol moving average
         // delays the envelope by (SMOOTH-1)/2 samples
         if (!std::isnan(curSlotPhase)) {
@@ -344,6 +375,9 @@ private:
     }
 
     const std::vector<std::complex<float>>* curRaw = nullptr;
+    const std::vector<std::complex<float>>* curDl = nullptr;
+    double desenseDbAvg = 0.0;
+    int desenseCount = 0;
     int curRawDelay = 0;
     uint64_t curBase = 0;
     double curSlotPhase = NAN;

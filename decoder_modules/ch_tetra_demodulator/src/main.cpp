@@ -76,7 +76,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 1,
+    /* Version:         */ 0, 20, 2,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -549,7 +549,7 @@ public:
                      "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -566,7 +566,7 @@ public:
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
                      alarmTotal, alarmActive ? "true" : "false",
-                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size());
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN);
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";

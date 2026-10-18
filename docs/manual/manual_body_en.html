@@ -558,6 +558,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
 <tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only (no timing reference to the downlink). The radio must be registered in trunked mode (TMO).</td></tr>
+<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>The downlink gets weaker during the bursts: the strong radio overloads the receiver (analog, before the ADC; lowering the gain in the software is often not enough). Increase the distance, add an attenuator (30–40 dB) or use a coupler and dummy load. Limit: 1 dB, averaged over 20 bursts; needs the downlink in the SDR span.</td></tr>
 <tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
 </table>
 

@@ -198,6 +198,22 @@ public:
         tw::Text("Bursts:"); tw::SameTextColored(val, "%llu full slot", (unsigned long long)r.nFull);
         tw::SameTextColored(val, " %llu half slot", (unsigned long long)r.nHalf);
         tw::SameText(" ("); tw::SameTextColored(val, "%.1f/s", r.burstsPerSec); tw::SameText(")");
+        if (r.state == 2) {
+            tw::Text("Overload check:");
+            if (!hasDlTap()) { tw::SameTextDisabled("needs the downlink in the SDR span (Timing vs. downlink)"); }
+            else if (!r.desenseValid) { tw::SameTextDisabled("collecting bursts..."); }
+            else if (r.desenseDb > 1.0f) {
+                tw::SameTextColored(bad, "RECEIVER OVERLOADED - results invalid");
+                tw::TextColored(bad, "Downlink drops %.1f dB during the bursts. Increase the distance,\nadd an attenuator or use a coupler and dummy load.", r.desenseDb);
+            }
+            else { tw::SameTextColored(good, "OK"); tw::SameTextDisabled("(downlink %+.1f dB during bursts)", -r.desenseDb); }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("The downlink of the cell is continuous. If it gets weaker while a burst\n"
+                                  "is received, the strong burst compresses the receiver (analog, before\n"
+                                  "the ADC - lowering the gain in the software may not be enough).\n"
+                                  "Limit: 1 dB, averaged over the last 20 bursts.");
+            }
+        }
         if (r.profileDbc.empty()) { return changed; }
 
         auto mark = [&](bool ok) { return ok ? good : bad; };
@@ -532,7 +548,7 @@ private:
                 phase = e.valid ? e.phase : NAN;
             }
             double nowS = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN);
+            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN, dlx.empty() ? nullptr : &dlx);
             std::lock_guard<std::mutex> lck(resMtx);
             res = dsp.result();
         }

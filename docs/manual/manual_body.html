@@ -558,6 +558,7 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
 <tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
 <tr><td>Burst-Analyse findet keine Bursts</td><td>Uplink liegt außerhalb der SDR-Spanne (rote Meldung im Burst-Panel). Bei 9,4 MHz Duplexabstand braucht man mindestens 12 MS/s, Mitte zwischen Downlink und Uplink. Sonst Quelle <span class="ui">Manual frequency</span> und das SDR nur auf den Uplink stellen (ohne Zeitbezug zum Downlink). Das Funkgerät muss im Netzbetrieb (TMO) angemeldet sein.</td></tr>
+<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>Der Downlink wird während der Bursts schwächer: Das starke Funkgerät übersteuert den Empfänger (analog, vor dem Wandler; die Software-Verstärkung zu senken reicht oft nicht). Abstand vergrößern, Abschwächer (30–40 dB) oder Auskoppler mit Dummy-Load. Grenze: 1 dB, gemittelt über 20 Bursts; braucht den Downlink in der SDR-Spanne.</td></tr>
 <tr><td>Pluto als Laufwerk sichtbar, aber nicht in SDR++</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span>.</td></tr>
 </table>
 
