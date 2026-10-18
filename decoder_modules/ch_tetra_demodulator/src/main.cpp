@@ -42,6 +42,7 @@
 #include "open_ext.h"
 #include "burst_analyzer.h"
 #include "channel_analyzer.h"
+#include "vem_analyzer.h"
 #include "eval_view.h"
 #include "alarms.h"
 #include "report.h"
@@ -77,7 +78,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 4,
+    /* Version:         */ 0, 20, 5,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -165,6 +166,7 @@ public:
             if (b.contains("off")) { burstSt.maskOffDbc = b["off"]; }
             if (b.contains("ramp")) { burstSt.maskRampSym = b["ramp"]; }
         }
+        if (config.conf[name].contains("vemRun")) { vemRun = config.conf[name]["vemRun"]; }
         if (config.conf[name].contains("mp") && config.conf[name]["mp"].is_object()) {
             json& mp = config.conf[name]["mp"];
             if (mp.contains("run")) { mpRun = mp["run"]; }
@@ -239,6 +241,7 @@ public:
             carrierMon.takeChanged();
             burstAn.setName(name + " bursts");
             chanAn.setName(name + " channel");
+            vemAn.setName(name + " modulation accuracy");
         }
         constDiagSplitter.init(&mainDemodulator.out);
         constDiagSplitter.bindStream(&constDiagStream);
@@ -302,6 +305,7 @@ public:
         carrierMon.stopLog();
         burstAn.stop();
         chanAn.stop();
+        vemAn.stop();
         if(isEnabled()) {
             disable();
         }
@@ -358,6 +362,7 @@ public:
         carrierMon.stopLog();
         burstAn.stop();
         chanAn.stop();
+        vemAn.stop();
 
         // Stop upstream first to drain data flow into the chain
         mainDemodulator.stop();
@@ -531,6 +536,7 @@ public:
             uint32_t tsTraffic = 0, tsAll = 0;
             for (int t = 0; t < 4; t++) { for (int c = 0; c < 4; c++) { tsAll += m.dlUseTotal[t][c]; } tsTraffic += m.dlUseTotal[t][3]; }
             TetraChannelResult mpr = chanAn.get();
+            TetraVemResult vr = vemAn.get();
             int alarmTotal;
             bool alarmActive;
             {
@@ -554,7 +560,7 @@ public:
                      "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d, \"freq_ref\": %d}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d, \"freq_ref\": %d, \"vem_grid\": %s, \"vem_n\": %d, \"vem_measured\": %llu, \"vem_rejected\": %llu, \"vem_rms_pct\": %.3f, \"vem_rms_max_pct\": %.3f, \"vem_peak_pct\": %.2f, \"vem_c0_pct\": %.3f}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -571,7 +577,9 @@ public:
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
                      alarmTotal, alarmActive ? "true" : "false",
-                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN, freqRef);
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN, freqRef,
+                     vr.gridValid ? "true" : "false", vr.n, (unsigned long long)vr.measured, (unsigned long long)vr.rejected,
+                     vr.n ? vr.rmsMean * 100.0 : -999.0, vr.n ? vr.rmsMax * 100.0 : -999.0, vr.n ? vr.peakMax * 100.0 : -999.0, vr.n ? vr.c0Mean * 100.0 : -999.0);
             return b;
         }
         return "{\"error\": \"unknown command: " + cmd + "\"}";
@@ -627,7 +635,7 @@ private:
         // MER / EVM
         tw::Text("MER:"); tw::SameNext();
         if (m.valid && m.symSync) {
-            tw::TextColored(m.merDb >= 20.0f ? good : (m.merDb >= 12.0f ? warn : bad), "%5.1f dB", m.merDb); tw::SameText(" EVM rms"); tw::SameTextColored(val, "%4.1f %%", m.evmPct); tw::SameText(" peak"); tw::SameTextColored(val, "%4.0f %%", m.evmPeakPct);
+            tw::TextColored(m.merDb >= 20.0f ? good : (m.merDb >= 12.0f ? warn : bad), "%5.1f dB", m.merDb); tw::SameText(" decoder EVM"); tw::SameTextColored(val, "%4.1f %%", m.evmPct); tw::SameText(" peak"); tw::SameTextColored(val, "%4.0f %%", m.evmPeakPct);
         } else { tw::TextDisabled("-- (no symbol sync)"); }
         ImGui::SetNextItemWidth(menuWidth);
         float merFrac = m.symSync ? std::clamp(m.merDb / 30.0f, 0.0f, 1.0f) : 0.0f;
@@ -1802,6 +1810,7 @@ private:
                 } else {
                     drawMeasurements(_this, menuWidth);
                 }
+                _this->drawVem(menuWidth);
             }
             break;
         case S_TXA:
@@ -2656,6 +2665,10 @@ private:
         burstAn.setKnownCarrier(burstSt.source == 2 && osmotetradecoder.getRxState() == 2);
         burstAn.loop(enabled && burstRun, f, dlTap);
         chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
+        {
+            TetraMeasSnapshot vm = meas.get();
+            vemAn.loop(enabled && vemRun && vfo != nullptr && decoder_mode == 0, mainVfoFreq(), (uint16_t)vm.mcc, (uint16_t)vm.mnc, (uint8_t)vm.cc);
+        }
         alarmLoop();
         {
             // summary for the automation channel (read from another thread)
@@ -2879,6 +2892,21 @@ private:
         mp["mem"] = mpMem;
         mp["detached"] = mpDetached;
         config.release(true);
+    }
+
+    // modulation accuracy per EN 300 394-1 10.1.3 (own measurement path)
+    void drawVem(float width) {
+        if (decoder_mode != 0) { return; }
+        ImGui::Separator();
+        bool run = vemRun;
+        SourceGainInterface* g = findGainInterface();
+        bool gainHeld = !autoGain || (gainHolding && !gainFollowNow()) || !(g && g->gainControllable());
+        if (vemAn.draw(name, width, run, gainHeld, freqRef)) {
+            vemRun = run;
+            config.acquire();
+            config.conf[name]["vemRun"] = vemRun;
+            config.release(true);
+        }
     }
 
     void drawMultipath(float width) {
@@ -3581,6 +3609,8 @@ private:
     bool burstDetached = false, focusBurstWin = false;
     std::atomic<double> pendingCarrierHz { 0.0 };
     TetraChannelAnalyzer chanAn;
+    TetraVemAnalyzer vemAn;
+    bool vemRun = true;
     bool mpRun = false, mpDetached = false, focusMpWin = false;
     int mpMem = 1;
     TetraEvalView evalView;

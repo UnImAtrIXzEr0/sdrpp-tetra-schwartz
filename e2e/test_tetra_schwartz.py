@@ -208,6 +208,12 @@ def test_tetra_chain():
             problems.append(f"burst analysis not running ({best.get('burst_status')})")
         if best and locked and (best.get("mp_slots", 0) < 20 or best.get("mp_quality", 0) < 3.5):
             problems.append(f"multipath: training sequences not found in the real signal (slots {best.get('mp_slots')}, quality {best.get('mp_quality')})")
+        if best:
+            # modulation accuracy (EN 300 394-1 10.1.3): informative here, the
+            # short looped recording may hold few CRC-checked bursts
+            print(f"  modulation accuracy: grid {best.get('vem_grid')}, measured {best.get('vem_measured')}, "
+                  f"rejected {best.get('vem_rejected')}, rms {best.get('vem_rms_pct')} %, peak {best.get('vem_peak_pct')} %, "
+                  f"residual carrier {best.get('vem_c0_pct')} %")
         if best and best.get("alarms_total", 0) < 1:
             problems.append("test alarm was not raised")
         # report
