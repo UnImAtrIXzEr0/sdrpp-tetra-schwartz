@@ -95,7 +95,7 @@ def solo(ctx, win, rect):
 def session_a():
     src = T.recording()
     tmp = tempfile.mkdtemp(prefix="doc_a_")
-    rec = os.path.join(tmp, "baseband_468128000Hz_12-00-00_01-01-2026.wav")
+    rec = os.path.join(tmp, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
     if not T.upsample_recording(src, rec):
         shutil.copyfile(src, rec)
     with SDRPPTestContext() as ctx:

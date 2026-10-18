@@ -187,8 +187,6 @@ file(GLOB SRC LIST_DIRECTORIES false
     "src/dsp/*.cpp"
     "src/decoder/src/*.cpp"
     "src/decoder/src/*.c"
-    "src/decoder/src/crypto/*.cpp"
-    "src/decoder/src/crypto/*.c"
     "src/decoder/src/lower_mac/*.cpp"
     "src/decoder/src/lower_mac/*.c"
     "src/decoder/src/phy/*.cpp"
@@ -222,12 +220,6 @@ set_source_files_properties(
     src/decoder/src/tetra_sndcp_pdu.c
     src/decoder/src/tetra_cmce_pdu.c
     src/decoder/src/tetra_mac_pdu.c
-    src/decoder/src/crypto/hurdle.c
-    src/decoder/src/crypto/taa1.c
-    src/decoder/src/crypto/tea1.c
-    src/decoder/src/crypto/tea2.c
-    src/decoder/src/crypto/tea3.c
-    src/decoder/src/crypto/tetra_crypto.c
     src/decoder/src/lower_mac/osmo_conv.c
     src/decoder/src/lower_mac/crc_simple.c
     src/decoder/src/lower_mac/tch_reordering.c

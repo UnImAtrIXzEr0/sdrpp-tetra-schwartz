@@ -27,7 +27,6 @@
 // #include <osmocom/core/msgb.h>
 // #include <osmocom/core/talloc.h>
 
-#include "crypto/tetra_crypto.h"
 #include "tetra_common.h"
 #include "tetra_prim.h"
 #include "tetra_upper_mac.h"
@@ -87,7 +86,6 @@ static int get_num_fill_bits(const unsigned char *l1h, int len_with_fillbits)
 static int rx_bcast(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 {
 	struct msgb *msg = tmvp->oph.msg;
-	struct tetra_crypto_state *tcs = tms->tcs;
 	struct tetra_si_decoded sid;
 	uint32_t dl_freq, ul_freq;
 	int i;
@@ -176,18 +174,6 @@ static int rx_bcast(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 
 	memcpy(&tms->last_sid, &sid, sizeof(sid));
 
-	/* Update crypto state */
-	tcs->la = sid.mle_si.la;
-	tcs->cn = sid.main_carrier; /* FIXME this won't work when not tuned to the main carier */
-	if (sid.cck_valid_no_hf) {
-		if (sid.cck_id != tcs->cck_id) {
-			tcs->cck_id = sid.cck_id;
-			update_current_cck(tcs);
-		}
-	} else {
-		tcs->hn = sid.hyperframe_number;
-	}
-
 	return -1; /* FIXME check this indeed fills slot */
 }
 
@@ -216,10 +202,8 @@ const char *tetra_alloc_dump(const struct tetra_chan_alloc_decoded *cad, struct 
 static int rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 {
 	struct msgb *msg = tmvp->oph.msg;
-	struct tetra_crypto_state *tcs = tms->tcs;
 	struct tetra_resrc_decoded rsd;
 	struct msgb *fragmsgb;
-	struct tetra_key *key = 0;
 	int tmpdu_offset, slot;
 	int pdu_bits; /* Full length of pdu, including fill bits */
 
@@ -244,19 +228,8 @@ static int rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 		msg->len = (uint16_t)(msg->tail - msg->head);
 	}
 
-	/* Decrypt buffer if encrypted and key available */
-	if (rsd.is_encrypted && tcdb->num_keys) {
-		decrypt_identity(tcs, &rsd.addr);
-		key = get_ksg_key(tcs, rsd.addr.ssi);
-
-		if (key) {
-			rsd.is_encrypted = !decrypt_mac_element(tcs, tmvp, key, msgb_l1len(msg), tmpdu_offset);
-			if (rsd.chan_alloc_pres) {
-				// Re-decode the channel allocation element to get accurate L2 start
-				tmpdu_offset += macpdu_decode_chan_alloc(&rsd.cad, msg->l1h + tmpdu_offset);
-			}
-		}
-	}
+	/* TETRA-SCHWARTZ: no decryption (amateur radio edition); encrypted
+	 * elements stay encrypted and are not decoded further */
 
 	/* We now have accurate length and start of TM-SDU, set LLC start in msg->l2h */
 	msg->l2h = msg->l1h + tmpdu_offset;
@@ -325,7 +298,6 @@ static int rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 		tms->fragslots[slot].num_frags = 1;
 		tms->fragslots[slot].length = msgb_l2len(msg);
 		tms->fragslots[slot].encryption = rsd.encryption_mode > 0;
-		tms->fragslots[slot].key = key;
 		tms->fragslots[slot].ssi = rsd.addr.ssi;
 		tms->fragslots[slot].addr_type = rsd.addr.type;
 	}
@@ -354,7 +326,6 @@ void append_frag_bits(struct tetra_mac_state *tms, int slot, uint8_t *bits, int 
 static int rx_macfrag(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 {
 	struct msgb *msg = tmvp->oph.msg;
-	struct msgb *fragmsgb;
 	int slot = tmvp->u.unitdata.tdma_time.tn;
 	uint8_t *bits = msg->l1h;
 	uint8_t fillbits_present;
@@ -373,11 +344,6 @@ static int rx_macfrag(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tm
 			msg->tail -= num_fill_bits;
 			msg->len = (uint16_t)(msg->tail - msg->head);
 		}
-
-		/* Decrypt (if required) */
-		fragmsgb = tms->fragslots[slot].msgb;
-		if (tms->fragslots[slot].encryption && tms->fragslots[slot].key)
-			decrypt_mac_element(tms->tcs, tmvp, tms->fragslots[slot].key, msgb_l1len(msg), n);
 
 		/* Add frag to fragslot buffer */
 		append_frag_bits(tms, slot, msg->l2h, msgb_l2len(msg));
@@ -427,9 +393,6 @@ static int rx_macend(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms
 			msg->len = (uint16_t)(msg->tail - msg->head);
 		}
 
-		/* Decrypt (if required) */
-		if (tms->fragslots[slot].encryption && tms->fragslots[slot].key)
-			decrypt_mac_element(tms->tcs, tmvp, tms->fragslots[slot].key, msgb_l1len(msg), n);
 
 		/* Parse chanalloc element (if present) and update l2 offsets */
 		if (chanalloc_present) {
@@ -441,7 +404,7 @@ static int rx_macend(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms
 		// printf("FRAG-END slot=%d added=%d msgb=%s\n", slot, msgb_l2len(msg), osmo_ubit_dump(fragmsgb->l2h, msgb_l2len(fragmsgb)));
 
 		/* Message is completed inside fragmsgb now */
-		if (!tms->fragslots[slot].encryption || tms->fragslots[slot].key) {
+		if (!tms->fragslots[slot].encryption) {
 			tetra_l3_rx_tm_sdu(tms, fragmsgb->l2h, tms->fragslots[slot].length,
 					   tms->fragslots[slot].ssi, tms->fragslots[slot].addr_type, slot);
 		}

@@ -56,6 +56,20 @@ based on SDR++Brown v1.2.1. Main changes (details in the git history):
   12-bit ADC range; sources not supported by this edition are hidden from the
   source list by default (Module Manager).
 
+- Decoder: the encryption code of osmo-tetra (TEA1/TEA2/TEA3 keystream
+  generators, TAA1, HURDLE, key handling) is **removed**. This edition does
+  not decrypt anything; encrypted elements are shown as encrypted and not
+  decoded further.
+- Tests: the TETRA test recording is **synthetic** (fictitious amateur radio
+  cell MCC 901 / MNC 9999, see `e2e/recordings/README.md` and
+  `e2e/gen/tetra_synth.cpp`); it contains no data of any real network.
+
+The TETRA speech codec is the reference code of ETSI EN 300 395-2
+(© ETSI). It is not part of this repository: the build downloads it from
+etsi.org and applies the patches in
+`decoder_modules/ch_tetra_demodulator/src/decoder/etsi_codec-patches`. The
+binaries contain it compiled. ETSI's copyright and terms apply to it.
+
 The SDRplay source module needs the SDRplay API installed on the computer
 (Linux: the API library is not bundled in the AppImage).
 

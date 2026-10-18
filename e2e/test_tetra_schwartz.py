@@ -23,7 +23,7 @@ from e2e_common import (
 
 def recording():
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.environ.get("E2E_TEST_FILE", os.path.join(here, "recordings", "tetra_sample.wav"))
+    return os.environ.get("E2E_TEST_FILE", os.path.join(here, "recordings", "tetra_synthetic.wav"))
 
 
 def upsample_recording(src, dst, factor=8):
@@ -114,9 +114,9 @@ def test_tetra_chain():
         stats.test_fail("test_tetra_chain", f"recording not found: {src}")
         return False
     # The file source takes the centre frequency from the file name; give the
-    # recording one (the TETRA carrier is then at 468.125 MHz = centre - 3 kHz)
+    # recording one (the TETRA carrier is then at 438.2375 MHz = centre - 3 kHz)
     tmpdir = tempfile.mkdtemp(prefix="tetra_rec_")
-    rec = os.path.join(tmpdir, "baseband_468128000Hz_12-00-00_01-01-2026.wav")
+    rec = os.path.join(tmpdir, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
     upsampled = upsample_recording(src, rec)
     if not upsampled:
         shutil.copyfile(src, rec)

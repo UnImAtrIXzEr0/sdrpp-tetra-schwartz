@@ -317,7 +317,7 @@ python test_frequency_manager_tetra.py
   `test_radio_modes.py`, `test_frequency_manager.py`, `test_frequency_manager_tetra.py`
   (22/22 as of Aug 2026).
 - `.wav`-based tests (`test_dmr_wait_status.py`, `test_dsd_record.py`, `test_tetra_demodulator.py`)
-  use repo-relative samples `e2e/recordings/dmr_sample.wav` + `tetra_sample.wav` (committed).
+  use repo-relative samples `e2e/recordings/dmr_sample.wav` + `tetra_synthetic.wav` (committed, synthetic cell, see e2e/gen/tetra_synth.cpp).
   Run them the same way (set the three `E2E_*` env vars, then `python test_<name>.py`).
 - These tests use `File Source` → `set_filename` over HTTP. `file_source` must return properly
   JSON-escaped responses (fixed via `json::dump()`), else a Windows path `C:\dev\...` fails with

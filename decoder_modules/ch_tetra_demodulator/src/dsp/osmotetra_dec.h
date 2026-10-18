@@ -20,7 +20,6 @@
 
 extern "C" {
     #include "tetra_common.h"
-    #include "crypto/tetra_crypto.h"
     #include <phy/tetra_burst.h>
     #include <phy/tetra_burst_sync.h>
     #include "c-code/channel.h"
@@ -67,17 +66,14 @@ namespace dsp {
             memset(trs, 0, sizeof(struct tetra_rx_state));
 
             // Set up the nested sub-structures natively on the stack
-            tms->tcs = &instance_tcs;
             tms->t_display_st = &instance_t_display_st;
             tms->fragslots = instance_fragslots;
 
-            memset(tms->tcs, 0, sizeof(struct tetra_crypto_state));
             memset(tms->t_display_st, 0, sizeof(struct tetra_display_state));
             memset(tms->fragslots, 0, sizeof(struct fragslot) * FRAGSLOT_NR_SLOTS);
 
             // Initialize the Osmocom library states safely
             tetra_mac_state_init(tms);
-            tetra_crypto_state_init(tms->tcs);
 
             // Establish the secure private callback link
             trs->burst_cb_priv = tms;
@@ -260,7 +256,6 @@ private:
         uint8_t unpacked_bits_buf[UNPACK_BUF_BITS];
         struct tetra_mac_state instance_tms;
         struct tetra_rx_state instance_trs;
-        struct tetra_crypto_state instance_tcs;
         struct tetra_display_state instance_t_display_st;
         struct fragslot instance_fragslots[FRAGSLOT_NR_SLOTS];
     };

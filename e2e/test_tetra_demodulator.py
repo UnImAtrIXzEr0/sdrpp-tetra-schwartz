@@ -26,7 +26,7 @@ from e2e_common import (
 
 def get_test_file_path():
     """Get the path to the test recording file."""
-    default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings", "tetra_sample.wav")
+    default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings", "tetra_synthetic.wav")
     return os.environ.get("E2E_TEST_FILE", default_path)
 
 
