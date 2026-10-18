@@ -9,7 +9,7 @@
   <div class="l2"><a href="#s1-2">Rechtliche Hinweise</a></div>
   <div class="l1"><a href="#s2">2 Installation und erster Start</a></div>
   <div class="l2"><a href="#s2-1">Windows</a> · <a href="#s2-2">Linux (AppImage)</a></div>
-  <div class="l2"><a href="#s2-3">Treiber und Zusatzsoftware</a></div>
+  <div class="l2"><a href="#s2-3">Treiber und Zusatzsoftware</a> · <a href="#s2-5">Selbst bauen</a></div>
   <div class="l2"><a href="#s2-4">Was beim ersten Start eingestellt ist</a></div>
   <div class="l1"><a href="#s3">3 Die Oberfläche</a></div>
   <div class="l2"><a href="#s3-2">Module Manager</a> · <a href="#s3-3">Eigene Fenster</a></div>
@@ -106,10 +106,10 @@ Messwerte sind sorgfältig umgesetzt, aber nicht mit kalibrierten Messgeräten v
   <li><code>sdrpp.exe</code> starten. Weil das Programm nicht signiert ist, warnt Windows SmartScreen: <span class="ui">Weitere Informationen</span> → <span class="ui">Trotzdem ausführen</span>. Blockiert der Browser schon den Download, die Datei in der Download-Liste ausdrücklich behalten.</li>
   <li>Einstellungen, Logs und Namenslisten liegen im selben Ordner. Für ein Update den neuen Ordner daneben entpacken; die Konfiguration (<code>config.json</code>, <code>*_config.json</code>) kann übernommen werden.</li>
 </ol>
-<h2 id="s2-2">Linux (AppImage, Ubuntu 24.04)</h2>
-<pre>chmod +x SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage
+<h2 id="s2-2">Linux (AppImage, Ubuntu 24.04 und neuer)</h2>
+<pre>chmod +x SDRPP-TETRA-SCHWARTZ_v…-beta_x86_64.AppImage
 sudo apt install libfuse2t64          # einmalig, für AppImages
-./SDRPP-TETRA-SCHWARTZ-v0.19.0-beta-x86_64.AppImage</pre>
+./SDRPP-TETRA-SCHWARTZ_v…-beta_x86_64.AppImage</pre>
 <p>Die Konfiguration liegt unter <code>~/.config/sdrpp_brown_appimage</code>. Für USB-SDRs muss der Benutzer Zugriff auf die Geräte haben (udev-Regeln des jeweiligen SDR-Pakets, z. B. <code>rtl-sdr</code>, <code>hackrf</code>, <code>uhd-host</code>).</p>
 
 <h2 id="s2-3">Treiber und Zusatzsoftware</h2>
@@ -134,6 +134,28 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="0456", ENV{ID_MM_DEVICE_IGNORE}="1"
 EOF
 sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
 <p>Der Benutzer muss in der Gruppe <code>plugdev</code> sein (<code>groups</code>). Nachbauten mit anderer USB-Kennung (<code>lsusb</code>) bekommen eine eigene Zeile. Einen Pluto im Netzwerk trägst du unter <span class="ui">Source</span> → <span class="ui">Address</span> ein (z. B. <code>ip:192.168.2.1</code>) und wählst <span class="ui">Use address</span>.</p>
+
+<h2 id="s2-5">Selbst bauen (andere Linux-Versionen, Windows, macOS)</h2>
+<p>Die fertigen Pakete laufen unter <b>Windows 10 und 11 (64 Bit)</b> und unter <b>Linux x86-64 mit glibc 2.39 oder neuer</b> (Ubuntu 24.04 und neuer, Debian 13, Fedora 40 und neuer, aktuelles Arch). Für ältere Linux-Versionen (z. B. Ubuntu 22.04, Debian 12, Mint 21), ARM-Rechner oder den neuesten Stand vor einem Release baut man das Programm aus dem Quellcode selbst. macOS ist nicht getestet, Android wird nicht unterstützt.</p>
+<ol class="steps">
+  <li><b>SDR-Treiber</b> nach den Seiten der Hersteller installieren (RTL-SDR: Osmocom; PlutoSDR: libiio/libad9361; USRP: UHD-Installationsanleitung; HackRF, Airspy, BladeRF, LimeSuite, SDRplay-API, SoapySDR). Die Links stehen in <code>docs/BUILDING.md</code> im Repository.</li>
+  <li><b>Voraussetzungen</b> (Debian/Ubuntu):
+<pre>sudo apt install build-essential cmake ninja-build git unzip xxd libfftw3-dev libglfw3-dev \
+  libvolk-dev libzstd-dev librtaudio-dev libpulse-dev portaudio19-dev libspdlog-dev \
+  liborc-0.4-dev librtlsdr-dev libhackrf-dev libairspy-dev libairspyhf-dev libiio-dev libad9361-dev</pre>
+  Für USRP zusätzlich <code>libuhd-dev libboost-dev libboost-thread-dev</code>, für BladeRF <code>libbladerf-dev</code>, für LimeSDR <code>liblimesuite-dev</code>. Paketnamen für Fedora und Arch: <code>docs/BUILDING.md</code>.</li>
+  <li><b>Bauen und installieren</b> (Internetzugang nötig: der Build lädt den ETSI-Sprachcodec):
+<pre>git clone https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz.git
+cd sdrpp-tetra-schwartz
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+  -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON -DOPT_BUILD_USRP_SOURCE=ON
+cmake --build build -j$(nproc)
+sudo cmake --install build
+sdrpp</pre></li>
+  <li>Bricht <code>cmake</code> wegen einer fehlenden SDR-Bibliothek ab: Bibliothek nachinstallieren oder das Modul abschalten, z. B. <code>-DOPT_BUILD_USRP_SOURCE=OFF</code> (alle Optionen oben in <code>CMakeLists.txt</code>).</li>
+  <li><b>Aktualisieren:</b> <code>git pull</code>, danach die Zeilen <code>cmake --build</code> und <code>sudo cmake --install</code> erneut.</li>
+</ol>
+<p><b>Windows</b> selbst zu bauen ist aufwendig (Visual Studio 2022, vcpkg, PothosSDR, rtaudio, optional UHD und codec2); die genaue, funktionierende Anleitung ist der CI-Workflow <code>.github/workflows/build_tetra_custom.yml</code>, Zusammenfassung in <code>docs/BUILDING.md</code>. Ohne eigene Änderungen ist die fertige ZIP-Datei der einfachere Weg.</p>
 
 <h2 id="s2-4">Was beim ersten Start eingestellt ist</h2>
 <ul>
