@@ -77,6 +77,26 @@ public:
         if (addrType == 6) { s.lastUsageMarker = usageMarker; }
         s.encrypted = s.encrypted || (encrMode != 0);
         s.chanAlloc = s.chanAlloc || (chanAlloc != 0);
+        if (encrMode != 0) {
+            encryptedPdus++;
+            // one traffic line per address and 10 s: the content is not decoded
+            auto it = lastEncrLine.find(ssi);
+            if (it == lastEncrLine.end() || now - it->second >= 10) {
+                lastEncrLine[ssi] = now;
+                TetraTrafficEntry te;
+                te.t = now;
+                te.tn = tn;
+                te.pdu = "encrypted";
+                te.to = ssi;
+                te.text = "Encrypted (air interface encryption mode " + std::to_string(encrMode) + ") - not decoded, this program does not decrypt";
+                traffic.push_back(te);
+                while (traffic.size() > MAX_TRAFFIC) { traffic.pop_front(); }
+            }
+        }
+    }
+    uint64_t encryptedCount() {
+        std::lock_guard<std::mutex> lck(mtx);
+        return encryptedPdus;
     }
 
     // ---- layer 3 events (decoder thread) ----
@@ -299,6 +319,8 @@ private:
     std::unordered_map<uint32_t, TetraSubscriber> table;
     std::vector<uint32_t> newSinceLog;
     std::deque<TetraTrafficEntry> traffic;
+    std::unordered_map<uint32_t, time_t> lastEncrLine;
+    uint64_t encryptedPdus = 0;
     std::vector<TetraTrafficEntry> newTraffic;
     std::unordered_map<int, uint32_t> calls;        // call id -> call address
     std::unordered_map<int, uint32_t> talkerOfCall; // call id -> current talker

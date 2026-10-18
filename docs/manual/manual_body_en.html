@@ -239,6 +239,17 @@ sdrpp</pre></li>
 <tr><td>SDRplay</td><td><span class="ui">IF AGC</span> off; set the LNA state manually according to the signal strength.</td><td>IF gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>Spectran (HTTP)</td><td>set level (reference level) and frequency correction in the Spectran software.</td><td>not from this program</td></tr>
 </table>
+<h3>Tested devices</h3>
+<p>Our own tests – a hint for users, not a guarantee. Other SDRs supported by SDR++ should work as well but have not been tried with this edition.</p>
+<table>
+<tr><th style="width:27%">Device</th><th style="width:12%">Status</th><th>Strengths and limits for the measurements</th></tr>
+<tr><td><b>LibreSDR B220</b> (USRP clone, AD9361, used with UHD)</td><td>✓ works</td><td>12 bit, large bandwidth: uplink and downlink of a cell at the same time (≥ 12 MS/s over USB 3). Set <span class="ui">Master Clock</span> to <span class="ui">Auto</span>. High sample rates cost a lot of CPU. External reference depending on the board version.</td></tr>
+<tr><td><b>RTL-SDR V3</b> and <b>RTL-SDR V4</b></td><td>✓ works</td><td>Cheap and good for decoding, coverage drives and trends. 8-bit ADC and at most about 2.4 MS/s: limited dynamic range, so the adjacent channel limits (−60/−70 dBc) and low switching transients usually cannot be verified; MER/EVM are indicative. No external reference (the TCXO is about 1 ppm). Uplink and downlink of a cell do not fit into the bandwidth together.</td></tr>
+<tr><td><b>PLUTO+</b> (AD9363, ADC/DAC)</td><td>✓ works</td><td>12 bit, several MS/s over USB 2 or Ethernet. External 10 MHz reference input: the best choice for frequency measurements. Watch the <span class="ui">Overflows</span> counter (lost samples).</td></tr>
+<tr><td><b>HamGeek Zynq7010 AD9363 SDR</b> (XC7Z010CLG400 + AD9363ABCZ, Pluto-Nano clone)</td><td>✓ works</td><td>12 bit like the PLUTO+, compact. Frequency accuracy depends on its oscillator – calibrate it (manual, chapter 4.3).</td></tr>
+<tr><td><b>HamGeek ADI Pluto+ 70 MHz–6 GHz</b> (AD9363, via USB)</td><td>✗ not yet</td><td>Connects and runs, but shows no carrier. A setting is still wrong; under investigation.</td></tr>
+</table>
+
 <div class="box info"><b class="t">New in v0.20: dBFS for PlutoSDR and BladeRF</b>Both deliver 12-bit samples. Since v0.20, 0 dBFS refers to the real ADC limit, so all levels appear 24 dB higher than in older versions. Please redo a level calibration (<span class="ui">Level cal.</span>).</div>
 <div class="box"><b class="t">Tip for Pluto/Zynq on Windows</b>If there are dropouts (“Re-locks … with timing slip”), lower the sample rate and connect the device directly to a USB 3 port without a hub. The buffers are already set to 20 ms × 8.</div>
 
@@ -262,6 +273,8 @@ sdrpp</pre></li>
 <h3>Constellation</h3>
 <p>π/4-DQPSK has eight target points (<span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit.</p>
 <p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display. The measurements still show it.</p>
+<h3>Encryption (indication only)</h3>
+<p>The program decrypts nothing; the encryption code of osmo-tetra is removed. Under <span class="ui">Network &amp; cell</span>, <span class="ui">Air interface encryption</span> shows whether the cell offers air interface encryption and whether a CCK is in use (security class 3). Encrypted messages appear in <span class="ui">Traffic</span> as <span class="ui">encrypted – not decoded</span>; stations with encrypted traffic carry an “E” in the TS column. The algorithm (TEA1 … TEA4) is normally not sent on the downlink and is therefore not shown.</p>
 <h3>Decoder mode</h3>
 <p>The program decodes by itself (normal case). At the very bottom of the menu, the closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> sends the symbols over UDP to an external program. While it is active, the built-in decoder and all measurements that need it are off; a note at the top of the menu says so. From v0.20.1 on, the program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
 <p>The TETRA demodulator header no longer has a checkbox to switch it off (a stray click switched the whole decoder off). If the module is switched off anyway, the checkbox appears again.</p>

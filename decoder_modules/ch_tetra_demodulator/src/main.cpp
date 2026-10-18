@@ -2982,6 +2982,26 @@ private:
         tw::TextColored(_this->osmotetradecoder.getCircuitData() ? on_color : off_color, "Circuit data  ");tw::SameTextColored(_this->osmotetradecoder.getVoiceService() ? on_color : off_color, "Voice  ");tw::SameTextColored(_this->osmotetradecoder.getNormalMode() ? on_color : off_color, "Normal mode");
         tw::TextColored(_this->osmotetradecoder.getMigrationSupported() ? on_color : off_color, "Migration  ");tw::SameTextColored(_this->osmotetradecoder.getNeverMinimumMode() ? on_color : off_color, "Never min mode  ");tw::SameTextColored(_this->osmotetradecoder.getPriorityCell() ? on_color : off_color, "Priority cell");
         tw::TextColored(_this->osmotetradecoder.getDeregMandatory() ? on_color : off_color, "Dereg req.  ");tw::SameTextColored(_this->osmotetradecoder.getRegMandatory() ? on_color : off_color, "Reg req.");
+        {
+            // encryption indicator only: nothing is decrypted in this edition
+            const struct tetra_display_state* ds = _this->osmotetradecoder.getDisplay();
+            bool air = _this->osmotetradecoder.getAirEncryption();
+            uint64_t enc = _this->subscribers.encryptedCount();
+            tw::Text("Air interface encryption:");
+            if (!air) { tw::SameTextColored(tc::val(), "not offered by the cell"); }
+            else if (ds && ds->cck_valid) { tw::SameTextColored(tc::warn(), "offered, CCK %d in use (security class 3)", ds->cck_id); }
+            else { tw::SameTextColored(tc::warn(), "offered"); }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("From the cell broadcast (BS service details, CCK identifier in SYSINFO,\n"
+                                  "EN 300 392-2). This program does NOT decrypt: encrypted messages and calls\n"
+                                  "are only marked as encrypted. The algorithm (TEA1 ... TEA4) is not sent\n"
+                                  "on the downlink in normal operation and is therefore not shown.");
+            }
+            if (enc > 0) {
+                tw::TextColored(tc::warn(), "Encrypted PDUs seen: %llu", (unsigned long long)enc);
+                tw::SameTextDisabled("(not decoded - no decryption in this program)");
+            }
+        }
         if(crc_failed) {
             style::endDisabled();
         }
@@ -4070,6 +4090,9 @@ private:
                     if (!call.empty()) { tw::TextU(call.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(3);
                     tw::Text("%u%s%s", sub.lastTn, sub.chanAlloc ? "C" : "", sub.encrypted ? "E" : "");
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("Last timeslot. C = channel allocation seen,\nE = encrypted traffic seen (not decoded - this program does not decrypt)");
+                    }
                     ImGui::TableSetColumnIndex(4);
                     char ab[32];
                     agoText(ago, ab, sizeof(ab));
@@ -4081,6 +4104,7 @@ private:
                         tw::TextColored(green, "TALKING in %u%s", sub.talkingIn, gi.empty() ? "" : (" " + gi).c_str());
                     }
                     else if (!sub.lastActivity.empty()) { tw::TextU(sub.lastActivity.c_str()); }
+                    else if (sub.encrypted) { tw::TextColored(tc::warn(), "encrypted - not decoded"); }
                     if (sub.hasPos && ImGui::IsItemHovered()) {
                         ImGui::SetTooltip("Last position %.5f, %.5f", sub.lat, sub.lon);
                     }
@@ -4212,7 +4236,7 @@ private:
                 std::vector<const TetraTrafficEntry*> rows;
                 rows.reserve(traffic.size());
                 for (auto it = traffic.rbegin(); it != traffic.rend(); ++it) {
-                    bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS";
+                    bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS" && it->pdu != "encrypted";
                     if (trafficHideControl && control) { continue; }
                     rows.push_back(&*it);
                 }
@@ -4231,7 +4255,7 @@ private:
                 clipper.Begin((int)rows.size());
                 while (clipper.Step()) for (int ri = clipper.DisplayStart; ri < clipper.DisplayEnd; ri++) {
                     const TetraTrafficEntry* it = rows[ri];
-                    bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS";
+                    bool control = it->pdu != "D-SDS-DATA" && it->pdu != "D-STATUS" && it->pdu != "encrypted";
                     struct tm lt;
 #ifdef _WIN32
                     localtime_s(&lt, &it->t);
@@ -4246,7 +4270,8 @@ private:
                     ImGui::TableSetColumnIndex(4);
                     tw::Text("%u", it->tn);
                     ImGui::TableSetColumnIndex(2);
-                    if (control) { tw::TextU(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
+                    if (it->pdu == "encrypted") { tw::TextColored(tc::warn(), "encrypted"); }
+                    else if (control) { tw::TextU(it->pdu.c_str()); } else { tw::TextColored(yellow, "%s", it->pdu.c_str()); }
                     ImGui::TableSetColumnIndex(3);
                     if (it->from) {
                         std::string c, i;
