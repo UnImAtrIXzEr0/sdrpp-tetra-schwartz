@@ -2,6 +2,9 @@ name: Feature request
 description: An idea for a new function or a better measurement
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: Ideas are welcome. This is a personal tool, not a community project – whether and when a suggestion is taken up is decided by the maintainer.
   - type: textarea
     id: idea
     attributes:

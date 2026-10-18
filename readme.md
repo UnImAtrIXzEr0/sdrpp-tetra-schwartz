@@ -8,6 +8,12 @@ for amateur radio TETRA cells by UnImAtrIXzEr0.
 > **Experimental beta.** Not an official release of SDR++ or SDR++Brown and
 > not endorsed by their authors. Please report problems with this edition
 > only [here](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues).
+>
+> **No support.** This is not a community project: it is a tool built and
+> adapted for our own needs and published as it is, in case it is useful to
+> others. We give no support or help with installation, SDRs or
+> measurements. Bug reports and suggestions are welcome, but whether and when
+> anything is changed is up to us alone.
 
 [![Download the latest version](https://img.shields.io/github/v/release/UnImAtrIXzEr0/sdrpp-tetra-schwartz?label=download&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/UnImAtrIXzEr0/sdrpp-tetra-schwartz/build_tetra_custom.yml?branch=main&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/actions)
@@ -84,12 +90,16 @@ Tips:
 
 ## Feedback
 
+This is **not a community project and comes without support** (see above).
+Bug reports and ideas are welcome and are read; there is no promise of an
+answer, a fix or a new function – we decide what gets changed.
+
 - **Bugs:** [open an issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
   with version, operating system, SDR and sample rate.
 - **Questions, measurement experiences, ideas:** [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
 - Please do not post data of real networks or other people (ISSIs, names,
   positions) in screenshots or logs.
-- Pull requests are welcome; they are reviewed and merged by the maintainer.
+- Pull requests may be offered; whether they are taken over is decided by the maintainer.
 
 ## Legal notes
 
@@ -113,6 +123,12 @@ Fehler bitte als [Issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/i
 melden, Fragen und Erfahrungen in den
 [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
 Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen.
+
+**Kein Support:** Das ist kein Community-Projekt, sondern ein Werkzeug, das
+wir für unsere eigenen Ansprüche gebaut bzw. angepasst haben und so, wie es
+ist, veröffentlichen. Wir leisten keine Unterstützung bei Installation, SDRs
+oder Messungen. Fehlerberichte und Verbesserungsvorschläge sind willkommen –
+ob und wann wir etwas davon umsetzen, behalten wir uns vor.
 
 ## Platforms and building from source
 

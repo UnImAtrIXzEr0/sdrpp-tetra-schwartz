@@ -2,7 +2,9 @@
 
 SDR++ TETRA-SCHWARTZ is a **modified version (fork)** of SDR++ for amateur
 radio TETRA, created and maintained by **UnImAtrIXzEr0**.
-It is an experimental beta. It is **not an official release** of SDR++ or
+It is an experimental beta, built and adapted for the maintainer's own needs
+and published as it is: **no support** and no promise of answers, fixes or
+new functions; suggestions are welcome, their implementation is reserved. It is **not an official release** of SDR++ or
 SDR++Brown and is **not endorsed by their authors**. Please report problems
 with this edition only here:
 <https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues>,

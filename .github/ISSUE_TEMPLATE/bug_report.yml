@@ -7,6 +7,7 @@ body:
       value: |
         Thanks for reporting! Please do **not** post real network data (ISSIs, talkgroups, names, positions of other users) or callsigns of others in screenshots or logs.
         Problems with this edition belong here, not to the authors of SDR++ or SDR++Brown.
+        Note: this is a personal tool published as it is – **no support**, no promise of an answer or a fix.
   - type: input
     id: version
     attributes:
