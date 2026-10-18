@@ -11,6 +11,7 @@
 #include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include <dsp/demod/psk.h>
 #include <dsp/buffer/packer.h>
@@ -76,7 +77,7 @@ SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
     /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
     /* Author:          */ "cropinghigh",
-    /* Version:         */ 0, 20, 3,
+    /* Version:         */ 0, 20, 4,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
 };
 
@@ -146,6 +147,7 @@ public:
         if (config.conf[name].contains("compOriginOffset")) { compOriginOffset = config.conf[name]["compOriginOffset"]; }
         if (config.conf[name].contains("afc")) { afcEnabled = config.conf[name]["afc"]; }
         if (config.conf[name].contains("autoGain")) { autoGain = config.conf[name]["autoGain"]; }
+        if (config.conf[name].contains("gainMode") && config.conf[name]["gainMode"].is_number_integer()) { gainMode = std::clamp((int)config.conf[name]["gainMode"], 0, 2); }
         if (config.conf[name].contains("trendDetached")) { trendDetached = config.conf[name]["trendDetached"]; }
         if (config.conf[name].contains("carrDetached")) { carrDetached = config.conf[name]["carrDetached"]; }
         if (config.conf[name].contains("burstDetached")) { burstDetached = config.conf[name]["burstDetached"]; }
@@ -1342,6 +1344,7 @@ private:
             config.release(true);
             gainStatus.clear();
             gainLastSet = -1;
+            restartLevelling();
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Looks for the best signal-to-noise ratio with as little gain as possible:\n"
@@ -1373,6 +1376,37 @@ private:
             }
         }
         if (!gainStatus.empty()) { tw::SameTextDisabled("(?)"); if (ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", gainStatus.c_str()); } }
+        if (autoGain && g && g->gainControllable()) {
+            ImGui::SetNextItemWidth((std::min)(menuWidth * 0.55f, 170.0f * style::uiScale));
+            if (ImGui::Combo(CONCAT("##_tetra_gmode_", name), &gainMode, "Level and hold\0Follow\0Automatic (GPS)\0")) {
+                config.acquire();
+                config.conf[name]["gainMode"] = gainMode;
+                config.release(true);
+                restartLevelling();
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Level and hold: find the best gain once, then keep it fixed, so all\n"
+                                  "results of a measurement series are taken with the same receiver\n"
+                                  "settings. A warning asks for re-levelling if the ADC nears clipping\n"
+                                  "or the SNR drops by more than 6 dB.\n"
+                                  "Follow: adjust continuously (every step is logged).\n"
+                                  "Automatic: follow while moving (GPS speed above 5 km/h over 10 s),\n"
+                                  "hold after 30 s standing still or without GPS fix. With a level\n"
+                                  "calibration (dBm) it always holds - the calibration is only valid\n"
+                                  "at the gain it was made with.");
+            }
+            if (tw::SameButtonOrFull(CONCAT("Re-level##_tetra_relevel_", name))) {
+                restartLevelling();
+                meas.addEvent("Re-levelling requested");
+            }
+            bool follow = gainFollowNow();
+            if (follow) { tw::TextColored(good, "following"); if (gainMoving) { tw::SameTextDisabled("(moving, %.0f km/h)", gainSpeedAvg); } }
+            else if (gainHolding) { tw::TextColored(good, "held"); tw::SameTextDisabled("(levelled %s)", gainHeldAt.c_str()); }
+            else { tw::TextColored(warn, "levelling..."); }
+            if (!gainHoldWarn.empty()) { tw::TextColored(tc::bad(), "%s", gainHoldWarn.c_str()); }
+            if (levelCalDb != 0.0f && gainMode == 1) { tw::TextColored(warn, "Level calibration is only valid at the calibration gain."); }
+            if (levelCalDb != 0.0f && gainMode == 2 && gainMoving) { tw::TextDisabled("moving, but held: level calibration active"); }
+        }
         // whole-band view: ADC peak over the full SDR bandwidth and channel SNR
         tw::Text("Band:"); tw::SameNext();
         if (bandRes.valid) {
@@ -1473,6 +1507,28 @@ private:
             }
         }
 
+        // ---- movement (automatic gain mode): GPS speed averaged over ~10 s ----
+        if (std::chrono::duration<double>(now - gainMoveLast).count() >= 1.0) {
+            gainMoveLast = now;
+            GpsFix f = gps.isRunning() ? gps.get() : GpsFix();
+            bool ok = f.valid && f.ageS < 5.0;
+            gainSpeedAvg = ok ? gainSpeedAvg + (f.speedKmh - gainSpeedAvg) / 10.0 : 0.0;
+            if (ok && gainSpeedAvg > 5.0) {
+                gainStillS = 0;
+                if (!gainMoving) {
+                    gainMoving = true;
+                    if (autoGain && gainMode == 2 && levelCalDb == 0.0f) { meas.addEvent("Moving: auto RF gain follows the level"); gainHoldWarn.clear(); }
+                }
+            }
+            else if (gainMoving && ++gainStillS >= 30) {
+                gainMoving = false;
+                if (autoGain && gainMode == 2 && levelCalDb == 0.0f) {
+                    // standing: keep the gain found while moving
+                    fixGain("standing still");
+                }
+            }
+        }
+
         // ---- automatic RF gain ----
         if (autoGain && std::chrono::duration<double>(now - gainLastStep).count() >= 4.0) {
             gainLastStep = now;
@@ -1498,6 +1554,20 @@ private:
                 gainLastSet = step;
                 double cur = g->gainStepDb(step);
                 double want = cur;
+                bool follow = gainFollowNow();
+                if (!follow && gainHolding) {
+                    // held: no steps, only advise re-levelling
+                    TetraBandMonitor::Result hb = bandRes;
+                    double pk = hb.valid ? (double)hb.peakDbfs : -200.0;
+                    std::string w;
+                    if (pk > -3.0 || m.peakDbfs > -3.0f) { w = "ADC near clipping - press Re-level"; }
+                    else if (hb.valid && !std::isnan(hb.snrDb) && !std::isnan(gainHoldSnr) && hb.snrDb < gainHoldSnr - 6.0f) {
+                        w = "SNR more than 6 dB below the levelled value - re-level?";
+                    }
+                    if (!w.empty() && w != gainHoldWarn) { meas.addEvent("Gain held: " + w); }
+                    gainHoldWarn = w;
+                    return;
+                }
                 std::string why;
                 TetraBandMonitor::Result b = bandRes;
                 bool haveSnr = b.valid && !std::isnan(b.snrDb);
@@ -1553,10 +1623,46 @@ private:
                         agcPrevSnr = haveSnr ? (double)b.snrDb : NAN;
                         agcPrevGainDb = cur;
                         meas.addEvent(std::string(want > cur ? "RF gain up to " : "RF gain down to ") + g->gainLabel(best) + why);
+                        gainQuiet = 0;
+                        return;
                     }
                 }
+                // no step this time: levelling is done after two quiet evaluations
+                if (!follow && ++gainQuiet >= 2) { fixGain("levelled"); }
             }
         }
+    }
+
+    // a level calibration (dBm) is only valid at the gain it was made with:
+    // automatic mode then holds even while moving
+    bool gainFollowNow() const { return gainMode == 1 || (gainMode == 2 && gainMoving && levelCalDb == 0.0f); }
+
+    void restartLevelling() {
+        gainHolding = false;
+        gainQuiet = 0;
+        gainHoldWarn.clear();
+        agcCeilDb = NAN;
+    }
+
+    // keep the current gain from now on (level and hold)
+    void fixGain(const char* why) {
+        gainHolding = true;
+        gainQuiet = 0;
+        gainHoldWarn.clear();
+        gainHoldSnr = (bandRes.valid && !std::isnan(bandRes.snrDb)) ? bandRes.snrDb : NAN;
+        time_t t = time(nullptr);
+        char b[16];
+        struct tm lt;
+#ifdef _WIN32
+        localtime_s(&lt, &t);
+#else
+        localtime_r(&t, &lt);
+#endif
+        strftime(b, sizeof(b), "%H:%M:%S", &lt);
+        gainHeldAt = b;
+        SourceGainInterface* g = findGainInterface();
+        std::string lbl = (g && g->gainControllable()) ? g->gainLabel(g->gainStep()) : std::string("?");
+        meas.addEvent(std::string("RF gain held at ") + lbl + " (" + why + ")");
     }
 
 
@@ -3415,6 +3521,18 @@ private:
     std::string afcStatus;
     std::chrono::steady_clock::time_point afcLastStep;
     bool autoGain = true;       // edition default
+    // 0 level once and hold, 1 follow continuously, 2 automatic: follow while
+    // moving (GPS, > 5 km/h), hold when standing (30 s) or without GPS
+    int gainMode = 2;
+    bool gainHolding = false;   // levelled, gain held
+    int gainQuiet = 0;          // evaluations without a step (levelling done after 2)
+    float gainHoldSnr = NAN;    // band SNR when the gain was fixed
+    std::string gainHoldWarn;   // why re-levelling is advised
+    std::string gainHeldAt;     // wall clock time of the levelling
+    bool gainMoving = false;
+    double gainSpeedAvg = 0.0;
+    int gainStillS = 0;
+    std::chrono::steady_clock::time_point gainMoveLast;
     std::string gainStatus;
     std::chrono::steady_clock::time_point gainLastStep;
     int gainLastSet = -1;
