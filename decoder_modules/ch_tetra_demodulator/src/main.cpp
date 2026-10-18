@@ -222,6 +222,18 @@ public:
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
         loadTiles();
+        if (config.conf[name].contains("listen") && config.conf[name]["listen"].is_object()) {
+            json& l = config.conf[name]["listen"];
+            if (l.contains("mode")) { listenMode = std::clamp((int)l["mode"], 0, 2); }
+            if (l.contains("ts")) { listenTs = std::clamp((int)l["ts"], 1, 4); }
+            if (l.contains("others")) { listenOthers = l["others"]; }
+            if (l.contains("muteEncrypted")) { listenMuteEnc = l["muteEncrypted"]; }
+            if (l.contains("list") && l["list"].is_array()) {
+                for (auto& e : l["list"]) {
+                    if (e.contains("ssi") && e.contains("group")) { listenList.push_back({ (uint32_t)e["ssi"], (bool)e["group"] }); }
+                }
+            }
+        }
         if (config.conf[name].contains("prop") && config.conf[name]["prop"].is_object()) {
             json& pp = config.conf[name]["prop"];
             if (pp.contains("bsValid")) { propView.bsValid = pp["bsValid"]; }
@@ -1031,6 +1043,7 @@ private:
         // own audio volume / mute, independent of the Radio module
         tw::Text("Audio:"); ImGui::SameLine();
         sigpath::sinkManager.showVolumeSlider(_this->name, "##_tetra_vol_", menuWidth - ImGui::GetCursorPosX(), 0, 2, false);
+        _this->drawListen(menuWidth);
         if (ImGui::RadioButton(CONCAT("ETSI##_tetra_mode_etsi_", _this->name), !_this->hamMode) && _this->hamMode) {
             _this->hamMode = false;
             _this->applyDuplexMode();
@@ -1526,6 +1539,7 @@ private:
         if (vfo && vfo->wtfVFO) { vfo->wtfVFO->positionLocked = enabled && vfoLocked; }
         updatePanels();
         if (!enabled) { return; }
+        listenLoop();
         snapLoop();
         double propT = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         if (gps.isRunning() && propView.due(propT)) {
@@ -2340,6 +2354,162 @@ private:
         saveTiles();
         static const char* names[] = { "classic (all in the menu)", "measuring station", "drive test", "touch" };
         meas.addEvent(std::string("Layout: ") + names[std::clamp(preset, 0, 3)]);
+    }
+
+    // ---------------- "Listen to": voice selection ----------------
+
+    void saveListen() {
+        config.acquire();
+        json& l = config.conf[name]["listen"];
+        l = json::object();
+        l["mode"] = listenMode;
+        l["ts"] = listenTs;
+        l["others"] = listenOthers;
+        l["muteEncrypted"] = listenMuteEnc;
+        json arr = json::array();
+        for (auto& e : listenList) { json j; j["ssi"] = e.ssi; j["group"] = e.group; arr.push_back(j); }
+        l["list"] = arr;
+        config.release(true);
+    }
+
+    void listenAddTop(uint32_t ssi, bool group) {
+        listenList.erase(std::remove_if(listenList.begin(), listenList.end(), [&](const ListenEntry& e) { return e.ssi == ssi && e.group == group; }), listenList.end());
+        listenList.insert(listenList.begin(), { ssi, group });
+        listenMode = 2;
+        saveListen();
+    }
+    void listenAddEnd(uint32_t ssi, bool group) {
+        for (auto& e : listenList) { if (e.ssi == ssi && e.group == group) { return; } }
+        listenList.push_back({ ssi, group });
+        saveListen();
+    }
+    bool listenHas(uint32_t ssi, bool group) {
+        for (auto& e : listenList) { if (e.ssi == ssi && e.group == group) { return true; } }
+        return false;
+    }
+    void listenRemove(uint32_t ssi, bool group) {
+        listenList.erase(std::remove_if(listenList.begin(), listenList.end(), [&](const ListenEntry& e) { return e.ssi == ssi && e.group == group; }), listenList.end());
+        saveListen();
+    }
+
+    // context menu for an ISSI / GSSI cell in the tables (right-click)
+    void listenContext(uint32_t ssi, bool group) {
+        std::string id = std::string("##_listen_ctx_") + (group ? "g" : "s") + std::to_string(ssi) + name;
+        if (ImGui::BeginPopupContextItem(id.c_str())) {
+            tw::TextDisabled("%s %u", group ? "Group" : "Station", ssi);
+            if (ImGui::MenuItem("Listen to this one (top of the priority list)")) { listenAddTop(ssi, group); }
+            if (!listenHas(ssi, group)) { if (ImGui::MenuItem("Add to the end of the priority list")) { listenAddEnd(ssi, group); } }
+            else if (ImGui::MenuItem("Remove from the priority list")) { listenRemove(ssi, group); }
+            ImGui::EndPopup();
+        }
+    }
+
+    // every frame: which timeslots may be played
+    void listenLoop() {
+        int mask = 0;
+        bool encMuted = false;
+        std::string now;
+        auto slotTraffic = [&](int ts) { return osmotetradecoder.getTimeslotContent(ts - 1) == 4; };
+        auto owner = [&](int ts) { return subscribers.slotOwner(ts); };
+        auto encOf = [&](const TetraSubscriberTable::SlotOwner& o) { return o.ssi && (o.e2ee || o.air); };
+        auto allowed = [&](int ts) {
+            if (!listenMuteEnc) { return true; }
+            auto o = owner(ts);
+            if (encOf(o)) { encMuted = true; return false; }
+            return true;
+        };
+        if (listenMode == 1) {
+            if (allowed(listenTs)) { mask = 1 << (listenTs - 1); }
+        }
+        else if (listenMode == 2) {
+            for (auto& e : listenList) {
+                int ts = subscribers.slotOf(e.ssi, !e.group);
+                if (ts >= 1 && ts <= 4 && slotTraffic(ts) && allowed(ts)) { mask = 1 << (ts - 1); break; }
+            }
+            if (!mask && listenOthers) {
+                for (int ts = 1; ts <= 4; ts++) { if (allowed(ts)) { mask |= 1 << (ts - 1); } }
+            }
+        }
+        else {
+            for (int ts = 1; ts <= 4; ts++) { if (allowed(ts)) { mask |= 1 << (ts - 1); } }
+        }
+        osmotetradecoder.setListenMask(mask);
+        // what is played: timeslot of the last voice frame, if traffic is still there
+        int vt = osmotetradecoder.getVoiceTn();
+        if (vt >= 1 && vt <= 4 && slotTraffic(vt) && ((mask >> (vt - 1)) & 1)) {
+            auto o = owner(vt);
+            char b[160];
+            if (o.ssi) {
+                std::string c, i;
+                describeSsi(o.ssi, TetraSubscriber::KIND_GROUP, c, i);
+                snprintf(b, sizeof(b), "TS%d, %u%s%s", vt, o.ssi, i.empty() ? "" : (" " + i).c_str(), o.talker ? (", talker " + std::to_string(o.talker)).c_str() : "");
+            }
+            else { snprintf(b, sizeof(b), "TS%d", vt); }
+            now = b;
+        }
+        listenNow = now;
+        listenMutedEnc = encMuted;
+    }
+
+    void drawListen(float menuWidth) {
+        (void)menuWidth;
+        tw::Text("Listen to:");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(130.0f * style::uiScale);
+        if (ImGui::Combo(CONCAT("##_tetra_listen_", name), &listenMode, "Auto\0One timeslot\0Priority list\0")) { saveListen(); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Which voice call goes to the loudspeaker (one at a time - the ETSI codec\n"
+                              "has a single state, two calls decoded in turn would mix):\n"
+                              "Auto: the first active traffic timeslot.\n"
+                              "One timeslot: only this timeslot.\n"
+                              "Priority list: the first listed group / station that has a call now\n"
+                              "(scanner); right-click a GSSI / ISSI in Stations & Traffic to add it.");
+        }
+        if (listenMode == 1) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70.0f * style::uiScale);
+            int t = listenTs - 1;
+            if (ImGui::Combo(CONCAT("##_tetra_listen_ts_", name), &t, "TS1\0TS2\0TS3\0TS4\0")) { listenTs = t + 1; saveListen(); }
+        }
+        if (listenMode == 2) {
+            if (tw::SameSmallButton(CONCAT("List...##_tetra_listen_list_", name))) { ImGui::OpenPopup(CONCAT("##_tetra_listen_pop_", name)); }
+        }
+        if (ImGui::BeginPopup(CONCAT("##_tetra_listen_pop_", name))) {
+            tw::TextDisabled("Priority list (top = highest). Right-click a GSSI / ISSI in\nStations & Traffic to add it, or enter it here.");
+            int del = -1, up = -1;
+            for (size_t i = 0; i < listenList.size(); i++) {
+                auto& e = listenList[i];
+                std::string c, inf;
+                describeSsi(e.ssi, e.group ? TetraSubscriber::KIND_GROUP : TetraSubscriber::KIND_INDIVIDUAL, c, inf);
+                std::string sid = std::to_string(i) + name;
+                if (ImGui::SmallButton(("^##_ll_up_" + sid).c_str()) && i > 0) { up = (int)i; }
+                ImGui::SameLine();
+                if (ImGui::SmallButton(("x##_ll_del_" + sid).c_str())) { del = (int)i; }
+                ImGui::SameLine();
+                tw::Text("%zu. %s %u %s", i + 1, e.group ? "group" : "station", e.ssi, e.group ? inf.c_str() : c.c_str());
+            }
+            if (up > 0) { std::swap(listenList[up], listenList[up - 1]); saveListen(); }
+            if (del >= 0) { listenList.erase(listenList.begin() + del); saveListen(); }
+            ImGui::Separator();
+            ImGui::SetNextItemWidth(110.0f * style::uiScale);
+            ImGui::InputScalar(CONCAT("##_ll_add_", name), ImGuiDataType_U32, &listenAddSsi);
+            ImGui::SameLine();
+            ImGui::Checkbox(CONCAT("group##_ll_grp_", name), &listenAddGroup);
+            ImGui::SameLine();
+            if (ImGui::SmallButton(CONCAT("Add##_ll_addb_", name)) && listenAddSsi > 0 && listenAddSsi <= 0xFFFFFF) { listenAddEnd(listenAddSsi, listenAddGroup); }
+            if (ImGui::Checkbox(CONCAT("Other calls when no listed one is active##_ll_oth_", name), &listenOthers)) { saveListen(); }
+            ImGui::EndPopup();
+        }
+        if (tw::SameCheckbox(CONCAT("Mute encrypted##_tetra_listen_enc_", name), &listenMuteEnc)) { saveListen(); }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Encrypted speech cannot be decoded (no decryption in this program); played\n"
+                              "anyway it is only noise. Applies when the call is marked encrypted\n"
+                              "(air interface encryption or end-to-end flag of the call setup).");
+        }
+        tw::Text("Playing:");
+        if (!listenNow.empty()) { tw::SameTextColored(tc::good(), "%s", listenNow.c_str()); }
+        else if (listenMutedEnc) { tw::SameTextColored(tc::warn(), "encrypted call - muted"); }
+        else { tw::SameTextDisabled("-"); }
     }
 
     // ---------------- Tile column / strip below the waterfall ----------------
@@ -4112,7 +4282,9 @@ private:
                     long ago = (long)(now - sub.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    tw::TextColored(sub.talkingIn ? green : (ago < 120 ? yellow : grey), "%u", sub.ssi);
+                    tw::TextColored(sub.talkingIn ? green : (ago < 120 ? yellow : grey), "%u%s", sub.ssi, listenHas(sub.ssi, false) ? " *" : "");
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Right-click: listen to this station / priority list (* = in the list)"); }
+                    listenContext(sub.ssi, false);
                     ImGui::TableSetColumnIndex(1);
                     tw::TextDisabled("%s", kindName(sub.kind));
                     if (ImGui::IsItemHovered()) {
@@ -4205,7 +4377,9 @@ private:
                     long ago = (long)(now - g.lastSeen);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
-                    tw::TextColored(g.talker ? green : (ago < 120 ? yellow : grey), "%u", g.ssi);
+                    tw::TextColored(g.talker ? green : (ago < 120 ? yellow : grey), "%u%s", g.ssi, listenHas(g.ssi, true) ? " *" : "");
+                    if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Right-click: listen to this group / priority list (* = in the list)"); }
+                    listenContext(g.ssi, true);
                     ImGui::TableSetColumnIndex(1);
                     if (!info.empty()) { tw::TextU(info.c_str()); } else { tw::TextDisabled("-"); }
                     ImGui::TableSetColumnIndex(2);
@@ -4562,6 +4736,17 @@ private:
     bool tilesDirty = false, sideRegistered = false, bottomRegistered = false;
     int touchTab = 0, touchStepIdx = 2;
     std::atomic<int> layoutReq { -1 };
+    // "Listen to": which voice call goes to the loudspeaker
+    struct ListenEntry { uint32_t ssi; bool group; };
+    int listenMode = 0;           // 0 auto, 1 one timeslot, 2 priority list
+    int listenTs = 2;
+    bool listenOthers = true;     // priority list: other calls when no listed one is active
+    bool listenMuteEnc = true;    // encrypted calls are not played (noise)
+    std::vector<ListenEntry> listenList;
+    std::string listenNow;        // what is played now (GUI)
+    bool listenMutedEnc = false;
+    uint32_t listenAddSsi = 0;
+    bool listenAddGroup = true;
     TetraPropagationView propView;
     RadioIdDb radioid;
     float levelCalDb = 0.0f;

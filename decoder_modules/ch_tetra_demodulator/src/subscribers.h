@@ -25,6 +25,9 @@ struct TetraSubscriber {
     uint8_t lastAddrType = 0;
     bool encrypted = false;    // MAC-RESOURCE encryption mode != 0
     bool chanAlloc = false;    // seen with a channel allocation (call setup / traffic)
+    uint8_t allocTs = 0;       // timeslot 1..4 of the last downlink channel allocation (clear signalling)
+    time_t allocTime = 0;
+    bool e2ee = false;         // call with end-to-end encryption (basic service information)
 
     // From layer 3 decoding
     enum Kind { KIND_UNKNOWN = 0, KIND_INDIVIDUAL = 1, KIND_GROUP = 2, KIND_BROADCAST = 3 };
@@ -77,8 +80,13 @@ public:
         if (addrType == 6) { s.lastUsageMarker = usageMarker; }
         s.encrypted = s.encrypted || (encrMode != 0);
         s.chanAlloc = s.chanAlloc || (chanAlloc != 0);
+        if (chanAlloc & 0x0f) {   // timeslot bitmap, TS1 = 8
+            for (int t = 0; t < 4; t++) { if (chanAlloc & (8 >> t)) { s.allocTs = (uint8_t)(t + 1); break; } }
+            s.allocTime = now;
+        }
         if (encrMode != 0) {
             encryptedPdus++;
+            lastEncrTime = now;
             // one traffic line per address and 10 s: the content is not decoded
             auto it = lastEncrLine.find(ssi);
             if (it == lastEncrLine.end() || now - it->second >= 10) {
@@ -94,6 +102,40 @@ public:
             }
         }
     }
+    // "Listen to": which address owns timeslot ts (1..4) - the newest downlink
+    // channel allocation within 'maxAge' seconds; 0 if none
+    struct SlotOwner { uint32_t ssi = 0; bool e2ee = false; bool air = false; uint32_t talker = 0; };
+    SlotOwner slotOwner(int ts, long maxAge = 60) {
+        std::lock_guard<std::mutex> lck(mtx);
+        SlotOwner o;
+        time_t now = time(nullptr), best = 0;
+        for (auto& kv : table) {
+            const TetraSubscriber& x = kv.second;
+            if (x.allocTs == ts && now - x.allocTime <= maxAge && x.allocTime > best) {
+                best = x.allocTime;
+                o.ssi = x.ssi; o.e2ee = x.e2ee; o.air = x.encrypted; o.talker = x.talker;
+            }
+        }
+        return o;
+    }
+    // timeslot of an address (group, or the group a station talks in / its own call); 0 = none
+    int slotOf(uint32_t ssi, bool station, long maxAge = 60) {
+        std::lock_guard<std::mutex> lck(mtx);
+        time_t now = time(nullptr);
+        auto ok = [&](const TetraSubscriber& x) { return x.allocTs && now - x.allocTime <= maxAge; };
+        auto it = table.find(ssi);
+        if (!station) { return (it != table.end() && ok(it->second)) ? it->second.allocTs : 0; }
+        if (it != table.end() && it->second.talkingIn) {
+            auto g = table.find(it->second.talkingIn);
+            if (g != table.end() && ok(g->second)) { return g->second.allocTs; }
+        }
+        return (it != table.end() && ok(it->second)) ? it->second.allocTs : 0;
+    }
+    time_t lastEncrypted() {
+        std::lock_guard<std::mutex> lck(mtx);
+        return lastEncrTime;
+    }
+
     uint64_t encryptedCount() {
         std::lock_guard<std::mutex> lck(mtx);
         return encryptedPdus;
@@ -174,6 +216,9 @@ public:
                 p.lastActivity = std::string(ev.type == TETRA_L3_CALL_SETUP ? "call setup to " : "talking in ") + std::to_string(ev.addr_ssi);
                 p.lastActivityTime = now;
                 talkerOfCall[ev.call_id] = ev.party_ssi;
+            }
+            if (ev.type == TETRA_L3_CALL_SETUP && addrValid && ev.encrypted_call >= 0) {
+                entry(ev.addr_ssi, now).e2ee = ev.encrypted_call == 1;
             }
             if (ev.type == TETRA_L3_CALL_SETUP) {
                 te.text = std::string(ev.comm_type == 0 ? "individual call" : ev.comm_type > 0 ? "group call" : "call") +
@@ -321,6 +366,7 @@ private:
     std::deque<TetraTrafficEntry> traffic;
     std::unordered_map<uint32_t, time_t> lastEncrLine;
     uint64_t encryptedPdus = 0;
+    time_t lastEncrTime = 0;
     std::vector<TetraTrafficEntry> newTraffic;
     std::unordered_map<int, uint32_t> calls;        // call id -> call address
     std::unordered_map<int, uint32_t> talkerOfCall; // call id -> current talker

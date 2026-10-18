@@ -388,6 +388,9 @@ struct tetra_mac_state {
 	void* put_voice_data_ctx;
 	int last_frame;
 	int curr_active_timeslot;
+	int listen_mask;		/* TETRA-SCHWARTZ: bit n-1 = timeslot n may be played */
+	int voice_skip;
+	int voice_tn;			/* timeslot of the last played voice frame */
 	
 	struct fragslot* fragslots;
 };

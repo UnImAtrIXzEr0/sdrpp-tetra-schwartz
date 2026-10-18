@@ -262,7 +262,9 @@ static int rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 	if (tms->addr_cb)
 		tms->addr_cb(tms->addr_cb_ctx, rsd.addr.type, rsd.addr.ssi, rsd.addr.usage_marker,
 			     rsd.addr.event_label, tmvp->u.unitdata.tdma_time.tn,
-			     rsd.encryption_mode, rsd.chan_alloc_pres);
+			     rsd.encryption_mode,
+			     /* channel allocation: flag 0x10 + timeslot bitmap (TS1 = 8), only readable in clear */
+			     rsd.chan_alloc_pres ? (uint8_t)(0x10 | ((rsd.encryption_mode == 0 && rsd.cad.ul_dl != 2) ? (rsd.cad.timeslot & 0x0f) : 0)) : 0);
 
 	if (msgb_l2len(msg) == 0)
 		goto out; /* No l2 data */

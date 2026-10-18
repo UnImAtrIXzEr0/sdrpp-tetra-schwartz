@@ -304,7 +304,20 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, int blk_num, const uint8_t *bi
 	case TPSAP_T_SCH_F:
 		tup->lchan = TETRA_LC_SCH_F;
 		//Process voice frame
+		/* TETRA-SCHWARTZ "Listen to": only the first traffic slot of a TDMA frame
+		 * that the listen mask allows goes through the codec. The ETSI codec has
+		 * one state only - decoding several calls in turn would mix them. */
 		if (tms->cur_burst.is_traffic) {
+			if (tms->t_display_st->curr_frame != tms->last_frame) {
+				tms->last_frame = tms->t_display_st->curr_frame;
+				tms->curr_active_timeslot = 0;
+			}
+			int tn_ok = (tms->listen_mask >> ((t_phy_state.time.tn - 1) & 3)) & 1;
+			if (tn_ok && tms->curr_active_timeslot == 0)
+				tms->curr_active_timeslot = t_phy_state.time.tn;
+			tms->voice_skip = !tn_ok || tms->curr_active_timeslot != t_phy_state.time.tn;
+		}
+		if (tms->cur_burst.is_traffic && !tms->voice_skip) {
 			int16_t block[690];
 			/* Generate a block */
 			memset(block, 0x00, sizeof(int16_t) * 690);
@@ -382,13 +395,8 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, int blk_num, const uint8_t *bi
 			Decod_Tetra(parm, synth_p2);		/* decoder */
 			Post_Process(synth_p2, (int16_t)240);	/* Post processing of synthesis  */
 			//USE SYNTH
-			if(tms->t_display_st->curr_frame != tms->last_frame) {
-				tms->curr_active_timeslot = t_phy_state.time.tn;
-				tms->last_frame = tms->t_display_st->curr_frame;
-			}
-			if(tms->curr_active_timeslot == t_phy_state.time.tn) {
-				tms->put_voice_data(tms->put_voice_data_ctx, 480, synth);
-			}
+			tms->voice_tn = t_phy_state.time.tn;
+			tms->put_voice_data(tms->put_voice_data_ctx, 480, synth);
 		}
 		break;
 	default:

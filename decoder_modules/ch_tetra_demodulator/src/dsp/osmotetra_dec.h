@@ -82,6 +82,7 @@ namespace dsp {
             tms->put_voice_data_ctx = this;
             tms->last_frame = 0;
             tms->curr_active_timeslot = 0;
+            tms->listen_mask = 0x0f;
 
             Init_Decod_Tetra();
 
@@ -116,6 +117,9 @@ namespace dsp {
         int getCurrMultiframe() { return tms->t_display_st->curr_multiframe; }
         int getCurrFrame() { return tms->t_display_st->curr_frame; }
         int getTimeslotContent(int ts) { return tms->t_display_st->timeslot_content[ts]; }
+        // "Listen to": bit n-1 = timeslot n may be played (set from the GUI thread)
+        void setListenMask(int m) { tms->listen_mask = m & 0x0f; }
+        int getVoiceTn() { return tms->voice_tn; }
         int getDlUsage() { return tms->t_display_st->dl_usage; }
         // timeslot occupancy counters (ts 0..3), see tetra_display_state
         uint32_t getDlUseCnt(int ts, int cat) { return tms->t_display_st->dl_use_cnt[ts & 3][cat & 3]; }

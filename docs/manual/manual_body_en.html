@@ -273,6 +273,14 @@ sdrpp</pre></li>
 <h3>Constellation</h3>
 <p>π/4-DQPSK has eight target points (<span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit.</p>
 <p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display. The measurements still show it.</p>
+<h3>Listen to – which call is played</h3>
+<p>Always <b>one</b> call is played: the ETSI speech codec has a single state, two calls decoded in turn would mix. Only the chosen timeslot goes through the codec. <span class="ui">Listen to</span> next to Audio:</p>
+<ul>
+  <li><span class="ui">Auto</span> – the first timeslot with speech in the TDMA frame.</li>
+  <li><span class="ui">One timeslot</span> – only TS1 … TS4.</li>
+  <li><span class="ui">Priority list</span> – scanner: the first group or station of the list that is talking now; a higher one interrupts a lower one. <span class="ui">List...</span> edits the list (order, delete, enter a GSSI/ISSI); <span class="ui">Other calls when no listed one is active</span> plays the other calls otherwise. Easier: right-click a GSSI or ISSI in <span class="ui">Stations &amp; Traffic</span> → <span class="ui">Listen to this one</span> (top of the list) or <span class="ui">Add to the end</span>; list entries carry a “*” there.</li>
+</ul>
+<p>Which group/station uses which timeslot comes from the channel allocation of the network at call setup (readable in clear signalling only). <span class="ui">Mute encrypted</span> (on by default) mutes encrypted calls – they would only be noise. <span class="ui">Playing</span> shows timeslot, group and talker of the call heard now, or “encrypted call – muted”.</p>
 <h3>Encryption (indication only)</h3>
 <p>The program decrypts nothing; the encryption code of osmo-tetra is removed. Under <span class="ui">Network &amp; cell</span>, <span class="ui">Air interface encryption</span> shows whether the cell offers air interface encryption and whether a CCK is in use (security class 3). Encrypted messages appear in <span class="ui">Traffic</span> as <span class="ui">encrypted – not decoded</span>; stations with encrypted traffic carry an “E” in the TS column. If the cell sends the extended services in SYSINFO, <span class="ui">Security</span> shows the security information per EN 300 392-7 V3.5.1 (A.8.77): authentication required or not, support of class 1 MS, class 2 (with SCK number) or class 3. The algorithm (TEA1 … TEA4, “KSG number”, A.8.41) is sent on the downlink only in a D-LOCATION UPDATE COMMAND; if one passes, <span class="ui">Algorithm</span> shows it, otherwise “not seen”. Indication only.</p>
 <h3>Decoder mode</h3>
