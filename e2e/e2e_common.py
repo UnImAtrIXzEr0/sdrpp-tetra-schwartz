@@ -317,6 +317,8 @@ def get_base_config(build_dir: str = DEFAULT_BUILD_DIR, root_dev: str = DEFAULT_
         "sampleRate": 48000.0,
         "modulesDirectory": modules_dir,
         "resourcesDirectory": res_dir,
+        # the tests use the menu; a fresh config starts with it closed (TETRA-SCHWARTZ)
+        "showMenu": True,
         "moduleInstances": {
             "Radio": {"module": "radio", "enabled": True},
             "NullAudioSink": {"module": "null_audio_sink", "enabled": True},

@@ -19,6 +19,10 @@ option(OPT_BACKEND_ANDROID "Use the Android backend" OFF)
 # Compatibility Options
 option(OPT_OVERRIDE_STD_FILESYSTEM "Use a local version of std::filesystem on systems that don't have it yet" OFF)
 
+# TETRA-SCHWARTZ: test build with its own default config folder (defines TETRA_TEST_BUILD),
+# so a test version and the stable version can be used side by side
+option(OPT_TETRA_TEST_BUILD "Test build: separate default config folder (defines TETRA_TEST_BUILD)" OFF)
+
 # Sources
 option(OPT_BUILD_AIRSPY_SOURCE "Build Airspy Source Module (Dependencies: libairspy)" ON)
 option(OPT_BUILD_AIRSPYHF_SOURCE "Build Airspy HF+ Source Module (Dependencies: libairspyhf)" ON)

@@ -66,6 +66,11 @@ target_compile_options(sdrpp_core PRIVATE ${SDRPP_COMPILER_FLAGS})
 # Set the install prefix
 target_compile_definitions(sdrpp_core PUBLIC INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
 
+# TETRA-SCHWARTZ: test build (separate default config folder); PUBLIC so modules see it too
+if (OPT_TETRA_TEST_BUILD)
+    target_compile_definitions(sdrpp_core PUBLIC TETRA_TEST_BUILD)
+endif()
+
 # Include core headers
 target_include_directories(sdrpp_core PUBLIC "src/")
 target_include_directories(sdrpp_core PUBLIC "src/imgui")

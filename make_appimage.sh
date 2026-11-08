@@ -33,6 +33,11 @@ EOF
 
 # Launcher: separate config root (paths differ from a normal install) and
 # SDRPP_APPDIR so the core resolves modules/resources inside the mount.
+# A test build (OPT_TETRA_TEST_BUILD=ON) gets its own config root as well.
+ROOT_NAME="sdrpp_brown_appimage"
+if grep -Eiq '^OPT_TETRA_TEST_BUILD:[A-Z]*=(ON|1|TRUE|YES|Y)$' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+    ROOT_NAME="sdrpp_brown_appimage_test"
+fi
 cat > "$(pwd)/AppRun.sh" <<'EOF'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"
@@ -41,10 +46,11 @@ export LD_LIBRARY_PATH="$HERE/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 for a in "$@"; do
     case "$a" in -r|--root|-r=*|--root=*) exec "$HERE/usr/bin/sdrpp" "$@";; esac
 done
-ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/sdrpp_brown_appimage"
+ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/@ROOT_NAME@"
 mkdir -p "$ROOT"
 exec "$HERE/usr/bin/sdrpp" -r "$ROOT" "$@"
 EOF
+sed -i "s/@ROOT_NAME@/$ROOT_NAME/" "$(pwd)/AppRun.sh"
 chmod +x "$(pwd)/AppRun.sh"
 
 # Collect dependencies of the binary, the core and every plugin

@@ -54,6 +54,7 @@ jobs:
             -DOPT_BUILD_CH_EXTRAVHF_DECODER=ON -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON
             -DOPT_BUILD_BLADERF_SOURCE=ON -DOPT_BUILD_LIMESDR_SOURCE=ON -DOPT_BUILD_SDRPLAY_SOURCE=ON
             -DOPT_BUILD_USRP_SOURCE=ON
+            ${{ github.ref == 'refs/heads/tetra-ui' && '-DOPT_TETRA_TEST_BUILD=ON' || '' }}
 
         - name: Build
           run: |
@@ -380,7 +381,7 @@ jobs:
 
         - name: Prepare CMake
           working-directory: ${{runner.workspace}}/build
-          run: cmake -DCOPY_MSVC_REDISTRIBUTABLES=ON "$Env:GITHUB_WORKSPACE" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DOPT_BUILD_BLADERF_SOURCE=ON -DOPT_BUILD_LIMESDR_SOURCE=ON -DOPT_BUILD_PERSEUS_SOURCE=ON -DOPT_BUILD_SDRPLAY_SOURCE=ON -DOPT_BUILD_NEW_PORTAUDIO_SINK=ON -DOPT_BUILD_M17_DECODER=ON -DOPT_BUILD_RFNM_SOURCE=ON -DOPT_BUILD_FOBOSSDR_SOURCE=ON -DOPT_BUILD_HYDRASDR_SOURCE=ON -DOPT_BUILD_CH_EXTRAVHF_DECODER=ON -DOPT_BUILD_SOAPY_SOURCE=ON -DOPT_BUILD_MPEG_ADTS_SINK=OFF -DOPT_BUILD_USRP_SOURCE=ON -DUHD_DIR="C:/Program Files/uhd"
+          run: cmake -DCOPY_MSVC_REDISTRIBUTABLES=ON "$Env:GITHUB_WORKSPACE" "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" -DOPT_BUILD_BLADERF_SOURCE=ON -DOPT_BUILD_LIMESDR_SOURCE=ON -DOPT_BUILD_PERSEUS_SOURCE=ON -DOPT_BUILD_SDRPLAY_SOURCE=ON -DOPT_BUILD_NEW_PORTAUDIO_SINK=ON -DOPT_BUILD_M17_DECODER=ON -DOPT_BUILD_RFNM_SOURCE=ON -DOPT_BUILD_FOBOSSDR_SOURCE=ON -DOPT_BUILD_HYDRASDR_SOURCE=ON -DOPT_BUILD_CH_EXTRAVHF_DECODER=ON -DOPT_BUILD_SOAPY_SOURCE=ON -DOPT_BUILD_MPEG_ADTS_SINK=OFF -DOPT_BUILD_USRP_SOURCE=ON -DUHD_DIR="C:/Program Files/uhd" ${{ github.ref == 'refs/heads/tetra-ui' && '-DOPT_TETRA_TEST_BUILD=ON' || '' }}
 
         - name: Build
           working-directory: ${{runner.workspace}}/build
@@ -465,3 +466,40 @@ jobs:
             gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V" --notes "$NOTES" --latest
             # the dependency cache release must not keep old history reachable
             git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/build-cache" || true
+
+    prerelease:
+        # test version of the new user interface (branch tetra-ui): published as a
+        # GitHub pre-release, never marked as latest; the stable beta stays the
+        # recommended download. Does not touch the build-cache tag.
+        if: github.ref == 'refs/heads/tetra-ui'
+        needs: [build_appimage, build_windows]
+        runs-on: ubuntu-24.04
+        steps:
+        - uses: actions/checkout@v4
+
+        - name: Read plugin version
+          run: echo "TETRA_VERSION=$(sed -n 's/^#define TETRA_PLUGIN_VERSION "\([^"]*\)".*/\1/p' decoder_modules/ch_tetra_demodulator/src/measurements.h)" >> $GITHUB_ENV
+
+        - name: Collect builds and manuals
+          uses: actions/download-artifact@v4
+          with:
+              path: dl
+
+        - name: Publish pre-release
+          run: |
+            V="v${TETRA_VERSION}"
+            # safety: only test versions are published from this branch (a stable tag is never replaced)
+            case "$TETRA_VERSION" in
+              *-test*) ;;
+              *) echo "::error::version '$TETRA_VERSION' is not a test version (expected e.g. 0.24.0-test.1)"; exit 1;;
+            esac
+            mkdir -p rel
+            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-TETRA-SCHWARTZ_${V}_windows_x64.zip"
+            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-TETRA-SCHWARTZ_${V}_x86_64.AppImage"
+            cp dl/*manuals_pdf/*.pdf rel/ 2>/dev/null || echo "::warning::no manuals in this run"
+            (cd rel && sha256sum * > SHA256SUMS.txt)
+            ls -la rel
+            NOTES="Test version of the new user interface - not the recommended download. It uses its own settings folder (Linux AppImage: ~/.config/sdrpp_brown_appimage_test, Windows: subfolder config-test next to sdrpp.exe), so it can be used next to the stable version without changing the stable settings. The stable beta stays the recommended download. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. Manuals (German / English) as PDF. Check the downloads with SHA256SUMS.txt."
+            # a rebuild of the same version replaces its pre-release (tag on the newest commit)
+            if gh release view "$V" > /dev/null 2>&1; then gh release delete "$V" --cleanup-tag -y; fi
+            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V (test version)" --notes "$NOTES" --prerelease --latest=false
