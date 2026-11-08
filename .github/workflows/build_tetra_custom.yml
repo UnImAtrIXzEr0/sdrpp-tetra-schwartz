@@ -74,6 +74,9 @@ jobs:
         - name: Package AppImage
           run: |
             bash .github/scripts/fetch_cached.sh linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+            bash .github/scripts/fetch_cached.sh runtime-x86_64 https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64
+            # hand the AppImage runtime to the appimage plugin, so it does not download it itself
+            export LDAI_RUNTIME_FILE="$PWD/runtime-x86_64"
             chmod +x linuxdeploy-x86_64.AppImage make_appimage.sh
             ./make_appimage.sh build ./linuxdeploy-x86_64.AppImage
             test -f AppDir/usr/lib/sdrpp/plugins/ch_tetra_demodulator.so
@@ -281,7 +284,12 @@ jobs:
             try {
               git -C C:/vcpkg fetch origin 39344dff01c5a5a0134caf2624cdd492f05d30ea 2>$null
               git -C C:/vcpkg checkout 39344dff01c5a5a0134caf2624cdd492f05d30ea
-              C:/vcpkg/bootstrap-vcpkg.bat -disableMetrics
+              # the vcpkg tool matching this revision comes from build-cache instead of bootstrap-vcpkg (GitHub release download)
+              $tag = (Select-String -Path C:/vcpkg/scripts/vcpkg-tool-metadata.txt -Pattern '^VCPKG_TOOL_RELEASE_TAG=(.+)$').Matches[0].Groups[1].Value.Trim()
+              ./.github/scripts/fetch_cached.ps1 "vcpkg-tool-$tag.exe" "https://github.com/microsoft/vcpkg-tool/releases/download/$tag/vcpkg.exe" C:/vcpkg/vcpkg.exe
+              if ($LASTEXITCODE -ne 0) { exit 1 }
+              New-Item -ItemType File C:/vcpkg/vcpkg.disable-metrics -Force | Out-Null
+              Write-Host "vcpkg tool $tag installed"
               Write-Host "vcpkg pinned to cache-producing revision 39344dff01"
             } catch {
               Write-Host "vcpkg pin failed (best effort); using runner default"
