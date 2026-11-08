@@ -52,8 +52,9 @@ namespace ui_text {
             // softkeys
             { "Mute encrypted", "Verschlüsselt stumm" },
             { "Cell details", "Zelldetails" },
-            { "Hide call control", "Nur Gespräche" },
+            { "Hide call control", "Ohne Rufsteuerung" },
             { "Play anyway", "Trotzdem abspielen" },
+            { "Calibration & reference", "Kalibrierung & Referenz" },
             { "Trends (10 min)", "Verläufe (10 min)" },
             { "Last analysis results", "Letzte Analyse-Ergebnisse" },
             { "Occupied BW", "Belegte Bandbreite" },

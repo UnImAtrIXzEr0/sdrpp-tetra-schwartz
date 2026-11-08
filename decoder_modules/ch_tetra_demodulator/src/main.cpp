@@ -1118,6 +1118,8 @@ private:
             if (ImGui::MenuItem("Drive test")) { _this->applyLayout(2); }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("GPS / coverage map, measurements and trends as tiles on the right"); }
             if (ImGui::MenuItem("Classic (all in the menu)")) { _this->applyLayout(0); }
+            // back to the standard user interface (its Settings dialog has no menu link)
+            if (ImGui::MenuItem("Instrument view")) { _this->instUi = true; _this->saveInstConfig(); }
             ImGui::Separator();
             tw::TextDisabled("Tile content: menu in each tile header. Sizes: drag\nthe dividers. Everything is kept for the next start;\n'Reset' in the tile column restores the preset.");
             ImGui::EndPopup();
@@ -4365,6 +4367,10 @@ private:
             coreSection("Source", "SDR source", true);
             coreSection(nullptr, "AFC & level", true);
             drawAfcGain(w, m);   // includes the SDR advice line
+            // level calibration, frequency reference, "Calibrate SDR", events
+            // (the measurement section of the classic layout)
+            coreSection(nullptr, "Calibration & reference", true);
+            drawMeasurements(this, w);
             break;
         case 2:
             coreSection("Sinks", "Audio output", true);
