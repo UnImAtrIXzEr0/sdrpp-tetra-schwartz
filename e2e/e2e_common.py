@@ -425,6 +425,13 @@ class SDRPPTestContext:
         recorder_config: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Write configuration files to temp directory."""
+        # the TETRA module keeps its settings in its own file
+        # (tetra_demodulator_config.json, keyed by the instance name)
+        main_config = dict(main_config)
+        tetra = main_config.pop("TETRA Demodulator", None)
+        if tetra is not None:
+            with open(f"{self.temp_dir}/tetra_demodulator_config.json", 'w') as f:
+                json.dump({"TETRA Demodulator": tetra}, f, indent=2)
         with open(f"{self.temp_dir}/config.json", 'w') as f:
             json.dump(main_config, f, indent=2)
         
