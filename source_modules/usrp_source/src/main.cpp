@@ -13,6 +13,7 @@
 #include <uhd/usrp/multi_usrp.hpp>
 #include <utils/optionlist.h>
 #include <signal_path/source_gain_interface.h>
+#include <signal_path/source_freq_interface.h>
 #include <cstring>
 #include <cmath>
 #include <utils/freq_formatting.h>
@@ -56,11 +57,12 @@ static void start(void* ctx);
 static void stop(void* ctx);
 static void tune(double freq, void* ctx);
 
-class USRPSourceModule : public ModuleManager::Instance, public SourceGainInterface {
+class USRPSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
 public:
     // ---- SourceGainInterface (TETRA automatic gain): 1 dB steps over the gain range ----
     void* getInterface(const char* iname) override {
         if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
+        if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
         return nullptr;
     }
     std::string gainSourceName() override { return "USRP"; }
@@ -75,6 +77,36 @@ public:
             config.conf["devices"][selectedSer]["channels"][selectedChan]["gain"] = gain;
             config.release(true);
         }
+    }
+    // Frequency correction (SDR calibration): no oscillator trim through UHD, the
+    // tuning frequency is corrected instead (positive ppm = oscillator runs fast).
+    // Not needed with an external 10 MHz reference: then disabled and not applied.
+    std::string corrSourceName() override { return "USRP"; }
+    bool corrAvailable() override { return !selectedSer.empty() && !externalRef(); }
+    double corrPpm() override { return ppm; }
+    double corrResolutionPpm() override { return 0.001; }
+    void setCorrPpm(double v) override {
+        ppm = std::clamp(v, -500.0, 500.0);
+        if (running && dev) {
+            try { setRxFreq(freq); } catch (const std::exception& e) { flog::error("USRP retune: {}", e.what()); }
+        }
+        if (!selectedSer.empty()) {
+            config.acquire();
+            config.conf["devices"][selectedSer]["ppm"] = ppm;
+            config.release(true);
+        }
+    }
+    bool externalRef() { return clockSources.size() > 0 && clockSources.key(csId) == "external"; }
+    // frequency to request for 'f' at the antenna; the DSP shift runs from the same
+    // reference, so correcting the target corrects the whole tuning
+    double hwFreq(double f) { return externalRef() ? f : f / (1.0 + ppm * 1e-6); }
+    void setRxFreq(double f) {
+        double lo_offset = sampleRate / 2.0;
+        uhd::tune_request_t tune_req(hwFreq(f));
+        tune_req.rf_freq_policy = uhd::tune_request_t::POLICY_MANUAL;
+        tune_req.rf_freq = hwFreq(f) + lo_offset;
+        tune_req.dsp_freq_policy = uhd::tune_request_t::POLICY_AUTO;
+        dev->set_rx_freq(tune_req, chanId);
     }
 
     USRPSourceModule(std::string name) {
@@ -138,6 +170,12 @@ public:
 
         selectedSer = serial;
         devId = devices.keyId(serial);
+        ppm = 0.0;
+        config.acquire();
+        if (config.conf["devices"][selectedSer].contains("ppm") && config.conf["devices"][selectedSer]["ppm"].is_number()) {
+            ppm = std::clamp(config.conf["devices"][selectedSer]["ppm"].get<double>(), -500.0, 500.0);
+        }
+        config.release();
 
         uhd::device_addr_t probe_hints = devices[devId];
         
@@ -536,12 +574,7 @@ private:
         _this->dev->set_rx_antenna(_this->antennas.key(_this->antId), _this->chanId);
         _this->dev->set_rx_gain(static_cast<double>(_this->gain), _this->chanId);
         
-        double lo_offset = _this->sampleRate / 2.0;
-        uhd::tune_request_t tune_req(_this->freq);
-        tune_req.rf_freq_policy = uhd::tune_request_t::POLICY_MANUAL;
-        tune_req.rf_freq = _this->freq + lo_offset;
-        tune_req.dsp_freq_policy = uhd::tune_request_t::POLICY_AUTO;
-        _this->dev->set_rx_freq(tune_req, _this->chanId);
+        _this->setRxFreq(_this->freq);
 
         try {
             std::string target_clk = _this->clockSources.key(_this->csId);
@@ -622,12 +655,7 @@ private:
     static void tune(double freq, void* ctx) {
         USRPSourceModule* _this = (USRPSourceModule*)ctx;
         if (_this->running && _this->dev) {
-            double lo_offset = _this->sampleRate / 2.0;
-            uhd::tune_request_t tune_req(freq);
-            tune_req.rf_freq_policy = uhd::tune_request_t::POLICY_MANUAL;
-            tune_req.rf_freq = freq + lo_offset;
-            tune_req.dsp_freq_policy = uhd::tune_request_t::POLICY_AUTO;
-            _this->dev->set_rx_freq(tune_req, _this->chanId);
+            _this->setRxFreq(freq);
         }
         _this->freq = freq;
         flog::info("USRPSourceModule '{0}': Tune: {1}!", _this->name, freq);
@@ -781,12 +809,30 @@ private:
                         try { _this->dev->set_clock_source("internal"); _this->dev->set_time_source("internal"); } catch(...) {}
                         _this->csId = _this->clockSources.keyId("internal");
                     }
+                    // the frequency correction applies to the internal reference only
+                    try { _this->setRxFreq(_this->freq); } catch (const std::exception& e) { flog::error("USRP retune: {}", e.what()); }
                 }
                 if (!_this->selectedSer.empty()) {
                     config.acquire();
                     config.conf["devices"][_this->selectedSer]["channels"][_this->selectedChan]["clock"] = _this->clockSources.key(_this->csId);
                     config.release(true);
                 }
+            }
+        }
+
+        // reference correction in ppb (1 ppb = 0.001 ppm), as for the HackRF
+        if (!_this->selectedSer.empty()) {
+            bool ext = _this->externalRef();
+            SmGui::LeftLabel("Freq. corr. (ppb)");
+            SmGui::FillWidth();
+            if (ext) { SmGui::BeginDisabled(); }
+            int ppb = (int)std::lround(_this->ppm * 1000.0);
+            if (SmGui::InputInt(CONCAT("##_usrp_ppb_", _this->name), &ppb, 10, 100)) {
+                _this->setCorrPpm(ppb / 1000.0);
+            }
+            if (ext) {
+                SmGui::EndDisabled();
+                SmGui::Text("external reference - no correction needed");
             }
         }
 
@@ -854,6 +900,7 @@ private:
     std::string selectedSer = "";
     std::string selectedChan = "";
     float gain = 0.0f;
+    double ppm = 0.0;   // frequency correction, per device (config "ppm")
     
     // Probing Feature Flag Cache Properties
     bool hasDcOffsetControl = false;

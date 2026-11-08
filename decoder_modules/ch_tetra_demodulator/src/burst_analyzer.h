@@ -40,7 +40,6 @@ struct TetraBurstSettings {
     float maskRippleDb = 1.0f; // useful part within +-ripple of the burst power
     float maskOffDbc = -40.0f; // before the ramp-up and after the ramp-down
     float maskRampSym = 5.0f;  // max. ramp time (-20 dBc ... -1 dBc) in symbols
-    bool timing = false;       // burst timing against the downlink slot grid (2nd tap on the TETRA VFO)
     float linStepDb = 10.0f;   // linearity check: added attenuation in front of the SDR
     bool transients = true;    // spectrum during the ramps
     int floorSpan = 0;         // history of the uplink noise: 0 10 min, 1 1 h, 2 6 h, 3 24 h
@@ -60,17 +59,14 @@ public:
     ~TetraBurstAnalyzer() { stop(); }
 
     bool isRunning() const { return running; }
-    bool hasDlTap() const { return dlvfo != nullptr; }
     std::string status;   // why it is not running (GUI)
 
-    // every GUI frame: run at absolute frequency 'freq' if it is inside the SDR
-    // span; dlFreq > 0 adds a sample-aligned tap on the downlink for the timing
-    void loop(bool enable, double freq, double dlFreq) {
+    // every GUI frame: run at absolute frequency 'freq' if it is inside the SDR span
+    void loop(bool enable, double freq) {
         bool sdr = gui::mainWindow.sdrIsRunning();
         double center = gui::waterfall.getCenterFrequency();
         double sr = sigpath::iqFrontEnd.getSampleRate();
         double off = freq - center;
-        double dlOff = dlFreq - center;
         status.clear();
         if (!enable) { stop(); return; }
         if (freq < 1e6) { status = "no frequency (uplink not known yet - needs SYSINFO)"; stop(); return; }
@@ -83,19 +79,12 @@ public:
             stop();
             return;
         }
-        bool wantDl = dlFreq > 1e6 && std::fabs(dlOff) <= lim && std::fabs(dlFreq - freq) > 50000.0;
-        if (dlFreq > 1e6 && !wantDl && std::fabs(dlFreq - freq) > 50000.0) { status = "downlink outside the SDR span: no timing measurement"; }
-        if (running && wantDl != (dlvfo != nullptr)) { stop(); }
-        if (!running) { start(off, wantDl ? dlOff : NAN); }
+        if (!running) { start(off); }
         else {
             if (std::fabs(off - curOffset) > 0.5) {
                 curOffset = off;
                 rxvfo->setOffset(off);
                 resetReq.store(true);
-            }
-            if (dlvfo && std::fabs(dlOff - curDlOffset) > 0.5) {
-                curDlOffset = dlOff;
-                dlvfo->setOffset(dlOff);
             }
         }
         // uplink noise history (once per second)
@@ -124,7 +113,6 @@ public:
     }
     // set while the tap sits on a carrier the decoder is locked to
     void setKnownCarrier(bool c) { knownCarrier.store(c); }
-    float slotQuality() { return dlQuality.load(); }
 
     void stop() {
         if (!running) { return; }
@@ -136,14 +124,8 @@ public:
         if (worker.joinable()) { worker.join(); }
         sink.stop();
         sigpath::iqFrontEnd.removeVFO(name);
-        if (dlvfo) {
-            dlSink.stop();
-            sigpath::iqFrontEnd.removeVFO(name + " DL");
-            dlvfo = nullptr;
-        }
         rxvfo = nullptr;
         running = false;
-        dlQuality.store(0.0f);
         std::lock_guard<std::mutex> lck(resMtx);
         res = TetraBurstResult();
     }
@@ -185,9 +167,8 @@ public:
         setAverages(st.averages);
         setTransients(st.transients);
         {
-            std::string l0 = "Timing vs. downlink##_ba_tim_" + id, l1 = "Ramp spectrum##_ba_tr_" + id;
+            std::string l1 = "Ramp spectrum##_ba_tr_" + id;
             tw::CheckRow row;
-            row.add(l0.c_str(), &st.timing);
             row.add(l1.c_str(), &st.transients);
             if (row.draw("Also:") >= 0) { changed = true; reset(); }
         }
@@ -204,22 +185,7 @@ public:
         tw::Text("Bursts:"); tw::SameTextColored(val, "%llu full slot", (unsigned long long)r.nFull);
         tw::SameTextColored(val, " %llu half slot", (unsigned long long)r.nHalf);
         tw::SameText(" ("); tw::SameTextColored(val, "%.1f/s", r.burstsPerSec); tw::SameText(")");
-        if (r.state == 2 && !hasDlTap()) { drawLinearity(id, width, r, st, gainHeld, changed); }
-        if (r.state == 2 && hasDlTap()) {
-            tw::Text("Overload check:");
-            if (!r.desenseValid) { tw::SameTextDisabled("collecting bursts..."); }
-            else if (r.desenseDb > 1.0f) {
-                tw::SameTextColored(bad, "RECEIVER OVERLOADED - results invalid");
-                tw::TextColored(bad, "Downlink drops %.1f dB during the bursts. Increase the distance,\nadd an attenuator or use a coupler and dummy load.", r.desenseDb);
-            }
-            else { tw::SameTextColored(good, "OK"); tw::SameTextDisabled("(downlink %+.1f dB during bursts)", -r.desenseDb); }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("The downlink of the cell is continuous. If it gets weaker while a burst\n"
-                                  "is received, the strong burst compresses the receiver (analog, before\n"
-                                  "the ADC - lowering the gain in the software may not be enough).\n"
-                                  "Limit: 1 dB, averaged over the last 20 bursts.");
-            }
-        }
+        if (r.state == 2) { drawLinearity(id, width, r, st, gainHeld, changed); }
         if (r.profileDbc.empty()) { return changed; }
 
         auto mark = [&](bool ok) { return ok ? good : bad; };
@@ -252,7 +218,6 @@ public:
             if (limited) { tw::SameTextDisabled("(at the floor)"); }
         }
         drawProfile(id, width, pal, r, st);
-        if (st.timing) { drawTiming(id, width, pal, r); }
         if (st.transients) { drawTransientPeak(r, st); drawTransients(id, width, r); }
         if (ImGui::TreeNode(("Time mask##_ba_mask_" + id).c_str())) {
             ImGui::SetNextItemWidth(90.0f * style::uiScale);
@@ -536,66 +501,6 @@ private:
         }
     }
 
-    void drawTiming(const std::string& id, float width, const TetraConstellationView::Palette& pal, const TetraBurstResult& r) {
-        if (!ImGui::TreeNodeEx(("Burst timing vs. downlink##_ba_tn_" + id).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
-        if (!hasDlTap()) {
-            tw::TextDisabled("Needs the TETRA VFO on the downlink of the same cell\n(inside the SDR span, more than 50 kHz from the burst frequency).");
-            ImGui::TreePop();
-            return;
-        }
-        float q = slotQuality();
-        tw::Text("Downlink slot grid:");
-        if (q > 3.5f) { tw::SameTextColored(tc::good(), "found (quality %.1f)", q); }
-        else { tw::SameTextColored(tc::warn(), "not found yet"); }
-        if (r.timingValid) {
-            tw::Text("Rising edge after slot start:");
-            tw::SameTextColored(tc::val(), "%.2f sym (%.0f us)", r.timingMeanSym, r.timingMeanSym / SYM * 1e6);
-            tw::SameTextDisabled("+- %.2f sym, %d bursts", r.timingStdSym, r.timingN);
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("-3 dB point of the rising edge, measured from the start of the uplink\n"
-                                  "slot as given by the received downlink (uplink slots are two slots\n"
-                                  "after the downlink ones). Compare mobiles with each other: the value\n"
-                                  "also contains the path differences base station -> mobile -> receiver\n"
-                                  "vs. base station -> receiver (3.3 us per km), so put the receiver close\n"
-                                  "to the mobile for an absolute check.");
-            }
-            // scatter: offset over time
-            const float h = 120.0f * style::uiScale, lm = 40.0f * style::uiScale;
-            ImVec2 p0 = ImGui::GetCursorScreenPos();
-            ImGui::InvisibleButton(("##_ba_tsc_" + id).c_str(), ImVec2(width, h));
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->AddRectFilled(p0, ImVec2(p0.x + width, p0.y + h), pal.bg);
-            dl->AddRect(p0, ImVec2(p0.x + width, p0.y + h), pal.border);
-            ImRect pr(ImVec2(p0.x + lm, p0.y + 4), ImVec2(p0.x + width - 4, p0.y + h - 4));
-            float c = r.timingMeanSym, half = (std::max)(2.0f, (std::min)(64.0f, 6.0f * r.timingStdSym));
-            float lo = c - half, hi = c + half;
-            auto Y = [&](float v) { return pr.Max.y - (v - lo) / (hi - lo) * pr.GetHeight(); };
-            char buf[32];
-            for (int i = 0; i <= 4; i++) {
-                float v = lo + (hi - lo) * i / 4;
-                dl->AddLine(ImVec2(pr.Min.x, Y(v)), ImVec2(pr.Max.x, Y(v)), pal.grid);
-                snprintf(buf, sizeof(buf), "%.1f", v);
-                dl->AddText(ImVec2(p0.x + 3, Y(v) - ImGui::GetFontSize() * 0.5f), pal.text, buf);
-            }
-            if (!r.timing.empty()) {
-                double ta = r.timing.front().t, tb = r.timing.back().t;
-                if (tb - ta < 1.0) { tb = ta + 1.0; }
-                dl->PushClipRect(pr.Min, pr.Max, true);
-                for (auto& pt : r.timing) {
-                    float v = pt.offsetSym;
-                    while (v - c > 127.5f) { v -= 255.0f; }
-                    while (v - c < -127.5f) { v += 255.0f; }
-                    float x = pr.Min.x + (float)((pt.t - ta) / (tb - ta)) * pr.GetWidth();
-                    dl->AddCircleFilled(ImVec2(x, Y(v)), 2.0f * style::uiScale, pal.dotGood);
-                }
-                dl->PopClipRect();
-            }
-            dl->AddText(ImVec2(pr.Min.x + 4, pr.Min.y + 2), pal.text, "symbols, last bursts");
-        }
-        else { tw::TextDisabled("no bursts with known slot grid yet"); }
-        ImGui::TreePop();
-    }
-
     void drawTransients(const std::string& id, float width, const TetraBurstResult& r) {
         if (!ImGui::TreeNodeEx(("Ramp spectrum (switching transients)##_ba_trn_" + id).c_str(), ImGuiTreeNodeFlags_DefaultOpen)) { return; }
         if (!r.transValid) { tw::TextDisabled("needs full-slot bursts"); ImGui::TreePop(); return; }
@@ -635,37 +540,19 @@ private:
         ImGui::TreePop();
     }
 
-    void start(double offset, double dlOffset) {
-        bool withDl = !std::isnan(dlOffset);
-        if (withDl) {
-            auto v = sigpath::iqFrontEnd.addVFOs({ name, name + " DL" }, FS, TAP_BW, { offset, dlOffset });
-            if (v.size() != 2) { return; }
-            rxvfo = v[0];
-            dlvfo = v[1];
-            curDlOffset = dlOffset;
-        }
-        else {
-            rxvfo = sigpath::iqFrontEnd.addVFO(name, FS, TAP_BW, offset);
-            if (!rxvfo) { return; }
-        }
+    void start(double offset) {
+        rxvfo = sigpath::iqFrontEnd.addVFO(name, FS, TAP_BW, offset);
+        if (!rxvfo) { return; }
         curOffset = offset;
         {
             std::lock_guard<std::mutex> lck(ringMtx);
             ringRaw.assign(RING, std::complex<float>(0.0f, 0.0f));
             ringFilt.assign(RING, std::complex<float>(0.0f, 0.0f));
-            ringDl.assign(withDl ? RING : 0, std::complex<float>(0.0f, 0.0f));
             wIdx = 0;
-            dlIdx = 0;
             ulFilter.reset();
-            dlFilter.reset();
         }
         if (!sinkInit) { sink.init(&rxvfo->out, handler, this); sinkInit = true; }
         else { sink.setInput(&rxvfo->out); }
-        if (withDl) {
-            if (!dlSinkInit) { dlSink.init(&dlvfo->out, dlHandler, this); dlSinkInit = true; }
-            else { dlSink.setInput(&dlvfo->out); }
-            dlSink.start();
-        }
         sink.start();
         stopFlag = false;
         resetReq.store(true);
@@ -685,34 +572,20 @@ private:
         }
     }
 
-    static void dlHandler(dsp::complex_t* data, int count, void* ctx) {
-        TetraBurstAnalyzer* _this = (TetraBurstAnalyzer*)ctx;
-        std::lock_guard<std::mutex> lck(_this->ringMtx);
-        if (_this->ringDl.empty()) { return; }
-        for (int i = 0; i < count; i++) {
-            _this->ringDl[(size_t)(_this->dlIdx & (RING - 1))] = _this->dlFilter.step(std::complex<float>(data[i].re, data[i].im));
-            _this->dlIdx++;
-        }
-    }
-
     void work() {
         const size_t WIN = (size_t)(FS * 0.6);
         TetraBurstDsp dsp;
-        tetra_sp::SlotFoldState slotState;
         auto t0 = std::chrono::steady_clock::now();
-        double phase = NAN;
         while (true) {
             {
                 std::unique_lock<std::mutex> lck(cvMtx);
                 if (cv.wait_for(lck, std::chrono::milliseconds(150), [this] { return stopFlag; })) { return; }
             }
-            std::vector<std::complex<float>> x, raw, dlx, dlAligned;
+            std::vector<std::complex<float>> x, raw;
             uint64_t end;
-            bool withDl;
             {
                 std::lock_guard<std::mutex> lck(ringMtx);
-                withDl = !ringDl.empty();
-                end = withDl ? (std::min)(wIdx, dlIdx) : wIdx;
+                end = wIdx;
                 if (end < WIN) { continue; }
                 x.resize(WIN);
                 raw.resize(WIN);
@@ -722,31 +595,10 @@ private:
                     x[i] = ringFilt[k];
                     raw[i] = ringRaw[k];
                 }
-                if (withDl) {   // slot grid on every pass: a sample slip is caught within 0.15 s
-                    dlx.resize(WIN);
-                    for (size_t i = 0; i < WIN; i++) { dlx[i] = ringDl[(size_t)((s0 + i) & (RING - 1))]; }
-                    // downlink on the time line of the (longer-delayed) uplink filter, for the overload check
-                    const uint64_t dd = (uint64_t)(ulFilter.delay() - dlFilter.delay());
-                    if (s0 >= dd) {
-                        dlAligned.resize(WIN);
-                        for (size_t i = 0; i < WIN; i++) { dlAligned[i] = ringDl[(size_t)((s0 + i - dd) & (RING - 1))]; }
-                    }
-                }
             }
-            if (resetReq.exchange(false)) { dsp.reset(); slotState.reset(); }
-            if (!dlx.empty()) {
-                // newest 0.25 s: short enough that a sample clock offset of
-                // the SDR does not smear the correlation peak
-                const size_t SW = (size_t)(FS * 0.25);
-                std::vector<std::complex<float>> dls(dlx.end() - SW, dlx.end());
-                tetra_sp::SlotEstimate e = tetra_sp::slotTiming(dls, end - SW, &slotState);
-                dlQuality.store((float)e.quality);
-                // the slot grid comes from the downlink filter, the bursts from the
-                // (longer) TETRA filter on the uplink: refer both to the same moment
-                phase = e.valid ? std::fmod(e.phase + (double)(ulFilter.delay() - dlFilter.delay()) + 2040.0, 2040.0) : NAN;
-            }
+            if (resetReq.exchange(false)) { dsp.reset(); }
             double nowS = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay(), withDl ? phase : NAN, dlAligned.empty() ? nullptr : &dlAligned);
+            dsp.process(x, end - WIN, nowS, avgReq.load(), transReq.load() ? &raw : nullptr, ulFilter.delay());
             std::lock_guard<std::mutex> lck(resMtx);
             res = dsp.result();
         }
@@ -820,20 +672,17 @@ private:
 
     std::string name = "TETRA bursts";
     dsp::channel::RxVFO* rxvfo = nullptr;
-    dsp::channel::RxVFO* dlvfo = nullptr;
-    dsp::sink::Handler<dsp::complex_t> sink, dlSink;
-    bool sinkInit = false, dlSinkInit = false;
+    dsp::sink::Handler<dsp::complex_t> sink;
+    bool sinkInit = false;
     bool running = false;
-    double curOffset = 0.0, curDlOffset = 0.0;
+    double curOffset = 0.0;
 
     std::mutex ringMtx;
-    std::vector<std::complex<float>> ringRaw, ringFilt, ringDl;
-    uint64_t wIdx = 0, dlIdx = 0;
+    std::vector<std::complex<float>> ringRaw, ringFilt;
+    uint64_t wIdx = 0;
     // uplink envelope through the TETRA filter (EN 300 392-2 6.4.5: power vs. time
-    // is measured through the root raised cosine filter 0.35); downlink for the slot grid
+    // is measured through the root raised cosine filter 0.35)
     tetra_sp::StreamFir ulFilter { tetra_sp::rrcTaps(33) };
-    tetra_sp::ChanFilter dlFilter;
-    std::atomic<float> dlQuality { 0.0f };
     std::atomic<bool> transReq { true };
     std::deque<std::pair<time_t, float>> floorHist;
     std::atomic<bool> knownCarrier { false };

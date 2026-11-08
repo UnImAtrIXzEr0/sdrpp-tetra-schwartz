@@ -33,12 +33,6 @@ struct TetraBurstResult {
     double preS = 0.004;
     // power between the bursts (uplink noise / interference), NaN = not measurable
     float gapDbfs = NAN;
-    // timing of the bursts relative to the downlink slot grid (needs the DL tap)
-    bool timingValid = false;
-    float timingMeanSym = NAN, timingStdSym = NAN;   // -3 dB point of the rising edge after the slot start
-    int timingN = 0;
-    struct TimingPoint { double t; float offsetSym; float powerDbfs; };
-    std::vector<TimingPoint> timing;                 // last bursts (for the scatter plot)
     // switching transients: channel power at -50, -25, 0, +25, +50 kHz in
     // 1.8 ms windows at the ramp-up, in the middle and at the ramp-down,
     // relative to the channel power in the middle (dBc); [window][offset]
@@ -53,12 +47,6 @@ struct TetraBurstResult {
     bool transPeakValid = false;
     float transPeakDbc[2][2] = { { NAN, NAN }, { NAN, NAN } };
     float transPeakFloorDbc = NAN;   // the same detector on a quiet stretch
-    // receiver overload check (needs the DL tap): downlink power during the
-    // bursts relative to just before / after them. A continuous downlink must
-    // not change; a drop means the strong burst compresses the receiver.
-    bool desenseValid = false;
-    int desenseN = 0;
-    float desenseDb = NAN;   // > 0: downlink weaker during the bursts
 };
 
 class TetraBurstDsp {
@@ -72,7 +60,6 @@ public:
 
     void reset() {
         for (int c = 0; c < 2; c++) { prof[c].clear(); pbAvg[c] = 0.0; nAvg[c] = 0; }
-        timingPts.clear();
         for (auto& w : transAcc) { for (auto& v : w) { v = 0.0; } }
         for (auto& v : transFloorAcc) { v = 0.0; }
         transCount = 0;
@@ -81,8 +68,6 @@ public:
         peakFloor = 0.0;
         peakRef = 0.0;
         peakN = 0;
-        desenseDbAvg = 0.0;
-        desenseCount = 0;
         acc = TetraBurstResult();
         recent.clear();
         processedValid = false;
@@ -93,16 +78,11 @@ public:
     // x: the newest channel-filtered samples (x[0] has the absolute index
     // 'base'), nowS: a monotonic time in seconds. Windows may overlap; every
     // burst is taken once. raw: the same samples before the channel filter
-    // (wide, for the switching transients; raw[k] belongs to x[k + rawDelay]),
-    // slotPhase: downlink slot grid (absolute index mod 2040 of symbol 0) or NaN.
+    // (wide, for the switching transients; raw[k] belongs to x[k + rawDelay]).
     void process(const std::vector<std::complex<float>>& x, uint64_t base, double nowS, int avgN,
-                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0, double slotPhase = NAN,
-                 const std::vector<std::complex<float>>* dl = nullptr) {
+                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0) {
         curRaw = raw;
-        curDl = (dl && dl->size() == x.size()) ? dl : nullptr;
         curRawDelay = rawDelay;
-        curBase = base;
-        curSlotPhase = slotPhase;
         const size_t W = x.size();
         const size_t SMOOTH = (size_t)(FS / SYM);           // one symbol
         const size_t preN = (size_t)(FS * PRE), postN = (size_t)(FS * POST);
@@ -187,37 +167,6 @@ public:
         if (!prof[c].empty()) { evaluate(c, fl); }
         acc.fs = FS;
         acc.preS = PRE;
-        // timing statistics over the last 50 bursts
-        while (timingPts.size() > 400) { timingPts.erase(timingPts.begin()); }
-        acc.timing = timingPts;
-        if (!timingPts.empty()) {
-            // circular mean (the offset wraps at 255 symbols)
-            size_t n0 = timingPts.size() > 50 ? timingPts.size() - 50 : 0;
-            double sx = 0, sy = 0;
-            for (size_t k = n0; k < timingPts.size(); k++) {
-                double a = 2.0 * TxMath::PI * timingPts[k].offsetSym / 255.0;
-                sx += std::cos(a); sy += std::sin(a);
-            }
-            double m = std::atan2(sy, sx) / (2.0 * TxMath::PI) * 255.0;
-            if (m < 0) { m += 255.0; }
-            double v = 0;
-            for (size_t k = n0; k < timingPts.size(); k++) {
-                double d = timingPts[k].offsetSym - m;
-                while (d > 127.5) { d -= 255.0; }
-                while (d < -127.5) { d += 255.0; }
-                v += d * d;
-            }
-            size_t cnt = timingPts.size() - n0;
-            acc.timingValid = true;
-            acc.timingMeanSym = (float)m;
-            acc.timingStdSym = (float)std::sqrt(v / cnt);
-            acc.timingN = (int)cnt;
-        }
-        if (desenseCount > 0) {
-            acc.desenseValid = desenseCount >= 3;
-            acc.desenseN = desenseCount;
-            acc.desenseDb = (float)desenseDbAvg;
-        }
         if (peakN > 0) {
             acc.transPeakValid = true;
             for (int r = 0; r < 2; r++) { for (int o = 0; o < 2; o++) { acc.transPeakDbc[r][o] = (float)(10.0 * std::log10((std::max)(peakHold[r][o], 1e-30))); } }
@@ -261,31 +210,6 @@ private:
         pbAvg[cls] = n == 1 ? pb : pbAvg[cls] + a * (pb - pbAvg[cls]);
         if (cls == 0) { acc.nFull++; } else { acc.nHalf++; }
         recent.push_back(nowS);
-        // overload check: downlink power in the useful part of the burst vs.
-        // 1..3 ms before and after it (the downlink is continuous)
-        if (curDl && i >= 3 * ms1 && j + 3 * ms1 < W) {
-            const std::vector<std::complex<float>>& d = *curDl;
-            double in = 0.0, out = 0.0;
-            size_t nIn = 0, nOut = 0;
-            for (size_t k = i + ms05; k < j - ms05; k++) { in += std::norm(d[k]); nIn++; }
-            for (size_t k = i - 3 * ms1; k < i - ms1; k++) { out += std::norm(d[k]); nOut++; }
-            for (size_t k = j + ms1; k < j + 3 * ms1; k++) { out += std::norm(d[k]); nOut++; }
-            if (nIn && nOut && in > 0.0 && out > 0.0) {
-                double db = 10.0 * std::log10((out / nOut) / (in / nIn));
-                desenseCount = (std::min)(desenseCount + 1, 1000000);
-                int nn = (std::min)(desenseCount, 20);
-                desenseDbAvg += (db - desenseDbAvg) / nn;
-            }
-        }
-        // timing against the downlink slot grid; the one-symbol moving average
-        // delays the envelope by (SMOOTH-1)/2 samples
-        if (!std::isnan(curSlotPhase)) {
-            double smoothDelay = ((double)(FS / SYM) - 1.0) / 2.0;
-            double posAbs = (double)(curBase + a50) - smoothDelay;
-            double off = std::fmod(posAbs - curSlotPhase, 2040.0);
-            if (off < 0) { off += 2040.0; }
-            timingPts.push_back({ nowS, (float)(off / 8.0), (float)(10.0 * std::log10((std::max)(pb, 1e-30))) });
-        }
         // switching transients (full-slot bursts): windows centred at the rising
         // and falling -3 dB points and in the middle
         if (curRaw && cls == 0) {
@@ -472,13 +396,7 @@ private:
     }
 
     const std::vector<std::complex<float>>* curRaw = nullptr;
-    const std::vector<std::complex<float>>* curDl = nullptr;
-    double desenseDbAvg = 0.0;
-    int desenseCount = 0;
     int curRawDelay = 0;
-    uint64_t curBase = 0;
-    double curSlotPhase = NAN;
-    std::vector<TetraBurstResult::TimingPoint> timingPts;
     double transAcc[3][5] = {};
     double transFloorAcc[5] = {};
     int transCount = 0, transFloorCount = 0;

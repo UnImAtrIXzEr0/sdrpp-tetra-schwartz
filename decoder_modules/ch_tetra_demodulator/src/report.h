@@ -226,7 +226,6 @@ public:
                 row(o, "Outside the burst", opt(b.offBeforeDbc, 1, " dBc") + " before, " + opt(b.offAfterDbc, 1, " dBc") + " after (floor " + opt(b.floorDbc, 1, " dBc") + ")");
             }
             if (!std::isnan(b.gapDbfs)) { row(o, "Noise between bursts", num(b.gapDbfs, 1) + " dBFS"); }
-            if (b.timingValid) { row(o, "Timing vs. downlink", num(b.timingMeanSym, 2) + " &plusmn; " + num(b.timingStdSym, 2) + " symbols after slot start (" + std::to_string(b.timingN) + " bursts)"); }
             o << "</table>\n";
             if (!b.profileDbc.empty()) { o << svgProfile(b); }
             if (b.transValid) {

@@ -48,8 +48,9 @@ namespace tw {
     //    only change once if a value grows beyond the room (then it wraps and
     //    stays wrapped). When the width changes it is decided again, with a
     //    hysteresis of 2 em before a wrapped segment comes back.
-    //  - Text too long for a whole line wraps word by word and keeps the largest
-    //    height it had at this width (no line count flicker).
+    //  - Text too long for a whole line wraps word by word and keeps a larger
+    //    height it needed in the last seconds (no line count flicker), then
+    //    shrinks to what it needs (see WRAP_HOLD_S).
     // Table cells (CellScope) stay single line, clipped with "..." and the full
     // text as tooltip, so rows keep their height; the columns can be resized.
     struct LabelCol { float maxW = 0.0f; };
@@ -87,9 +88,21 @@ namespace tw {
         bool prevSameLine = false;  // ... and is directly in front of the current one
     };
     inline LineState& line() { static LineState l; return l; }
+    // Line keys are unique within a frame: a key used again in the same frame
+    // (lines or table cells that start with the same format, e.g. "%s") gets
+    // a numbered variant, so their segment and height memories never collide.
+    inline ImGuiID uniqueLineKey(ImGuiID k) {
+        struct Use { int frame = -1; int n = 0; };
+        static std::unordered_map<ImGuiID, Use> m;
+        const int f = ImGui::GetFrameCount();
+        Use& u = m[k];
+        if (u.frame != f) { u.frame = f; u.n = 0; return k; }
+        int n = ++u.n;
+        return ImHashData(&n, sizeof(n), k);
+    }
     inline void beginLine(const char* key) {
         LineState& l = line();
-        l.key = ImGui::GetID(key);
+        l.key = uniqueLineKey(ImGui::GetID(key));
         l.win = ImGui::GetCurrentWindowRead();
         l.nSeg = 0;
         l.lastResW = 0.0f;
@@ -277,21 +290,29 @@ namespace tw {
 
     // Fit 'buf' into the remaining width. Cells: clip with "..." (tooltip with
     // the full text). Elsewhere nothing is cut: text longer than the room wraps
-    // word by word and keeps the largest height it had at this window width.
-    struct WrapMem { float maxH = 0.0f; float atW = -1.0f; };
+    // word by word and keeps a larger height it needed shortly before.
+    // The height memory keeps a taller height only for WRAP_HOLD_S after it was
+    // last needed (longer than the rotation of the optional SYSINFO fields, about
+    // 4 multiframes), then the line shrinks to what its content needs.
+    static constexpr double WRAP_HOLD_S = 6.0;
+    // atW: room (wrap width) the height was learnt for - the window width alone
+    // misses table columns that change their width
+    struct WrapMem { float maxH = 0.0f; float atW = -1.0f; double needT = 0.0; float lowH = 0.0f; };
     inline std::unordered_map<ImGuiID, WrapMem>& wrapMems() { static std::unordered_map<ImGuiID, WrapMem> m; return m; }
     struct FitText {
         bool wrap = false, cut = false;
         ImGuiID memId = 0;
         float y0 = 0.0f;
+        float room = 0.0f;      // width available for the text
         char full[512];
         // seg: id of the line segment this text is (0: a line start); the height
         // memory belongs to the place, not to the text drawn there ("-" or a value)
         FitText(char* buf, size_t n, const void* key = nullptr, ImGuiID seg = 0) {
             float avail = ImGui::GetContentRegionAvail().x;
+            room = avail;
             if (!cellMode()) {
-                // wrap only if needed; the height memory keeps the space if a
-                // shorter value later fits on fewer lines
+                // wrap only if needed; the height memory keeps the space for a
+                // while if a shorter value later fits on fewer lines
                 memId = seg ? (seg ^ 0x5eed1234u) : ImHashData(&key, sizeof(key), line().key ^ ImGui::GetID("##tw_wrap"));
                 y0 = ImGui::GetCursorScreenPos().y;
                 if (textWidth(buf) > avail && avail > 0) {
@@ -322,11 +343,26 @@ namespace tw {
             if (wrap) { ImGui::PopTextWrapPos(); }
             if (cut && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", full); }
             if (cellMode() || !memId) { return; }
+            // A table measures its columns in its first frames (auto-fit, a few px
+            // wide): heights from then are not real, neither learnt nor applied
+            ImGuiTable* tb = ImGui::GetCurrentTable();
+            if (tb && tb->CurrentColumn >= 0 && (tb->IsInitializing || tb->Columns[tb->CurrentColumn].AutoFitQueue != 0)) { return; }
             WrapMem& m = wrapMems()[memId];
-            float full = fullWidth();
             float h = ImGui::GetItemRectSize().y;
-            if (std::fabs(full - m.atW) > 0.5f) { m.atW = full; m.maxH = h; }
-            if (h > m.maxH) { m.maxH = h; }
+            double now = ImGui::GetTime();
+            if (std::fabs(room - m.atW) > 0.5f) { m.atW = room; m.maxH = h; m.needT = now; m.lowH = 0.0f; }
+            if (h + 0.5f >= m.maxH) {
+                // the content needs the height now
+                m.maxH = (std::max)(m.maxH, h);
+                m.needT = now;
+                m.lowH = 0.0f;
+            }
+            else {
+                // hysteresis: shrink to the tallest height needed meanwhile once the
+                // larger one has not been needed for WRAP_HOLD_S
+                m.lowH = (std::max)(m.lowH, h);
+                if (now - m.needT > WRAP_HOLD_S) { m.maxH = m.lowH; m.needT = now; m.lowH = 0.0f; }
+            }
             if (h + 0.5f < m.maxH) {
                 // keep the room of the taller version (only below a single item line)
                 ImVec2 c = ImGui::GetCursorScreenPos();
