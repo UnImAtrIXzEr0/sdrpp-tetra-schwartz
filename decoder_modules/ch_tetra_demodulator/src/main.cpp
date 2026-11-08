@@ -3257,6 +3257,7 @@ private:
         // an analysis starts when its view is chosen (like a measuring instrument)
         int vk = instMode * 100 + instView;
         if (vk != instViewSeen) {
+            if (instViewSeen >= 100 && instViewSeen < 200) { instViewLeft(instViewSeen - 100); }
             instViewSeen = vk;
             if (instMode == IM_MEASURE) { instViewEntered(instView); }
         }
@@ -6120,10 +6121,17 @@ private:
     bool rfOpen = false;     // RF / Gain window (instrument UI)
     bool instLeftReg = false;   // content column registered as left panel
     int instViewSeen = -1;      // mode*100+view last seen (an analysis starts with its view)
+    // burst, multipath and TX analysis run only while their view is shown: all of
+    // them at once load the CPU so much that the decoder can lose its lock
     void instViewEntered(int v) {
         if (v == IV_BURST && !burstRun) { burstRun = true; saveBurstConfig(); }
         if (v == IV_MP && !mpRun) { mpRun = true; saveMpConfig(); }
         if (v == IV_TXA && !txaRun) { txaRun = true; saveTxaConfig(); }
+    }
+    void instViewLeft(int v) {
+        if (v == IV_BURST && burstRun) { burstRun = false; saveBurstConfig(); }
+        if (v == IV_MP && mpRun) { mpRun = false; saveMpConfig(); }
+        if (v == IV_TXA && txaRun) { txaRun = false; saveTxaConfig(); }
     }
     float instLeftW = 0.0f;
     std::atomic<bool> settingsCloseReq{ false };   // debug "inst settings -1"
