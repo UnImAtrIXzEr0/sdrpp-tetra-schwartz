@@ -288,11 +288,16 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit 1 }
               New-Item -ItemType File C:/vcpkg/vcpkg.disable-metrics -Force | Out-Null
               Write-Host "vcpkg tool $tag installed"
-              # vcpkg's own CMake (pinned by this revision): placed in its downloads folder, so vcpkg does not fetch it from GitHub releases
-              $cm = (Get-Content C:/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools | Where-Object { $_.name -eq 'cmake' -and $_.os -eq 'windows' -and $_.arch -eq 'amd64' } | Select-Object -First 1
+              # vcpkg's own CMake and Ninja (pinned by this revision): placed in its downloads folder,
+              # so vcpkg does not fetch them from GitHub releases ("amd64" / "x64" both name x86-64 there)
+              $tools = (Get-Content C:/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools
               New-Item -ItemType Directory C:/vcpkg/downloads -Force | Out-Null
-              ./.github/scripts/fetch_cached.ps1 $cm.archive $cm.url "C:/vcpkg/downloads/$($cm.archive)"
-              if ($LASTEXITCODE -ne 0) { exit 1 }
+              foreach ($tn in @('cmake', 'ninja')) {
+                $t = $tools | Where-Object { $_.name -eq $tn -and $_.os -eq 'windows' -and ($_.arch -eq 'amd64' -or $_.arch -eq 'x64') } | Select-Object -First 1
+                if (-not $t) { Write-Host "::error::no Windows x64 entry for $tn in vcpkg-tools.json"; exit 1 }
+                ./.github/scripts/fetch_cached.ps1 $t.archive $t.url "C:/vcpkg/downloads/$($t.archive)"
+                if ($LASTEXITCODE -ne 0) { exit 1 }
+              }
               Write-Host "vcpkg pinned to cache-producing revision 39344dff01"
             } catch {
               Write-Host "vcpkg pin failed (best effort); using runner default"
