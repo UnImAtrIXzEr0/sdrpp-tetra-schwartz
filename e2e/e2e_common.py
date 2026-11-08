@@ -319,6 +319,8 @@ def get_base_config(build_dir: str = DEFAULT_BUILD_DIR, root_dev: str = DEFAULT_
         "resourcesDirectory": res_dir,
         # the tests use the menu; a fresh config starts with it closed (TETRA-SCHWARTZ)
         "showMenu": True,
+        # the existing tests use the classic layout; the instrument UI has its own test
+        "TETRA Demodulator": {"instUi": False},
         "moduleInstances": {
             "Radio": {"module": "radio", "enabled": True},
             "NullAudioSink": {"module": "null_audio_sink", "enabled": True},

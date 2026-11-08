@@ -522,6 +522,17 @@ public:
             layoutReq.store(std::clamp(atoi(args.c_str()), 0, 3));
             return "{\"status\": \"ok\"}";
         }
+        if (cmd == "inst") {
+            // instrument UI: "ui 0|1", "mode 0..3", "view 0..6", "lang en|de" (tests, screenshots)
+            std::string k = args.substr(0, args.find(' '));
+            std::string v = args.find(' ') == std::string::npos ? "" : args.substr(args.find(' ') + 1);
+            if (k == "ui") { instUi = (v == "1"); }
+            else if (k == "mode") { instMode = std::clamp(atoi(v.c_str()), 0, (int)IM_COUNT - 1); }
+            else if (k == "view") { instView = std::clamp(atoi(v.c_str()), 0, (int)IV_COUNT - 1); }
+            else if (k == "lang") { ui_text::lang() = (v == "de") ? ui_text::DE : ui_text::EN; }
+            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang <value>\"}"; }
+            return "{\"status\": \"ok\"}";
+        }
         if (cmd == "set_bursts") {
             // burst analysis on the TETRA VFO frequency ("1") or off ("0")
             burstRun = (args == "1" || args == "true");
@@ -3361,7 +3372,7 @@ private:
 #endif
         strftime(tb, sizeof(tb), "%H:%M:%S", &lt);
         bool logging = meas.isLogging();
-        std::string r = std::string(ui_text::T("Log")) + (logging ? " \xe2\x97\x8f " : " \xe2\x97\x8b ") + ui_text::T(logging ? "running" : "off") + "   " + tb;
+        std::string r = std::string(ui_text::T("Log")) + ": " + ui_text::T(logging ? "running" : "off") + "   " + tb;
         float rw = ImGui::CalcTextSize(r.c_str()).x;
         ImGui::SameLine();
         float x = ImGui::GetWindowContentRegionMax().x - rw - 6.0f * k;
@@ -3397,13 +3408,14 @@ private:
         drawCellDetailsDialog();
     }
 
-    bool softkey(const char* label, const std::string& id, int on = -1, const char* right = nullptr) {
+    // on: -1 plain key, 0/1 toggle (text ": ON/OFF" unless stateText is false; 1 = highlighted)
+    bool softkey(const char* label, const std::string& id, int on = -1, const char* right = nullptr, bool stateText = true) {
         float w = ImGui::GetContentRegionAvail().x;
         float h = (std::max)(ImGui::GetFrameHeight() * 1.45f, 34.0f * style::uiScale);
         ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
         if (on == 1) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
         std::string txt = std::string(ui_text::T(label));
-        if (on >= 0) { txt += std::string(": ") + ui_text::T(on ? "ON" : "OFF"); }
+        if (on >= 0 && stateText) { txt += std::string(": ") + ui_text::T(on ? "ON" : "OFF"); }
         if (right) { txt += std::string("  ") + right; }
         bool r = ImGui::Button((txt + "###_sk_" + id + name).c_str(), ImVec2(w, h));
         if (on == 1) { ImGui::PopStyleColor(); }
@@ -3440,7 +3452,7 @@ private:
         softGroup("MODE");
         for (int i = 0; i < IM_COUNT; i++) {
             bool act = instMode == i;
-            if (softkey(instModeName(i), std::string("mode") + std::to_string(i), act ? 1 : -1)) { setInstMode(i); }
+            if (softkey(instModeName(i), std::string("mode") + std::to_string(i), act ? 1 : 0, nullptr, false)) { setInstMode(i); }
         }
         softGroup(instMode == IM_MEASURE ? "VIEW" : "SOFTKEYS");
         bool logging = meas.isLogging();
@@ -3454,7 +3466,7 @@ private:
             break;
         case IM_MEASURE:
             for (int v = 0; v < IV_COUNT; v++) {
-                if (softkey(instViewName(v), std::string("view") + std::to_string(v), instView == v ? 1 : -1)) { instView = v; saveInstConfig(); }
+                if (softkey(instViewName(v), std::string("view") + std::to_string(v), instView == v ? 1 : 0, nullptr, false)) { instView = v; saveInstConfig(); }
             }
             softGroup("SOFTKEYS");
             if (softkey("Reset statistics", "reset")) { meas.resetTotals(); }
@@ -3472,11 +3484,11 @@ private:
             TetraMeasurements::CellLock lock = meas.getCellLock();
             bool decLocked = osmotetradecoder.getRxState() == 2 && osmotetradecoder.getMcc() != 0;
             if (lock.active) {
-                if (softkey("Unlock cell", "lock", 1)) { lock.active = false; meas.setCellLock(lock); }
+                if (softkey("Unlock cell", "lock")) { lock.active = false; meas.setCellLock(lock); }
             }
             else {
                 if (!decLocked) { style::beginDisabled(); }
-                if (softkey("Lock cell", "lock", 0)) {
+                if (softkey("Lock cell", "lock")) {
                     lock.active = true;
                     lock.mcc = osmotetradecoder.getMcc();
                     lock.mnc = osmotetradecoder.getMnc();
@@ -3742,7 +3754,7 @@ private:
         ImGui::TextDisabled("%s", unit);
         if (valid && alignDelta && alignRef.set && !std::isnan(ref)) {
             char db[48];
-            snprintf(db, sizeof(db), "\xce\x94 %+.*f", std::fabs(hi - lo) < 30.0 ? 1 : 0, v - ref);
+            snprintf(db, sizeof(db), "%+.*f %s", std::fabs(hi - lo) < 30.0 ? 1 : 0, v - ref, ui_text::T("to ref."));
             ImGui::SameLine();
             float x = ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(db).x;
             if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
@@ -3770,8 +3782,9 @@ private:
         }
         ImGui::Dummy(ImVec2(cw, bh + 6.0f * k));
         char a[32], b[32];
-        snprintf(a, sizeof(a), "%g", lo);
-        snprintf(b, sizeof(b), "%g %s", hi, unit);
+        int dec = (std::fabs(hi - lo) < 30.0) ? 1 : 0;
+        snprintf(a, sizeof(a), "%.*f", dec, lo);
+        snprintf(b, sizeof(b), "%.*f %s", dec, hi, unit);
         ImGui::TextDisabled("%s", a);
         ImGui::SameLine();
         float x = ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(b).x;
@@ -3805,12 +3818,10 @@ private:
             if (r.valid) { acp = (std::max)(r.acpDbc[2], r.acpDbc[3]); }
         }
         // ACP +-25 kHz, worse side; BS / MS classes 1-3: -60 dBc (table 7.2)
-        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : "TX spectrum off", acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h);
+        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : ui_text::T("TX spectrum off"), acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h);
         if (!txaRun) {
-            if (ImGui::SmallButton(CONCAT("Start TX spectrum analysis##_inst_txa_", name))) { txaRun = true; saveTxaConfig(); }
+            if (ImGui::SmallButton(ui_text::L("Start TX spectrum analysis", "_inst_txa_" + name).c_str())) { txaRun = true; saveTxaConfig(); }
         }
-        ImGui::Spacing();
-        drawTrends(a.x);
     }
 
     void drawAlignSide(float w) {
@@ -3825,7 +3836,7 @@ private:
                 ImGui::TableSetColumnIndex(1);
                 if (!syn) { ImGui::TextDisabled("--"); return; }
                 ImGui::TextColored(tc::val(), fmt, v);
-                if (alignDelta && alignRef.set && !std::isnan(ref)) { ImGui::SameLine(); ImGui::TextColored(tc::cyan(), "\xce\x94 %+.1f", v - ref); }
+                if (alignDelta && alignRef.set && !std::isnan(ref)) { ImGui::SameLine(); ImGui::TextColored(tc::cyan(), "%+.1f %s", v - ref, ui_text::T("to ref.")); }
             };
             row("Phase error", "%.1f %%", symbolExtractor.getPhaseErrDeg() * 3.14159265 / 180.0 * 100.0, alignRef.ph);
             row("Amplitude error", "%.1f %%", symbolExtractor.getAmpErrPct(), alignRef.am);
@@ -3864,7 +3875,7 @@ private:
         tw::TextDisabled("%s", ui_text::T("3 Read the delta (blue = change to reference)"));
         if (freqRef == 0) {
             ImGui::Spacing();
-            tw::TextColored(tc::warn(), "Frequency: without an external 10 MHz reference the\nSDR's own error is included (indicative).");
+            tw::TextColored(tc::warn(), "%s", ui_text::T("Frequency: without an external 10 MHz reference the\nSDR's own error is included (indicative)."));
         }
     }
 
@@ -3911,7 +3922,6 @@ private:
             if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 0); }
             else if (decoder_mode == 0) { drawNetworkBody(w); }
         }
-        else if (instMode == IM_ALIGN) { drawTimeslotTable(w); }
         else { drawTrends(w); }
         touch::dragScroll();
         ImGui::EndChild();

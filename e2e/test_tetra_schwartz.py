@@ -576,6 +576,60 @@ def test_layout_stability():
     return True
 
 
+def test_instrument_ui():
+    """Instrument UI (test version): every mode and view in both languages is
+    drawn with a running cell (status bar, message line, own main view instead
+    of the waterfall, softkeys); the program must keep running and stay locked."""
+    stats.test_start("test_instrument_ui")
+    tmpdir = tempfile.mkdtemp(prefix="tetra_inst_")
+    rec = os.path.join(tmpdir, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
+    if not upsample_recording(recording(), rec):
+        shutil.copyfile(recording(), rec)
+    cfg = get_base_config()
+    cfg["moduleInstances"].pop("Radio", None)
+    cfg["streams"].pop("Radio", None)
+    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
+    cfg["source"] = "File"
+    cfg["File Source"] = {"path": rec, "filename": rec}
+    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["showMenu"] = False
+    cfg["TETRA Demodulator"] = {"instUi": True, "hamMode": True}
+    with SDRPPTestContext() as ctx:
+        ctx.write_configs(cfg)
+        if not ctx.start():
+            stats.test_fail("test_instrument_ui", "SDR++ did not start")
+            return False
+        ctx.sleep(2.0)
+        ctx.module_cmd("File Source", "set_filename", rec)
+        http_get(ctx.base_url, "/sdr/start")
+        ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
+        ctx.sleep(6.0)
+        for lang in ("en", "de"):
+            ctx.module_cmd("TETRA Demodulator", "inst", "lang " + lang)
+            for mode in range(4):
+                ctx.module_cmd("TETRA Demodulator", "inst", "mode %d" % mode)
+                ctx.sleep(1.0)
+            ctx.module_cmd("TETRA Demodulator", "inst", "mode 1")
+            for view in range(7):
+                ctx.module_cmd("TETRA Demodulator", "inst", "view %d" % view)
+                ctx.sleep(1.0)
+        # switch to the classic layout and back (panels are removed and registered again)
+        ctx.module_cmd("TETRA Demodulator", "inst", "ui 0")
+        ctx.sleep(1.0)
+        ctx.module_cmd("TETRA Demodulator", "inst", "ui 1")
+        ctx.sleep(1.0)
+        if not alive(ctx):
+            stats.test_fail("test_instrument_ui", "SDR++ stopped while switching modes/views")
+            return False
+        m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+        if not m or m.get("rx_state") != 2:
+            stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
+            return False
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, classic and back")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
@@ -585,7 +639,8 @@ if __name__ == "__main__":
     r3 = test_bursts()
     r4 = test_timing_multipath()
     r5 = test_layout_stability()
-    res = [r1, r2, r3, r4, r5]
+    r6 = test_instrument_ui()
+    res = [r1, r2, r3, r4, r5, r6]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)
