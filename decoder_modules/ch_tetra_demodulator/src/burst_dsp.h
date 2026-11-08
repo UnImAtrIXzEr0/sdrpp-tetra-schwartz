@@ -47,6 +47,12 @@ struct TetraBurstResult {
     bool transPeakValid = false;
     float transPeakDbc[2][2] = { { NAN, NAN }, { NAN, NAN } };
     float transPeakFloorDbc = NAN;   // the same detector on a quiet stretch
+    // receiver overload check (option, needs the DL tap): downlink power during
+    // the bursts relative to just before / after them. A continuous downlink must
+    // not change; a drop means the strong burst compresses the receiver.
+    bool desenseValid = false;
+    int desenseN = 0;
+    float desenseDb = NAN;   // > 0: downlink weaker during the bursts
 };
 
 class TetraBurstDsp {
@@ -68,6 +74,8 @@ public:
         peakFloor = 0.0;
         peakRef = 0.0;
         peakN = 0;
+        desenseDbAvg = 0.0;
+        desenseCount = 0;
         acc = TetraBurstResult();
         recent.clear();
         processedValid = false;
@@ -78,10 +86,13 @@ public:
     // x: the newest channel-filtered samples (x[0] has the absolute index
     // 'base'), nowS: a monotonic time in seconds. Windows may overlap; every
     // burst is taken once. raw: the same samples before the channel filter
-    // (wide, for the switching transients; raw[k] belongs to x[k + rawDelay]).
+    // (wide, for the switching transients; raw[k] belongs to x[k + rawDelay]),
+    // dl: the downlink on the same time line as x, for the overload check (or null).
     void process(const std::vector<std::complex<float>>& x, uint64_t base, double nowS, int avgN,
-                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0) {
+                 const std::vector<std::complex<float>>* raw = nullptr, int rawDelay = 0,
+                 const std::vector<std::complex<float>>* dl = nullptr) {
         curRaw = raw;
+        curDl = (dl && dl->size() == x.size()) ? dl : nullptr;
         curRawDelay = rawDelay;
         const size_t W = x.size();
         const size_t SMOOTH = (size_t)(FS / SYM);           // one symbol
@@ -167,6 +178,11 @@ public:
         if (!prof[c].empty()) { evaluate(c, fl); }
         acc.fs = FS;
         acc.preS = PRE;
+        if (desenseCount > 0) {
+            acc.desenseValid = desenseCount >= 3;
+            acc.desenseN = desenseCount;
+            acc.desenseDb = (float)desenseDbAvg;
+        }
         if (peakN > 0) {
             acc.transPeakValid = true;
             for (int r = 0; r < 2; r++) { for (int o = 0; o < 2; o++) { acc.transPeakDbc[r][o] = (float)(10.0 * std::log10((std::max)(peakHold[r][o], 1e-30))); } }
@@ -210,6 +226,22 @@ private:
         pbAvg[cls] = n == 1 ? pb : pbAvg[cls] + a * (pb - pbAvg[cls]);
         if (cls == 0) { acc.nFull++; } else { acc.nHalf++; }
         recent.push_back(nowS);
+        // overload check: downlink power in the useful part of the burst vs.
+        // 1..3 ms before and after it (the downlink is continuous)
+        if (curDl && i >= 3 * ms1 && j + 3 * ms1 < W) {
+            const std::vector<std::complex<float>>& d = *curDl;
+            double in = 0.0, out = 0.0;
+            size_t nIn = 0, nOut = 0;
+            for (size_t k = i + ms05; k < j - ms05; k++) { in += std::norm(d[k]); nIn++; }
+            for (size_t k = i - 3 * ms1; k < i - ms1; k++) { out += std::norm(d[k]); nOut++; }
+            for (size_t k = j + ms1; k < j + 3 * ms1; k++) { out += std::norm(d[k]); nOut++; }
+            if (nIn && nOut && in > 0.0 && out > 0.0) {
+                double db = 10.0 * std::log10((out / nOut) / (in / nIn));
+                desenseCount = (std::min)(desenseCount + 1, 1000000);
+                int nn = (std::min)(desenseCount, 20);
+                desenseDbAvg += (db - desenseDbAvg) / nn;
+            }
+        }
         // switching transients (full-slot bursts): windows centred at the rising
         // and falling -3 dB points and in the middle
         if (curRaw && cls == 0) {
@@ -396,6 +428,9 @@ private:
     }
 
     const std::vector<std::complex<float>>* curRaw = nullptr;
+    const std::vector<std::complex<float>>* curDl = nullptr;
+    double desenseDbAvg = 0.0;
+    int desenseCount = 0;
     int curRawDelay = 0;
     double transAcc[3][5] = {};
     double transFloorAcc[5] = {};

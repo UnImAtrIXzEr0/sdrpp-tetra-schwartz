@@ -379,6 +379,7 @@ def test_timing_multipath():
         ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
         ctx.module_cmd("TETRA Analyzer", "set_burst_freq", "429900000")
+        ctx.module_cmd("TETRA Analyzer", "set_overload_check", "1")   # downlink tap on the TETRA VFO
         ctx.module_cmd("TETRA Analyzer", "set_multipath", "1")
         ctx.module_cmd("TETRA Analyzer", "set_windows", "1")
         best = None
@@ -404,6 +405,11 @@ def test_timing_multipath():
         problems = []
         if b.get("burst_n_full", 0) < 20:
             problems.append(f"too few bursts ({b.get('burst_n_full')}, {b.get('burst_status')})")
+        # overload check: the generated downlink is constant, so it must not drop during the bursts
+        if b.get("burst_desense_n", 0) < 3:
+            problems.append(f"overload check: no result ({b.get('burst_desense_n')} bursts)")
+        elif abs(b.get("burst_desense_db", 99)) > 1.0:
+            problems.append(f"overload check: downlink changes {b.get('burst_desense_db')} dB during the bursts (generated: 0)")
         if b.get("burst_trans_n", 0) < 5:
             problems.append("no ramp spectrum")
         if b.get("burst_gap_dbfs", -999) < -150 or b.get("burst_gap_dbfs", -999) > -30:
@@ -418,7 +424,7 @@ def test_timing_multipath():
         if problems:
             stats.test_fail("test_timing_multipath", "; ".join(problems))
             return False
-    stats.test_pass("test_timing_multipath", "bursts, ramp spectrum, uplink noise and echo as generated")
+    stats.test_pass("test_timing_multipath", "bursts, overload check, ramp spectrum, uplink noise and echo as generated")
     return True
 
 
@@ -660,6 +666,38 @@ def test_listen_mute():
     return True
 
 
+def test_clock_cal():
+    """Calibration of the SDR's internal clock against its reference
+    (clock_cal.h, requested by the USRP source): simulated source and carrier
+    measurement - result, abort on lock loss / no relock / cancel, always back
+    on the reference."""
+    stats.test_start("test_clock_cal")
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    d = os.path.join(root, "decoder_modules", "ch_tetra_demodulator", "src")
+    cxx = os.environ.get("CXX", "g++")
+    if shutil.which(cxx) is None:
+        stats.test_pass("test_clock_cal", f"skipped (no C++ compiler '{cxx}')")
+        return True
+    tmpdir = tempfile.mkdtemp(prefix="tetra_clkcal_")
+    exe = os.path.join(tmpdir, "test_clock_cal")
+    r = subprocess.run([cxx, "-std=c++17", "-DTETRA_CLOCK_CAL_STANDALONE", "-I" + os.path.join(root, "core", "src"), "-I" + d,
+                        os.path.join(here, "gen", "test_clock_cal.cpp"), "-o", exe],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        stats.test_fail("test_clock_cal", "compile error: " + r.stderr[-400:])
+        return False
+    r = subprocess.run([exe], capture_output=True, text=True, timeout=30)
+    stats.info(r.stdout.strip())
+    if r.returncode != 0:
+        bad = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+        stats.test_fail("test_clock_cal", "; ".join(bad) or "failed")
+        return False
+    stats.test_pass("test_clock_cal", "internal clock error found, aborts cleanly, always back on the reference")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
@@ -671,7 +709,8 @@ if __name__ == "__main__":
     r5 = test_layout_stability()
     r6 = test_instrument_ui()
     r7 = test_listen_mute()
-    res = [r1, r2, r3, r4, r5, r6, r7]
+    r8 = test_clock_cal()
+    res = [r1, r2, r3, r4, r5, r6, r7, r8]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

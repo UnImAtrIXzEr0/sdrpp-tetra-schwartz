@@ -132,6 +132,35 @@ int main() {
         CHECK(t.listenEncState(2) == T::LISTEN_UNKNOWN && t.slotCallId(2) == -1, "clear(): unknown");
     }
 
+    // 6. idle timeout: release and the next D-SETUP on the timeslot both missed
+    {
+        T t;
+        t.setTestClock(t0);
+        mac(t, GSSI, 2);
+        l3(t, TETRA_L3_CALL_SETUP, 606, GSSI, TALKER_A, 0);
+        t.setTestClock(t0 + 300);   // one transmission of T311 = 300 s (maximum), no PDU meanwhile
+        CHECK(t.listenEncState(2) == T::LISTEN_CLEAR, "clear call: still clear after a 300 s transmission without PDUs");
+        mac(t, GSSI, 0);
+        l3(t, TETRA_L3_TX_CEASED, 606, GSSI, 0);   // confirms the call
+        mac(t, GSSI, 0);
+        l3(t, TETRA_L3_CALL_OTHER, 606, GSSI, 0);  // e.g. D-INFO: confirms the call
+        t.setTestClock(t0 + 300 + T::CALL_IDLE_S);
+        CHECK(t.listenEncState(2) == T::LISTEN_CLEAR, "D-TX-CEASED / D-INFO of the call restart the idle time");
+        t.setTestClock(t0 + 300 + T::CALL_IDLE_S + 1);
+        CHECK(t.listenEncState(2) == T::LISTEN_UNKNOWN, "no PDU of the call for more than CALL_IDLE_S: unknown (muted)");
+        CHECK(t.slotCallId(2) == -1, "stale call no longer bound to the timeslot");
+        // a PDU of another call does not confirm it
+        T u;
+        u.setTestClock(t0);
+        mac(u, GSSI, 3);
+        l3(u, TETRA_L3_CALL_SETUP, 607, GSSI, TALKER_A, 0);
+        u.setTestClock(t0 + 200);
+        mac(u, 9, 0);
+        l3(u, TETRA_L3_CALL_OTHER, 608, 9, 0);
+        u.setTestClock(t0 + T::CALL_IDLE_S + 1);
+        CHECK(u.listenEncState(3) == T::LISTEN_UNKNOWN, "PDUs of other calls do not keep a stale state alive");
+    }
+
     printf("%s (%d failure%s)\n", failures ? "FAILED" : "PASSED", failures, failures == 1 ? "" : "s");
     return failures ? 1 : 0;
 }

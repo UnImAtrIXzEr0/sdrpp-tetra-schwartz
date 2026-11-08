@@ -59,6 +59,7 @@
 #include "gps.h"
 #include "propagation.h"
 #include "map_export.h"
+#include "clock_cal.h"
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
 #include "const_view.h"
@@ -201,6 +202,7 @@ public:
             // "timing" / "ulOnlyV222" (burst timing vs. the downlink, removed) are ignored
             if (b.contains("linStepDb")) { burstSt.linStepDb = std::clamp((float)b["linStepDb"], 3.0f, 30.0f); }
             if (b.contains("transients")) { burstSt.transients = b["transients"]; }
+            if (b.contains("overloadCheck")) { burstSt.overloadCheck = b["overloadCheck"]; }
             if (b.contains("stdMask")) { burstSt.stdMask = b["stdMask"]; }
             if (b.contains("station")) { burstSt.station = std::clamp((int)b["station"], 0, 1); }
             if (b.contains("msClass4")) { burstSt.msClass4 = b["msClass4"]; }
@@ -574,6 +576,11 @@ public:
             burstRun = true;
             return "{\"status\": \"ok\"}";
         }
+        if (cmd == "set_overload_check") {
+            // burst analysis: overload check with the downlink tap on the TETRA VFO
+            burstSt.overloadCheck = (args == "1" || args == "true");
+            return "{\"status\": \"ok\"}";
+        }
         if (cmd == "set_alarm_test") {
             // level alarm that triggers at once (automation tests)
             alarmSt.enabled = true;
@@ -647,7 +654,7 @@ public:
                      "\"burst_gap_dbfs\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"freq_ref\": %d, \"vem_grid\": %s, \"vem_n\": %d, \"vem_measured\": %llu, \"vem_rejected\": %llu, \"vem_rms_pct\": %.3f, \"vem_rms_max_pct\": %.3f, \"vem_peak_pct\": %.2f, \"vem_c0_pct\": %.3f}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d, \"freq_ref\": %d, \"vem_grid\": %s, \"vem_n\": %d, \"vem_measured\": %llu, \"vem_rejected\": %llu, \"vem_rms_pct\": %.3f, \"vem_rms_max_pct\": %.3f, \"vem_peak_pct\": %.2f, \"vem_c0_pct\": %.3f}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -664,7 +671,7 @@ public:
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
                      alarmTotal, alarmActive ? "true" : "false",
-                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), freqRef,
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN, freqRef,
                      vr.gridValid ? "true" : "false", vr.n, (unsigned long long)vr.measured, (unsigned long long)vr.rejected,
                      vr.n ? vr.rmsMean * 100.0 : -999.0, vr.n ? vr.rmsMax * 100.0 : -999.0, vr.n ? vr.peakMax * 100.0 : -999.0, vr.n ? vr.c0Mean * 100.0 : -999.0);
             return b;
@@ -4718,6 +4725,7 @@ private:
         b.erase("ulOnlyV222");
         b["linStepDb"] = burstSt.linStepDb;
         b["transients"] = burstSt.transients;
+        b["overloadCheck"] = burstSt.overloadCheck;
         b["floorSpan"] = burstSt.floorSpan;
         config.release(true);
     }
@@ -4750,7 +4758,10 @@ private:
         else if (burstSt.source == 1) { f = burstSt.manualMHz * 1e6; }
         else { f = mainVfoFreq(); }
         burstAn.setKnownCarrier(burstSt.source == 2 && osmotetradecoder.getRxState() == 2);
-        burstAn.loop(enabled && burstRun, f);
+        // overload check: downlink tap on the TETRA VFO (not when the bursts are measured there)
+        double dlTap = (burstSt.overloadCheck && burstSt.source != 2) ? mainVfoFreq() : 0.0;
+        burstAn.loop(enabled && burstRun, f, dlTap);
+        clockCal.loop(enabled && vfo != nullptr && decoder_mode == 0, meas.get());
         chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
         {
             TetraMeasSnapshot vm = meas.get();
@@ -5819,6 +5830,7 @@ private:
     TetraCarrierMonitor carrierMon;
     bool carrDetached = false, focusCarrWin = false;
     TetraBurstAnalyzer burstAn;
+    TetraClockCal clockCal;       // internal clock of the SDR against its reference (requested by the source)
     TetraBurstSettings burstSt;
     bool burstRun = false;
     bool burstDetached = false, focusBurstWin = false;
