@@ -379,6 +379,7 @@ def test_timing_multipath():
         ctx.module_cmd("TETRA Demodulator", "set_afc", "0")
         ctx.module_cmd("TETRA Demodulator", "set_offset", "100000")
         ctx.module_cmd("TETRA Demodulator", "set_burst_freq", "429900000")
+        ctx.module_cmd("TETRA Demodulator", "set_overload_check", "1")   # downlink tap on the TETRA VFO
         ctx.module_cmd("TETRA Demodulator", "set_multipath", "1")
         ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
         best = None
@@ -404,6 +405,11 @@ def test_timing_multipath():
         problems = []
         if b.get("burst_n_full", 0) < 20:
             problems.append(f"too few bursts ({b.get('burst_n_full')}, {b.get('burst_status')})")
+        # overload check: the generated downlink is constant, so it must not drop during the bursts
+        if b.get("burst_desense_n", 0) < 3:
+            problems.append(f"overload check: no result ({b.get('burst_desense_n')} bursts)")
+        elif abs(b.get("burst_desense_db", 99)) > 1.0:
+            problems.append(f"overload check: downlink changes {b.get('burst_desense_db')} dB during the bursts (generated: 0)")
         if b.get("burst_trans_n", 0) < 5:
             problems.append("no ramp spectrum")
         if b.get("burst_gap_dbfs", -999) < -150 or b.get("burst_gap_dbfs", -999) > -30:
@@ -418,7 +424,7 @@ def test_timing_multipath():
         if problems:
             stats.test_fail("test_timing_multipath", "; ".join(problems))
             return False
-    stats.test_pass("test_timing_multipath", "bursts, ramp spectrum, uplink noise and echo as generated")
+    stats.test_pass("test_timing_multipath", "bursts, overload check, ramp spectrum, uplink noise and echo as generated")
     return True
 
 
