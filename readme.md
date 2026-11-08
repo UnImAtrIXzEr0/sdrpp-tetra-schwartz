@@ -1,13 +1,14 @@
-# SDR++ TETRA-SCHWARTZ
+# SDR++ Air Interface Analyzer
 
-**A TETRA receiver and measurement program for amateur radio** – based on
-[SDR++](https://github.com/AlexandreRouma/SDRPlusPlus) and the
-[SDR++Brown](https://github.com/sannysanoff/SDRPlusPlusBrown) fork, extended
-for amateur radio TETRA cells by UnImAtrIXzEr0.
+**An air interface analyzer for amateur radio – currently TETRA** (SDR++ AIA
+for short): a receiver and measurement program operated like a measuring
+instrument, based on [SDR++](https://github.com/AlexandreRouma/SDRPlusPlus)
+and the [SDR++Brown](https://github.com/sannysanoff/SDRPlusPlusBrown) fork,
+extended for amateur radio TETRA cells by UnImAtrIXzEr0.
 
 > **Experimental beta.** Not an official release of SDR++ or SDR++Brown and
 > not endorsed by their authors. Please report problems with this edition
-> only [here](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues).
+> only [here](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/issues).
 >
 > **No support.** This is not a community project: it is a tool built and
 > adapted for our own needs and published as it is, in case it is useful to
@@ -15,13 +16,34 @@ for amateur radio TETRA cells by UnImAtrIXzEr0.
 > measurements. Bug reports and suggestions are welcome, but whether and when
 > anything is changed is up to us alone.
 
-[![Download the latest version](https://img.shields.io/github/v/release/UnImAtrIXzEr0/sdrpp-tetra-schwartz?label=download&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest)
-[![Build](https://img.shields.io/github/actions/workflow/status/UnImAtrIXzEr0/sdrpp-tetra-schwartz/build_tetra_custom.yml?branch=main&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/actions)
+[![Download the latest version](https://img.shields.io/github/v/release/UnImAtrIXzEr0/sdrpp-air-interface-analyzer?label=download&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/build_tetra_custom.yml?branch=main&style=for-the-badge)](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/actions)
 [![Licence GPL-3.0](https://img.shields.io/badge/licence-GPL--3.0-blue?style=for-the-badge)](license)
 
-![Measuring station layout: spectrum and waterfall, tile column with constellation, measurements and trends, stations below](docs/readme/overview_tiles.png)
+![Classic layout with a tile column: spectrum and waterfall, constellation, measurements and trends, stations below](docs/readme/overview_tiles.png)
 
-*All pictures show the synthetic test cell of this repository (MCC 901, MNC 9999) – no real network.*
+*All pictures show the synthetic test cell of this repository (MCC 901, MNC 9999) – no real network. They were taken in the classic layout; the manuals show the instrument view.*
+
+## The user interface
+
+One surface, like a measuring instrument (the **instrument view**, standard):
+
+- **Status bar** at the top: sync, cell, DL frequency, level, MER, frequency
+  error, CRC errors – fixed-width fields, nothing jumps.
+- **Four modes** as softkeys on the right: **Monitor** (listen, cell, stations
+  and traffic), **Measure** (measured values with ETSI limits, mini trends and
+  the views spectrum, constellation, TX spectrum (ACP), burst (uplink),
+  carriers, trends, multipath), **Drive test** (large values, GPS, maps) and
+  **Alignment** (large meters with reference and delta for aligning a
+  transmitter).
+- **Content column** on the left for the mode, **main view** in the middle,
+  **message line** at the bottom with the most important note.
+- An analysis runs while its view is shown; the trends are recorded all the
+  time (24 h in memory).
+- Everything that used to be in the SDR menu is in **Settings**; **RF / Gain**
+  opens the SDR source in a window of its own. Texts in English or German.
+- The former layout with the menu column stays available: Settings → Display &
+  operation → Classic layout.
 
 ## What it does
 
@@ -40,9 +62,9 @@ for amateur radio TETRA cells by UnImAtrIXzEr0.
   sequences), **frequency stability**, **trends**, **alarms**, **HTML report**.
 - **Drive tests**: GPS, CSV log, coverage maps for Google Earth (KML) and
   OpenStreetMap, propagation diagram around the base station.
-- **Your own layout**: a tile column next to the waterfall, the content of
-  every tile selectable, sizes adjustable, kept across restarts; touch view
-  for tablets.
+- **Instrument view** with modes and softkeys (see above); themes RoSc light,
+  RoSc dark, KeSi and KeSiPro. In the classic layout: your own tile column,
+  touch view for tablets.
 - Automatic RF gain that looks for the best signal-to-noise ratio, dBm
   calibration, snap to carrier, lock VFO.
 - **No decryption.** Encrypted traffic stays encrypted.
@@ -70,7 +92,7 @@ SDR++ should work as well but have not been tried with this edition.
 
 ## Download
 
-On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest):
+On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/releases/latest):
 
 | File | For |
 |---|---|
@@ -84,14 +106,19 @@ On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz
 
 1. **Windows:** unpack the zip into a folder of its own and start `sdrpp.exe`.
    SDR drivers (e.g. for the USRP, PlutoSDR, RTL-SDR) as described in the manual.
-   **Linux:** `chmod +x SDRPP-TETRA-SCHWARTZ_*.AppImage`, then start it
+   **Linux:** `chmod +x SDRPP-AIA_*.AppImage`, then start it
    (Ubuntu 24.04 needs `sudo apt install libfuse2t64` once for AppImages).
-2. Choose your SDR under **Source** and a sample rate (2–4 MS/s is enough for
-   one carrier; uplink and downlink together need more than the duplex spacing).
-3. Press **Play**, click on the TETRA carrier in the spectrum (**Snap to
-   carrier** puts the VFO on its centre), switch on **TETRA Analyzer**.
-4. Choose **ETSI** or **Amateur radio** (own duplex tables) at the top of the
-   TETRA menu, **Layout…** for a tile layout (measuring station, drive test).
+   Settings of a former version (folder `sdrpp_brown_appimage` or
+   `sdrpp-brown`) are copied over automatically on the first start.
+2. Softkey **RF / Gain**: choose your SDR and a sample rate (2–4 MS/s is enough
+   for one carrier; uplink and downlink together need more than the duplex
+   spacing).
+3. Press **Play**, click on the TETRA carrier in the waterfall (**Snap to
+   carrier** puts the VFO on its centre). The status bar shows **Locked** once
+   the decoder has the cell.
+4. Choose **ETSI** or **Amateur radio** (own duplex tables) under **Settings** →
+   **Network: ETSI / amateur radio**, then the mode: **Monitor**, **Measure**,
+   **Drive test** or **Alignment**.
 5. For comparable values: **Level and hold** for the gain, a dBm calibration
    and a frequency reference – see the manual, chapter “Setting up the SDR”.
 
@@ -99,7 +126,8 @@ Tips:
 - Hover over a value: almost every value explains itself and names its standard.
 - Values marked *indicative* are not a test per the standard (e.g. over the air
   instead of at the antenna connector); the manual says what is missing.
-- Drag the grip (six dots) of a section header to reorder the menu.
+- The message line names the most important problem (overload, lost samples,
+  SDR centre on the channel, a value outside its limit).
 
 ## Feedback
 
@@ -107,18 +135,17 @@ This is **not a community project and comes without support** (see above).
 Bug reports and ideas are welcome and are read; there is no promise of an
 answer, a fix or a new function – we decide what gets changed.
 
-- **Bugs:** [open an issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
+- **Bugs:** [open an issue](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/issues/new/choose)
   with version, operating system, SDR and sample rate.
-- **Questions, measurement experiences, ideas:** [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
+- **Questions, measurement experiences, ideas:** [Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/discussions).
 - Please do not post data of real networks or other people (ISSIs, names,
   positions) in screenshots or logs.
 - Pull requests may be offered; whether they are taken over is decided by the maintainer.
 
 ## Legal notes
 
-- **About the name:** “TETRA-SCHWARTZ” is a homage to the film comedy
-  *Spaceballs* (Mel Brooks, 1987) – “May the Schwartz be with you”. It has no
-  relation to any company, brand or product with a similar-sounding name.
+- **About the name:** the “air interface” is what goes between base station
+  and radio over the antenna – exactly what the program analyses.
 - For **experimental amateur radio purposes**: receive your own or amateur
   radio cells. Listening to other radio services may be prohibited where you
   live (Germany: § 5 TDDDG).
@@ -131,18 +158,21 @@ answer, a fix or a new function – we decide what gets changed.
 
 ## Kurz auf Deutsch
 
-SDR++ TETRA-SCHWARTZ ist ein TETRA-Empfangs- und Messprogramm für den
-Amateurfunk (experimentelle Beta). Download für Windows und Linux sowie die
+SDR++ Air Interface Analyzer (kurz SDR++ AIA) ist ein Empfangs- und
+Messprogramm für die Luftschnittstelle von Funknetzen im Amateurfunk, derzeit
+für TETRA (experimentelle Beta). Bedient wird es wie ein Messgerät: Statuszeile
+oben, Softkeys rechts mit den Modi Monitor, Messen, Messfahrt und Abgleich,
+Meldezeile unten; alle übrigen Einstellungen liegen unter „Einstellungen“, die
+Oberfläche gibt es auf Englisch und Deutsch. Die bisherige Ansicht mit der
+Menüspalte bleibt unter Einstellungen → Anzeige & Bedienung → Klassische
+Ansicht erreichbar. Einstellungen einer früheren Version werden beim ersten
+Start automatisch übernommen. Download für Windows und Linux sowie die
 **deutsche Bedienungsanleitung (PDF)** auf der
-[Releases-Seite](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest).
-Fehler bitte als [Issue](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues/new/choose)
+[Releases-Seite](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/releases/latest).
+Fehler bitte als [Issue](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/issues/new/choose)
 melden, Fragen und Erfahrungen in den
-[Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/discussions).
-Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen. Der Name
-„TETRA-SCHWARTZ“ ist eine Hommage an die Filmkomödie *Spaceballs* (Mel
-Brooks, 1987) – „Möge der Saft mit dir sein“ heißt im Original „May the
-Schwartz be with you“ – und hat nichts mit ähnlich klingenden Firmen oder
-Marken zu tun.
+[Discussions](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/discussions).
+Keine Entschlüsselung; nur für eigene bzw. Amateurfunk-Zellen.
 
 **Kein Support:** Das ist kein Community-Projekt, sondern ein Werkzeug, das
 wir für unsere eigenen Ansprüche gebaut bzw. angepasst haben und so, wie es
@@ -171,7 +201,7 @@ Linux in short (Debian/Ubuntu):
 sudo apt install build-essential cmake ninja-build git unzip xxd libfftw3-dev libglfw3-dev libvolk-dev \
     libzstd-dev librtaudio-dev libpulse-dev portaudio19-dev libspdlog-dev liborc-0.4-dev \
     librtlsdr-dev libhackrf-dev libairspy-dev libairspyhf-dev libiio-dev libad9361-dev
-git clone https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz.git && cd sdrpp-tetra-schwartz
+git clone https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer.git && cd sdrpp-air-interface-analyzer
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON
 cmake --build build -j$(nproc) && sudo cmake --install build && sdrpp
 ```

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>SDR++ TETRA-SCHWARTZ – User manual</title>
+<html lang="en"><head><meta charset="utf-8"><title>SDR++ Air Interface Analyzer – User manual</title>
 <link rel="stylesheet" href="manual.css"></head><body>
 
 <h1 id="toc" style="break-before:auto">Contents</h1>
@@ -12,12 +12,14 @@
   <div class="l2"><a href="#s2-3">Drivers and additional software</a> · <a href="#s2-5">Building it yourself</a></div>
   <div class="l2"><a href="#s2-4">Settings at the first start</a></div>
   <div class="l1"><a href="#s3">3 The user interface</a></div>
-  <div class="l2"><a href="#s3-1">Instrument view (test version)</a> · <a href="#s3-2">Module Manager</a> · <a href="#s3-3">Own windows</a></div>
+  <div class="l2"><a href="#s3-1">Status bar and message line</a> · <a href="#s3-2">Modes, views and softkeys</a></div>
+  <div class="l2"><a href="#s3-3">Settings and RF / Gain</a> · <a href="#s3-4">Controls, themes, fonts</a></div>
+  <div class="l2"><a href="#s3-5">Classic layout</a></div>
   <div class="l1"><a href="#s4">4 Setting up the SDR</a></div>
   <div class="l2"><a href="#s4-2">Recommendations per SDR type</a></div>
   <div class="l2"><a href="#s4-3">Calibration</a> · <a href="#s4-4">Level</a></div>
   <div class="l1"><a href="#s5">5 TETRA Analyzer: basics</a></div>
-  <div class="l1"><a href="#s6">6 Measurements</a></div>
+  <div class="l1"><a href="#s6">6 Measured values</a></div>
   <div class="l1"><a href="#s7">7 Network, cell and duplex tables</a></div>
   <div class="l1"><a href="#s8">8 Stations and traffic</a></div>
   <div class="l1"><a href="#s9">9 TX analysis (spectrum)</a></div>
@@ -38,7 +40,7 @@
 
 <!-- ============================================================ -->
 <h1 id="s1" class="pb"><span class="num">1</span>Overview</h1>
-<p class="lead">SDR++ TETRA-SCHWARTZ is an experimental amateur radio edition of SDR++ for analysing TETRA networks. It receives with an SDR, decodes TETRA transmissions and measures the signal quality the way you know it from a test bench – from the constellation diagram to the coverage map.</p>
+<p class="lead">SDR++ Air Interface Analyzer (SDR++ AIA for short) is an experimental amateur radio edition of SDR++ for analysing the air interface of radio networks. It currently contains TETRA (module <b>TETRA Analyzer</b>): the program receives with an SDR, decodes TETRA transmissions and measures the signal quality the way you know it from a measuring instrument – from the constellation diagram to the coverage map. It is operated through a single surface like a measuring instrument, the instrument view (<a href="#s3">chapter 3</a>).</p>
 <div class="box info"><b class="t">Explicitly for experimental amateur radio purposes</b>The program is intended exclusively for experimental amateur radio purposes – for experiments, self-training and technical investigations in the amateur radio service. It is not a calibrated measuring instrument and is not intended for commercial, professional or public-authority use.</div>
 
 <h2 id="s1-1">What the program does</h2>
@@ -63,10 +65,10 @@
 </div>
 </div>
 
-<figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Fig. 1 – Main window: the menu with the TETRA Analyzer on the left, spectrum and waterfall with the TETRA VFO on the right.</figcaption></figure>
+<figure><img src="shots/inst_measure_en.png" style="max-height:100mm"><figcaption>Fig. 1 – Main window in the instrument view, mode <span class="ui">Measure</span>: status bar at the top, measured values on the left, spectrum and waterfall with the TETRA VFO in the middle, softkeys on the right, message line at the bottom.</figcaption></figure>
 
 <h3>How the program works</h3>
-<p>The SDR delivers a wide I/Q data stream. From it the program cuts several narrow “taps” (VFOs): the TETRA VFO for demodulator and decoder and – only when switched on – further, invisible taps for TX analysis, burst analysis, multipath and additional carriers. All taps must lie within the bandwidth of the SDR. Every tap costs processing time at the full sample rate, so from v0.22.2 TX analysis, modulation accuracy and multipath share one analysis tap (288 kS/s, halved exactly to 144 kS/s for the latter two – passband ripple 0.0002 dB, stopband attenuation 100 dB; the results are the same as with separate taps).</p>
+<p>The SDR delivers a wide I/Q data stream. From it the program cuts several narrow “taps” (VFOs): the TETRA VFO for demodulator and decoder and – only when needed – further, invisible taps for TX analysis, burst analysis, multipath and additional carriers. In the instrument view TX analysis, burst analysis and multipath run only while their view is shown; in the mode <span class="ui">Alignment</span> the TX analysis runs automatically. All taps must lie within the bandwidth of the SDR. Every tap costs processing time at the full sample rate, so from v0.22.2 TX analysis, modulation accuracy and multipath share one analysis tap (288 kS/s, halved exactly to 144 kS/s for the latter two – passband ripple 0.0002 dB, stopband attenuation 100 dB; the results are the same as with separate taps).</p>
 <figure>
 <svg viewBox="0 0 860 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5a6774"/></marker></defs>
@@ -87,7 +89,7 @@
   <line x1="532" y1="95" x2="590" y2="125" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <line x1="532" y1="150" x2="590" y2="135" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <line x1="532" y1="205" x2="590" y2="145" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
-  <rect x="592" y="105" width="255" height="55" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="720" y="128" text-anchor="middle" font-weight="700" fill="#003a6c">own windows, report</text><text x="720" y="145" text-anchor="middle" fill="#5a6774" font-size="10.5">active only when switched on</text>
+  <rect x="592" y="105" width="255" height="55" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="720" y="128" text-anchor="middle" font-weight="700" fill="#003a6c">views, report</text><text x="720" y="145" text-anchor="middle" fill="#5a6774" font-size="10.5">analyses active only when needed</text>
   </g>
 </svg>
 <figcaption>Fig. 2 – Signal path: one SDR, several independent taps.</figcaption></figure>
@@ -101,22 +103,21 @@ Measured values are implemented with care but have not been compared with calibr
 <div class="box info"><b class="t">No support – not a community project</b>
 The program is a tool built and adapted for our own needs and published as it is. There is no support and no help with installation, SDRs or measurements. Bug reports and suggestions are welcome (issues in the repository); whether and when any of them is implemented is reserved.</div>
 
-<div class="box info"><b class="t">About the name</b>
-“TETRA-SCHWARTZ” is a homage to the film comedy <i>Spaceballs</i> (Mel Brooks, 1987) and its “Schwartz” (“May the Schwartz be with you”). The name has no relation to any company, brand or product with a similar-sounding name.</div>
+<div class="box info"><b class="t">About the name</b>The “air interface” of a radio system is what goes between base station and radio over the antenna. That is exactly what the program evaluates: modulation, spectrum, bursts, signalling. Short form: SDR++ AIA.</div>
 
 <!-- ============================================================ -->
 <h1 id="s2"><span class="num">2</span>Installation and first start</h1>
 <h2 id="s2-1">Windows</h2>
 <ol class="steps">
-  <li>Download the ZIP file <code>SDRPP-TETRA-SCHWARTZ_v…_windows_x64</code> and extract it <b>completely</b> into a folder of its own (do not start it from inside the ZIP).</li>
+  <li>Download the ZIP file <code>SDRPP-AIA_v…_windows_x64.zip</code> and extract it <b>completely</b> into a folder of its own (do not start it from inside the ZIP).</li>
   <li>Start <code>sdrpp.exe</code>. Because the program is not signed, Windows SmartScreen warns: <span class="ui">More info</span> → <span class="ui">Run anyway</span>. If the browser already blocks the download, explicitly keep the file in the download list.</li>
-  <li>Settings, logs and name lists are kept in the same folder. For an update, extract the new folder next to the old one; the configuration (<code>config.json</code>, <code>*_config.json</code>) can be copied over.</li>
+  <li>Settings, logs and name lists are kept in the same folder as <code>sdrpp.exe</code>. For an update, extract the new folder next to the old one; the configuration (<code>config.json</code>, <code>*_config.json</code>) can be copied over.</li>
 </ol>
 <h2 id="s2-2">Linux (AppImage, Ubuntu 24.04 and newer)</h2>
-<pre>chmod +x SDRPP-TETRA-SCHWARTZ_v…-beta_x86_64.AppImage
+<pre>chmod +x SDRPP-AIA_v…_x86_64.AppImage
 sudo apt install libfuse2t64          # once, for AppImages
-./SDRPP-TETRA-SCHWARTZ_v…-beta_x86_64.AppImage</pre>
-<p>The configuration is stored in <code>~/.config/sdrpp_brown_appimage</code>. For USB SDRs the user needs access to the devices (udev rules of the respective SDR package, e.g. <code>rtl-sdr</code>, <code>hackrf</code>, <code>uhd-host</code>).</p>
+./SDRPP-AIA_v…_x86_64.AppImage</pre>
+<p>The configuration is stored in <code>~/.config/sdrpp_aia_appimage</code>. On the first start of a version with the new name the program copies the settings from the former folder <code>~/.config/sdrpp_brown_appimage</code> there, provided the new folder does not exist yet; the old folder is left unchanged. For USB SDRs the user needs access to the devices (udev rules of the respective SDR package, e.g. <code>rtl-sdr</code>, <code>hackrf</code>, <code>uhd-host</code>).</p>
 
 <h2 id="s2-3">Drivers and additional software</h2>
 <table>
@@ -126,7 +127,6 @@ sudo apt install libfuse2t64          # once, for AppImages
 <tr><td>USRP (B2xx)</td><td>included; FPGA images with <code>uhd_images_downloader</code></td><td><code>sudo apt install uhd-host &amp;&amp; sudo uhd_images_downloader</code></td></tr>
 <tr><td>BladeRF, LimeSDR</td><td>included</td><td>udev rules from the manufacturers' packages</td></tr>
 <tr><td>SDRplay</td><td>install the SDRplay API (the service must be running)</td><td>install the SDRplay API; deliberately not bundled</td></tr>
-<tr><td>Spectran (HTTP)</td><td colspan="2">Spectran software with the HTTP server enabled; connect via host name and port</td></tr>
 </table>
 
 <h3>Enabling the PlutoSDR on Linux</h3>
@@ -151,8 +151,8 @@ sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger</pre>
   liborc-0.4-dev librtlsdr-dev libhackrf-dev libairspy-dev libairspyhf-dev libiio-dev libad9361-dev</pre>
   For the USRP also <code>libuhd-dev libboost-dev libboost-thread-dev</code>, for BladeRF <code>libbladerf-dev</code>, for LimeSDR <code>liblimesuite-dev</code>. Package names for Fedora and Arch: <code>docs/BUILDING.md</code>.</li>
   <li><b>Build and install</b> (internet access needed: the build downloads the ETSI speech codec):
-<pre>git clone https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz.git
-cd sdrpp-tetra-schwartz
+<pre>git clone https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer.git
+cd sdrpp-air-interface-analyzer
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
   -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON -DOPT_BUILD_USRP_SOURCE=ON
 cmake --build build -j$(nproc)
@@ -165,90 +165,173 @@ sdrpp</pre></li>
 
 <h2 id="s2-4">Settings at the first start</h2>
 <ul>
-  <li>Start frequency <b>439 MHz</b> (70 cm TETRA), colour theme <b>RoSc light</b> (dark variant: <b>RoSc dark</b>; matching waterfall colour maps "RoSc light (paper)", "RoSc dark (night)", "KeSi (signal)").</li>
+  <li><b>Instrument view</b> in the mode <span class="ui">Monitor</span>, user interface language English (change it under <span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Language</span>, see <a href="#s3-3">chapter 3.3</a>).</li>
+  <li>Start frequency <b>439 MHz</b> (70 cm TETRA), colour theme <b>RoSc light</b> (others: <b>RoSc dark</b>, <b>KeSi</b>, <b>KeSiPro</b>; matching waterfall colour maps "RoSc light (paper)", "RoSc dark (night)", "KeSi (signal)").</li>
   <li>TETRA Analyzer in <span class="ui">Amateur radio</span> mode, 8-point constellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> and <span class="ui">Auto RF gain</span> on, audio to <span class="ui">Audio</span>.</li>
-  <li>Modules not needed for TETRA are hidden or off: Radio, Frequency Manager, Band Plan, FT8/FT4, noise reduction, WebSDR, Rigctl, VFO Color, Debug. Everything can be shown again in the <a href="#s3-2">Module Manager</a>.</li>
+  <li>Modules not needed for TETRA are off: Radio, Frequency Manager, Band Plan, FT8/FT4, noise reduction, WebSDR, Rigctl, VFO Color, Debug. All of them can be switched on again under <span class="ui">Settings</span> → <span class="ui">Modules</span>.</li>
   <li>The source list only contains the supported SDRs (see <a href="#s4-2">chapter 4</a>).</li>
+  <li><b>Update from an older version:</b> the settings are taken over (folders: see <a href="#s19-1">appendix 19.1</a>). Colour themes that no longer exist are switched over: light ones to RoSc light, dark ones to RoSc dark.</li>
 </ul>
 
 <!-- ============================================================ -->
 <h1 id="s3" class="pb"><span class="num">3</span>The user interface</h1>
-<div class="cols">
-<div>
-<figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Fig. 3 – Menu column with the TETRA Analyzer.</figcaption></figure>
-</div>
-<div>
-<h3>Areas</h3>
+<p>The program is operated through a single surface, like a measuring instrument: the <b>instrument view</b>. There is no SDR menu column and no menu button any more; everything that used to be in the menu is in the <a href="#s3-3">Settings</a>. The texts of the instrument view exist in English (default) and German (<span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Language</span>). Texts without a translation – the sections from SDR++ itself (source, audio, display, modules) and the contents of the views – stay English in both languages.</p>
+<figure><img src="shots/inst_monitor_en.png"><figcaption>Fig. 3 – Instrument view in the mode <span class="ui">Monitor</span> (amateur radio mode): status bar, audio and compact cell data on the left, spectrum and waterfall with the stations and traffic strip in the middle, softkeys on the right, message line at the bottom.</figcaption></figure>
+<h3>Layout</h3>
 <ul>
-  <li><b>Top bar:</b> start/stop, volume, frequency display (mouse wheel or click on the digits), VFO selection, signal level.</li>
-  <li><b>Menu column</b> on the left: <span class="ui">Source</span> (SDR), <span class="ui">TETRA Analyzer</span>, <span class="ui">Sinks</span> (audio), <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>. Every section can be expanded and collapsed and rearranged by dragging.</li>
-  <li><b>Spectrum and waterfall</b> on the right. The TETRA VFO is the highlighted band; dragging with the mouse moves it, a click into the waterfall sets it to that frequency.</li>
+  <li><b>Top bar:</b> start/stop of the SDR, volume and frequency display (mouse wheel or click on the digits). There is exactly one VFO, the TETRA VFO, and only normal tuning: a click into the waterfall puts the VFO onto that frequency, the centre of the SDR stays where it is. Therefore the VFO selector, <span class="ui">Lock</span>, the centre-tuning button (it would put the channel onto the DC spike in the middle of the band) and the SNR meter are not shown here; level and MER are in the status bar.</li>
+  <li><b>Status bar</b> below it: the most important values at a glance (<a href="#s3-1">3.1</a>).</li>
+  <li><b>Content column</b> on the far left, with a fixed width: what belongs to the mode – audio and compact cell data (Monitor), measured values with limits, short trends and last analysis results (Measure), large value tiles (Drive test), error components and procedure (Alignment). Its width follows the content in the chosen language and does not change while measuring.</li>
+  <li><b>Main view</b> in the middle: spectrum and waterfall or the chosen view (constellation, TX spectrum, burst, carriers, trends, multipath, drive test, alignment). The sliders <span class="ui">Zoom</span>, <span class="ui">Max</span> and <span class="ui">Min</span> are only shown while the waterfall is visible.</li>
+  <li><b>Strip below the main view</b>, only in the mode Monitor: in amateur radio mode <span class="ui">Stations</span>, <span class="ui">Groups</span> and <span class="ui">Traffic</span> (<a href="#s8">chapter 8</a>), in ETSI mode network and cell (<a href="#s7">chapter 7</a>). Its height is set with the divider above it.</li>
+  <li><b>Softkey column</b> on the right, as wide as its longest text in the chosen language: the four modes at the top, below them the views or softkeys of the mode, at the very bottom <span class="ui">RF / Gain</span> and <span class="ui">Settings</span>.</li>
+  <li><b>Message line</b> at the bottom: notes and warnings, log state and clock on the right (<a href="#s3-1">3.1</a>).</li>
 </ul>
-<h3>Hints</h3>
-<ul>
-  <li>Almost every measured value has a <b>tooltip</b>: hold the mouse over it for a moment.</li>
-  <li><b>Instrument-style display (from v0.23.6):</b> The width of the menu column can be changed; nothing is cut off and nothing jumps. The values of a “label: value” line sit in a common value column. If a value no longer fits on the line, it moves with its unit to a continuation line below the value column. Every value reserves the room of its longest text so far, and at a constant width the layout stays fixed – a value that changes its length no longer pushes the rest of the line. A wrapped value only moves back once the column is about two characters wider than needed. Lines that are not always broadcast (e.g. <span class="ui">Security</span>) keep their place and show “not broadcast yet” until first received.</li>
-  <li><b>Tables:</b> move columns and change their width with the mouse; a right-click on the header shows or hides columns. A click on a column header sorts ascending, a second descending, a third removes the sorting (arrow in the header). Cells stay single-line; text that is too long ends with “…”, the full text is in the tooltip. If the window is narrower than all columns, the table scrolls sideways while the header row stays. The arrangement is saved.</li>
-  <li><b>Reordering sections in the TETRA Analyzer:</b> drag the grip (six dots on the right of the header); a line shows where the section lands. A right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The order is saved.</li>
-  <li><b>Own window:</b> the window icon left of the grip shows the section in its own window (icon blue = window open); a second click puts it back into the menu. The constellation is a section of its own. At the very top only audio, ETSI/Amateur radio and <span class="ui">Layout...</span> remain.</li>
-  <li><b>Channel raster:</b> <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> draws dashed channel boundaries at ±12.5 and ±37.5 kHz around the TETRA channel in the spectrum. The spectrum above the waterfall can be averaged under <span class="ui">Display</span> → <span class="ui">Spectrum averaging</span>: time constant in seconds (after this time a step has reached 63 %, after five times the time 99 %). <span class="ui">Power</span> averages the power and shows correct levels. <span class="ui">Log (dB)</span> averages the dB values as before; noise then reads about 2.5 dB too low. <span class="ui">Max hold</span> adds a second trace with the maximum that falls back at the set rate in dB/s (0 = hold until switched off). For measurements use <span class="ui">TX analysis</span> with <span class="ui">Avg</span> (fixed number of averaged spectra).</li>
-</ul>
-</div>
-</div>
+<p>Mode, view and language are kept over a restart.</p>
 
-<h2 id="s3-1">Instrument view (test version)</h2>
-<div class="box info"><b class="t">Test version only</b>The test versions (0.24.0-test.x) start with an instrument view: one surface like a measuring instrument, without the menu column. The classic layout described above stays available: <span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Classic layout</span>.</div>
-<h3>Areas</h3>
-<ul>
-  <li><b>Status bar</b> below the top bar: sync, cell, downlink frequency, level, MER, frequency error, CRC errors and what is playing.</li>
-  <li><b>Main view</b> on the left: spectrum and waterfall, or the view of the mode (constellation, TX spectrum, burst, carriers, trends, multipath, drive test, alignment). The <span class="ui">Zoom</span>, <span class="ui">Max</span> and <span class="ui">Min</span> sliders are only shown while the waterfall is visible.</li>
-  <li><b>Strip below the main view:</b> stations and traffic (Monitor) or trends (Measure). With the view <span class="ui">Trends</span> the strip is left out, so the trends are not shown twice.</li>
-  <li><b>Content column</b> in the middle right: audio and compact cell data (Monitor), the measured values with ETSI limits (Measure), drive test values, alignment values. The column cannot be narrowed until it disappears.</li>
-  <li><b>Softkey column</b> on the right: the four modes, the views or softkeys of the mode, and at the bottom <span class="ui">RF / Gain</span> and <span class="ui">Settings</span>.</li>
-  <li><b>Message line</b> at the bottom: hints and warnings (e.g. lost samples), log state and time.</li>
-</ul>
-<h3>Modes</h3>
+<h2 id="s3-1">Status bar and message line</h2>
+<p>Every field of the status bar has a fixed width – that of its longest possible text – so nothing moves when a value changes. Numbers are right-aligned.</p>
 <table>
-<tr><th style="width:18%">Mode</th><th>Use</th></tr>
-<tr><td><span class="ui">Monitor</span></td><td>Listen and watch the cell: waterfall, stations and traffic, audio, compact cell data. Softkeys: <span class="ui">Mute encrypted</span>, <span class="ui">Cell details</span>, <span class="ui">Hide call control</span>.</td></tr>
-<tr><td><span class="ui">Measure</span></td><td>Measured values with limits; views <span class="ui">Spectrum</span>, <span class="ui">Constellation</span>, <span class="ui">TX spectrum (ACP)</span>, <span class="ui">Burst (uplink)</span>, <span class="ui">Carriers</span>, <span class="ui">Trends</span>, <span class="ui">Multipath</span>. Softkeys: reset statistics, remove I/Q offset, CSV log, report.</td></tr>
-<tr><td><span class="ui">Drive test</span></td><td>GPS and coverage; lock the cell, CSV log, map export, report.</td></tr>
-<tr><td><span class="ui">Alignment</span></td><td>Large values for adjusting a transmitter: reference, delta to reference, hold, limits for base station or mobile station.</td></tr>
+<tr><th style="width:24%">Field</th><th>Content</th></tr>
+<tr><td>TETRA</td><td>Badge of the application.</td></tr>
+<tr><td>Sync</td><td><b>Locked</b> (green): the decoder has the cell. <b>Searching</b> (yellow): symbol clock found, frame structure not yet. <b>No sync</b> (red). With NETSYMS: <b>NETSYMS</b> (green) while the demodulator delivers symbols.</td></tr>
+<tr><td>Cell</td><td>MCC-MNC and colour code, e.g. <code>901-9999 CC 1</code>; “--” without a locked cell.</td></tr>
+<tr><td>DL</td><td>Frequency of the TETRA VFO in MHz.</td></tr>
+<tr><td>Level</td><td>Channel level in dBFS, with level calibration in dBm. Red when the ADC peak is above −3 dBFS.</td></tr>
+<tr><td>MER</td><td>Modulation error ratio in dB.</td></tr>
+<tr><td>Freq. error</td><td>Carrier offset in Hz against the frequency the cell announces (SYSINFO); with “*” only against the TETRA VFO (no SYSINFO yet).</td></tr>
+<tr><td>CRC errors</td><td>Share of blocks with a CRC error in the last second (built-in decoder only).</td></tr>
+<tr><td>right, per mode</td><td>Measure: <b>Playing</b> – timeslot, group and talker of the transmission being played, otherwise “nothing”. Drive test: <b>GPS</b> – “off”, “no fix (n sat)” or “fix, n sat”. Alignment: <b>Reference</b> – “set” or “not set” and the frequency reference (“internal”, “external 10 MHz”, “calibrated”). Monitor: nothing (“Playing” is in the content column there). If the window is too narrow, this field is left out.</td></tr>
 </table>
-<h3>RF / Gain and Settings</h3>
+<p>The <b>message line</b> shows one message on the left, the most important one first:</p>
+<ol>
+  <li><b>ALARM:</b> with the active alarms (red), when alarm monitoring is on (<a href="#s14">chapter 14</a>).</li>
+  <li><b>ADC overload - reduce the gain</b> (red): ADC peak above −3 dBFS.</li>
+  <li><b>Samples lost (USB / CPU)</b> (red): fewer samples arrive than the sample rate promises.</li>
+  <li><b>No cell: the decoder is not locked</b> (yellow).</li>
+  <li>Measure and Alignment only: <b>SDR centre on the channel - move it ~100 kHz away</b> (yellow) when the TETRA VFO is less than 15 kHz from the centre of the SDR (<a href="#s4">chapter 4</a>).</li>
+  <li>Measure and Alignment only: <b>All measured values within the limits</b> (green).</li>
+  <li>Measure only: the topmost measured value of the content column that violates its limit, with value and limit (red).</li>
+  <li>Otherwise <b>Ready</b>.</li>
+</ol>
+<p>On the right: <b>Log: running</b> (red) or <b>Log: off</b> and the clock.</p>
+
+<h2 id="s3-2">Modes, views and softkeys</h2>
+<p>The softkeys of the modes and views are highlighted while chosen. A softkey with a state shows it as <b>: ON</b> or <b>: OFF</b> and is highlighted when on. Other softkeys trigger an action.</p>
+<table>
+<tr><th style="width:15%">Mode</th><th>Content column and main view</th><th style="width:36%">Softkeys</th></tr>
+<tr><td><span class="ui">Monitor</span></td><td>Left <b>Audio</b> (volume, <span class="ui">Listen to</span>, <span class="ui">Playing</span>, <a href="#s5">chapter 5</a>) and – built-in decoder only – <b>Cell (compact)</b>: <span class="ui">DL / UL</span>, <span class="ui">Carrier / LA</span>, <span class="ui">Timeslots</span>, <span class="ui">Security</span>, <span class="ui">Access</span> (minimum level, maximum transmit power of the radios), <span class="ui">Services</span> (green = offered). In the middle spectrum and waterfall, below it the strip.</td><td><span class="ui">Mute encrypted</span>, <span class="ui">Play anyway</span> (only shown while a call is muted because its encryption is unknown), <span class="ui">Cell details</span>, <span class="ui">Hide call control</span> (amateur radio mode only). <span class="ui">Cell details</span> and <span class="ui">Hide call control</span> only with the built-in decoder.</td></tr>
+<tr><td><span class="ui">Measure</span></td><td>Left <b>Measured values</b> with limits, <b>Trends (10 min)</b> and <b>Last analysis results</b> (<a href="#s6">chapter 6</a>). In the middle the chosen view.</td><td>Views (below) and <span class="ui">Reset statistics</span>, softkeys of the view, <span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>, <span class="ui">Create report</span>.</td></tr>
+<tr><td><span class="ui">Drive test</span></td><td>Left large value tiles (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">Decoder EVM</span>, <span class="ui">Freq. error</span>, <span class="ui">Stations</span>, <span class="ui">GPS</span>; the “i” button shows the explanation), below them position, speed/HDOP, cell lock and the log file. In the middle GPS and coverage map (<a href="#s16">chapter 16</a>).</td><td><span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>, <span class="ui">Lock cell</span> / <span class="ui">Unlock cell</span>, <span class="ui">Export map</span>, <span class="ui">Create report</span>.</td></tr>
+<tr><td><span class="ui">Alignment</span></td><td>Left <b>Error components</b> and <b>Procedure</b>, in the middle four large meters (see below).</td><td><span class="ui">Set reference</span>, <span class="ui">Delta to reference</span>, <span class="ui">Hold</span>, <span class="ui">Limits: base station</span> / <span class="ui">Limits: mobile station</span>.</td></tr>
+</table>
+
+<h3>Monitor</h3>
 <ul>
-  <li><span class="ui">RF / Gain</span> opens a window with the SDR source section (device, sample rate, gain, frequency correction). It stays open next to the measurement and can be moved; a second press closes it.</li>
-  <li><span class="ui">Settings</span> holds everything that was in the menu column before, with the original controls: <span class="ui">Display &amp; operation</span> (language, classic layout, display, theme), <span class="ui">SDR &amp; calibration</span> (SDR source, AFC and level), <span class="ui">Audio &amp; recording</span> (audio output, recorder), <span class="ui">Logging &amp; report</span>, <span class="ui">Limits &amp; alarms</span>, <span class="ui">Modules</span> (module manager and all other modules, each with an <span class="ui">Enabled</span> switch) and the TETRA pages <span class="ui">Network</span>, <span class="ui">Duplex tables</span>, <span class="ui">Name lists</span>, <span class="ui">Decoder / NETSYMS</span>.</li>
-  <li>The sections that come from SDR++ itself (source, audio, display, modules) are English in both languages.</li>
+  <li><span class="ui">Mute encrypted</span> (default ON) mutes encrypted calls and keeps calls with unknown encryption muted until a call setup assigns them (details in <a href="#s5">chapter 5</a>). <span class="ui">Play anyway</span> releases such a timeslot: the call is audible until there has been no traffic on that timeslot for 10 s or a call setup assigns the timeslot again – after that the program decides by itself again.</li>
+  <li><span class="ui">Cell details</span> opens a window with everything the cell broadcasts (content as in <a href="#s7">chapter 7</a>). Built-in decoder only.</li>
+  <li><span class="ui">Hide call control</span> acts on the <span class="ui">Traffic</span> tab in the strip: when ON, call control (D-SETUP, D-TX-GRANTED, D-RELEASE …) is hidden; SDS, status and encrypted messages remain (<a href="#s8">chapter 8</a>). Amateur radio mode with the built-in decoder only.</li>
 </ul>
 
-<h2 id="s3-2">Module Manager</h2>
-<p>In the <span class="ui">Module Manager</span> every module has two switches: <span class="ui">Menu</span> shows it in the menu column, <span class="ui">On</span> enables it. Below, the built-in menus (VFO Color, Debug, Band Plan, Display, Theme) can be shown, and further SDR types can be added to the source list under <span class="ui">Sources in the source list</span>. The SDR currently in use always stays visible.</p>
+<h3>Measure: views</h3>
+<table>
+<tr><th style="width:24%">View</th><th>Content</th><th style="width:30%">Softkeys of the view</th></tr>
+<tr><td><span class="ui">Spectrum</span></td><td>Spectrum and waterfall.</td><td>–</td></tr>
+<tr><td><span class="ui">Constellation</span></td><td>Constellation diagram with the ETSI limits (<a href="#s5">chapter 5</a>).</td><td><span class="ui">8 points (pi/4)</span>, <span class="ui">Remove I/Q offset</span></td></tr>
+<tr><td><span class="ui">TX spectrum (ACP)</span></td><td>TX analysis: spectrum, adjacent channel power, occupied bandwidth (<a href="#s9">chapter 9</a>).</td><td><span class="ui">Analysis</span>, <span class="ui">Channel raster</span></td></tr>
+<tr><td><span class="ui">Burst (uplink)</span></td><td>Burst analysis of the radios (<a href="#s12">chapter 12</a>).</td><td><span class="ui">Analysis</span>, <span class="ui">Overload check</span>, <span class="ui">Ramp spectrum</span></td></tr>
+<tr><td><span class="ui">Carriers</span></td><td>Additional carriers (<a href="#s11">chapter 11</a>).</td><td>–</td></tr>
+<tr><td><span class="ui">Trends</span></td><td>Trends, frequency stability, reception limit (<a href="#s10">chapter 10</a>).</td><td><span class="ui">Open log...</span>: opens a saved CSV log.</td></tr>
+<tr><td><span class="ui">Multipath</span></td><td>Multipath profile of the downlink (<a href="#s13">chapter 13</a>).</td><td><span class="ui">Analysis</span></td></tr>
+</table>
+<p><b>Analyses run with their view:</b> the burst, multipath and TX analyses start when their view is chosen and stop when it is left – like a measuring instrument, and without processing time for analyses nobody looks at. The softkey <span class="ui">Analysis</span> pauses and restarts them within the view. Their last results stay in the content column under <b>Last analysis results</b>. In the mode Alignment the TX analysis runs automatically (for the adjacent channel meter). The <b>trends</b>, in contrast, are always recorded in the background (the last 24 h in memory), even when their view is not shown.</p>
+<figure><img src="shots/inst_const_en.png" style="max-height:105mm"><figcaption>Fig. 4 – Mode <span class="ui">Measure</span>, view <span class="ui">Constellation</span>: measured values, short trends and last analysis results on the left.</figcaption></figure>
 
-<h2 id="s3-3">Tiles, own windows and touch</h2>
-<p><b>Tile column (from v0.23.0):</b> the <span class="ui">Layout...</span> button next to ETSI/Amateur radio chooses a start assignment: <span class="ui">Measuring station</span> (constellation, measurements, trends; in amateur radio mode also Stations &amp; Traffic as a wide strip below the waterfall), <span class="ui">Drive test</span> (GPS/map, measurements, trends) or <span class="ui">Classic</span> (everything in the menu). The tiles sit in a column of their own to the right of the waterfall and cover nothing; the waterfall gets narrower instead.</p>
+<h3>Drive test</h3>
+<p><span class="ui">Lock cell</span> can only be used while the decoder is locked to a cell; afterwards the softkey reads <span class="ui">Unlock cell</span>. <span class="ui">Export map</span> can be used as soon as a CSV log is running or has run, and makes the maps from the current or last log (<a href="#s16">chapter 16</a>). The map value (<span class="ui">Map value</span>) and the GPS connection are in the main view.</p>
+
+<h3>Alignment</h3>
+<p>This mode is meant for aligning a transmitter: you adjust something at the transmitter and see at once whether it gets better or worse. The main view shows four meters with limit and scale:</p>
 <ul>
-  <li><b>Content:</b> the selection menu in the header of each tile chooses what it shows – any section of the TETRA menu and <span class="ui">Values (large)</span> (large value tiles). A section in a tile shows only “Shown in a tile” in the menu.</li>
-  <li><b>Size:</b> the dividers between the tiles change their height, the left edge of the column its width, the line above the stations strip its height.</li>
-  <li><b>Add / close:</b> <span class="ui">+ Tile</span> adds a tile at the bottom, <span class="ui">x</span> in the tile header closes it (the section goes back into the menu). <span class="ui">Stations below</span> switches the stations strip below the waterfall.</li>
-  <li><b>Saving:</b> assignment, width and heights are kept for the next start. <span class="ui">Reset</span> restores the chosen preset.</li>
+  <li><b>Freq. error</b> – limit base station ±0.2 ppm of the frequency (±0.1 ppm above 520 MHz), shown in Hz; mobile station ±100 Hz (EN 300 394-1 7.3.2.2). Scale ±2 × limit.</li>
+  <li><b>EVM rms</b> – limit 10 %, scale 0–15 %.</li>
+  <li><b>Residual carrier</b> – limit −26 dB (5 %), scale −60 … −16 dB.</li>
+  <li><b>Adjacent channel</b> – adjacent channel power at ±25 kHz, worse side; limit −60 dBc, scale −80 … −50 dBc.</li>
 </ul>
-<figure><img src="shots/overview_tiles.png"><figcaption>Tile column “Measuring station” with the stations strip below the waterfall (test recording).</figcaption></figure>
-<p><b>Own windows:</b> the window icon in the header of a section still moves it into a freely movable window (taking it out of the tile column). The menu then shows <span class="ui">Bring to front</span>. Position and size are remembered.</p>
-<p><b>Touch mode:</b> <span class="ui">Display</span> → <span class="ui">Touch mode (larger controls)</span> enlarges buttons, sliders and scroll bars and gives touches more margin; dragging with a finger on a free spot scrolls menu and windows. Tapping a value shows its help. Below it a scale suggestion for the screen (10–17 inch); <span class="ui">Use</span> applies it after a restart. From v0.23.0 the tile column becomes the touch view in touch mode: the frequency large at the top with <span class="ui">−</span> / <span class="ui">+</span> keys and a selectable step (6.25 kHz … 1 MHz), below one tile at full size, large tabs at the bottom to switch. Without an own assignment it starts with large values, constellation, measurements, GPS and network. Touch mode is checked with a mouse; feedback from real touch devices is welcome.</p>
+<p>The value is <b>green</b> inside the good zone (green band) and <b>red</b> outside it. If it lies beyond the scale, an <b>arrow</b> at that end of the scale points in its direction. The dashed blue line is the reference; with <span class="ui">Delta to reference</span> ON (default) the change against the reference is shown in blue on the right (“to ref.”).</p>
+<figure><img src="shots/inst_align_en.png" style="max-height:95mm"><figcaption>Fig. 5 – Mode <span class="ui">Alignment</span>. The adjacent channel is outside its limit here (red); the arrow shows a value beyond the scale.</figcaption></figure>
+<ul>
+  <li><span class="ui">Set reference</span> stores the current values (frequency error, EVM, residual carrier, phase and amplitude error, adjacent channel).</li>
+  <li><span class="ui">Hold</span> freezes frequency error, EVM, residual carrier, EVM peak, symbol clock and level at the moment it is switched on. Adjacent channel, phase and amplitude error and IRR keep running.</li>
+  <li><span class="ui">Limits: base station</span> / <span class="ui">Limits: mobile station</span> switches the frequency limit (the softkey shows the one in force).</li>
+  <li>The content column shows the <b>Error components</b> (phase error, amplitude error, EVM peak, I/Q imbalance, symbol clock, level; with a running burst analysis also the uplink noise) and the <b>Procedure</b>: 1 Set reference, 2 Adjust, 3 Read the delta. If the frequency reference is set to “internal”, a note reminds you that the frequency error contains the error of your own SDR (indicative).</li>
+</ul>
+<div class="box warn"><b class="t">“receiver limited” at the adjacent channel</b>The adjacent channel measurement is limited by the dynamic range of the SDR: what the receiver itself puts into the adjacent channel (noise, phase noise, ADC) looks like emission of the transmitter. If the measured value is less than 3 dB above this measurement floor, it is shown grey and marked <b>receiver limited</b> – the transmitter may be better. Remedy: set the level with an attenuator so that the SDR works close to full scale (without overload), and store the noise floor with <span class="ui">Store floor</span> in the view <span class="ui">TX spectrum (ACP)</span> (<a href="#s9">chapter 9</a>). In <b>Last analysis results</b> such a value carries a “*”.</div>
+
+<h2 id="s3-3">Settings and RF / Gain</h2>
+<p><span class="ui">RF / Gain</span> opens a movable window with the section of the SDR source (device, sample rate, gain, frequency correction). It stays open next to the measurement; the softkey is highlighted while it is open, a second press closes it.</p>
+<p><span class="ui">Settings</span> opens a window with pages on the left; the cross at the top right closes it. It contains everything that used to be in the menu column, with the original controls.</p>
+<figure><img src="shots/inst_settings_en.png" style="max-height:95mm"><figcaption>Fig. 6 – <span class="ui">Settings</span>, page <span class="ui">Display &amp; operation</span>.</figcaption></figure>
+<table>
+<tr><th style="width:30%">Page</th><th>Content</th></tr>
+<tr><td colspan="2" style="font-weight:600;color:#5a6774">Device</td></tr>
+<tr><td><span class="ui">Display &amp; operation</span></td><td><span class="ui">Language</span> (English / Deutsch), <span class="ui">Classic layout (everything in the menu)</span> (<a href="#s3-5">3.5</a>), the SDR++ section <span class="ui">Display</span> (among others touch mode, spectrum averaging, max hold, FFT, waterfall colour map, scaling) and <span class="ui">Theme</span> (colour theme).</td></tr>
+<tr><td><span class="ui">SDR &amp; calibration</span></td><td><span class="ui">SDR source</span> (the section <span class="ui">Source</span>) and <span class="ui">AFC &amp; level</span>: <span class="ui">AFC (follow carrier)</span>, SDR line with <span class="ui">Recommended view</span>, <span class="ui">Lock VFO</span>, <span class="ui">Snap to carrier</span>, <span class="ui">Auto RF gain</span> with its operating mode, <span class="ui">Band</span> (<a href="#s4">chapter 4</a>).</td></tr>
+<tr><td><span class="ui">Audio &amp; recording</span></td><td><span class="ui">Audio output</span> (SDR++ section <span class="ui">Sinks</span>) and – if the Recorder module is present – <span class="ui">Recording</span>.</td></tr>
+<tr><td><span class="ui">Logging &amp; report</span></td><td>Log folder (<span class="ui">Log folder</span>) and measurement report with notes (<a href="#s15">chapter 15</a>).</td></tr>
+<tr><td><span class="ui">Limits &amp; alarms</span></td><td>Alarms (<a href="#s14">chapter 14</a>). ACP limits and the burst time mask are set in their views (Measure).</td></tr>
+<tr><td><span class="ui">Modules</span></td><td><span class="ui">Module manager</span> and <span class="ui">Other modules</span>: every other module can be expanded, with the switch <span class="ui">Enabled</span> and its settings.</td></tr>
+<tr><td colspan="2" style="font-weight:600;color:#5a6774">Application TETRA</td></tr>
+<tr><td><span class="ui">Network: ETSI / amateur radio</span></td><td>Choice <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span> (<a href="#s5">chapter 5</a>).</td></tr>
+<tr><td><span class="ui">Duplex tables</span></td><td>View the duplex tables and edit them in amateur radio mode (<a href="#s7">chapter 7</a>).</td></tr>
+<tr><td><span class="ui">Name lists</span></td><td>State of the name lists, <span class="ui">Download name lists</span> and <span class="ui">Reload files</span> (<a href="#s8">chapter 8</a>). Amateur radio mode with the built-in decoder only; without name lists the stations strip shows <span class="ui">No name lists - Settings -&gt; Name lists</span>.</td></tr>
+<tr><td><span class="ui">Decoder / NETSYMS</span></td><td>Choice <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span> and the NETSYMS settings (<a href="#s5">chapter 5</a>).</td></tr>
+</table>
+<div class="box info"><b class="t">Classic layout only, for now</b>Level calibration (<span class="ui">Level cal. (dB)</span>), frequency reference (<span class="ui">Frequency reference</span>), <span class="ui">Calibrate SDR</span>, the event list (<span class="ui">Events</span>) and the remaining lines of the section <span class="ui">Measurements</span> (<a href="#s6">chapter 6</a>) cannot be reached in the instrument view of this version. Switch on the classic layout for them temporarily (<a href="#s3-5">3.5</a>); the settings then apply in the instrument view as well.</div>
+
+<h2 id="s3-4">Controls, themes, fonts</h2>
+<ul>
+  <li><b>On/off on the measuring surface:</b> softkeys with <b>: ON</b> / <b>: OFF</b> or <b>chips</b> – rounded switches, filled = on, outlined = off. Chips choose e.g. the curves of the trends (<span class="ui">Show:</span> <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>).</li>
+  <li><b>Either/or:</b> segmented buttons, the chosen one is highlighted: time span of the trends <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span>; <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span>; <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>; frequency of the burst analysis <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> | <span class="ui">TETRA VFO</span>; new entry of the priority list <span class="ui">Group</span> | <span class="ui">Station</span>.</li>
+  <li><b>Tooltips:</b> almost every measured value explains itself when the mouse rests on it.</li>
+  <li><b>Tables:</b> drag columns to move or resize them, right-click the header to show/hide columns. A click on a column header sorts ascending, a second one descending, a third one removes the sorting (arrow in the header). Cells stay on one line; text that is too long ends with “…”, the full text is in the tooltip. If the table is wider than its space, it can be scrolled sideways while the header row stays. The arrangement is saved.</li>
+</ul>
+<p><b>Colour themes</b> (<span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Theme</span>):</p>
+<table class="plain">
+<tr><th style="width:24%">Theme</th><th>Description</th></tr>
+<tr><td><b>RoSc light</b></td><td>Default. Light grey, not glaring background with blue accents.</td></tr>
+<tr><td><b>RoSc dark</b></td><td>Dark version of RoSc light.</td></tr>
+<tr><td><b>KeSi</b></td><td>Dark grey background, blue accents, yellow traces.</td></tr>
+<tr><td><b>KeSiPro</b></td><td>Like KeSi (yellow traces), plus steel-blue section bars and the constellation on black (points green within the limits, red outside).</td></tr>
+</table>
+<p>There are no other colour themes any more; a saved choice is switched over at start: light themes to RoSc light, dark ones to RoSc dark.</p>
+<p><b>Fonts:</b> one font family, Roboto: text in Roboto Regular 18 px, values in Roboto Medium 22 px, large readouts (value tiles, alignment meters) in Roboto Medium 45 px – each at 100 % scaling (<span class="ui">High-DPI Scaling</span> in the section <span class="ui">Display</span>).</p>
+
+<h2 id="s3-5">Classic layout</h2>
+<p><span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Classic layout (everything in the menu)</span> switches to the former surface: the menu column on the left with the sections <span class="ui">Source</span>, <span class="ui">TETRA Analyzer</span>, <span class="ui">Sinks</span>, <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>, spectrum and waterfall on the right, and again VFO selector, <span class="ui">Lock</span>, centre tuning and SNR meter at the top. In the section <span class="ui">TETRA Analyzer</span> all sections of this manual are listed one below the other, with checkboxes instead of softkeys (e.g. <span class="ui">Run analysis (250 kHz tap)</span>, <span class="ui">Run burst analysis</span>, <span class="ui">Run multipath analysis</span>, <span class="ui">Mute encrypted</span>); there the analyses run while their checkbox is ticked.</p>
+<div class="box warn"><b class="t">Back to the instrument view</b>In this version the classic layout has no way back: the <span class="ui">Settings</span> window exists only in the instrument view. To return, close the program and change the entry <code>"instUi": false</code> to <code>true</code> in the section <code>"TETRA Analyzer"</code> of <code>tetra_demodulator_config.json</code> (configuration folder, <a href="#s19-1">appendix 19.1</a>).</div>
+<figure><img src="shots/classic.png" style="max-height:90mm"><figcaption>Fig. 7 – Classic layout with the menu column.</figcaption></figure>
+<ul>
+  <li><b>Sections in the TETRA Analyzer:</b> drag them by the grip (six dots on the right of the header); a right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The window icon left of the grip shows the section in its own, freely movable window (icon blue = window open); a second click brings it back. Position and size are saved.</li>
+  <li><b>Tile column:</b> <span class="ui">Layout...</span> next to ETSI/Amateur radio chooses a start assignment: <span class="ui">Measuring station</span> (constellation, measurements, trends; in amateur radio mode stations &amp; traffic as a strip below the waterfall), <span class="ui">Drive test</span> (GPS/map, measurements, trends) or <span class="ui">Classic (all in the menu)</span>. The drop-down in the header of each tile chooses its content (every section and <span class="ui">Values (large)</span>); <span class="ui">+ Tile</span> adds a tile, <span class="ui">x</span> closes it, <span class="ui">Reset</span> restores the preset. The dividers change the sizes; everything is kept over a restart.</li>
+  <li><b>Display like an instrument:</b> the menu column can be resized; nothing is clipped and nothing jumps. If a value no longer fits into its line, it moves with its unit into a continuation line; lines that are not always broadcast keep their place.</li>
+  <li><b>Touch mode:</b> <span class="ui">Display</span> → <span class="ui">Touch mode (larger controls)</span> enlarges the controls; dragging with a finger on a free spot scrolls. In the classic layout the tile column then becomes the touch view: the frequency large at the top with <span class="ui">−</span> / <span class="ui">+</span> buttons and a selectable step, below it one tile at full size and large tabs to switch. The touch mode has been checked with a mouse; feedback from real touch devices is welcome.</li>
+  <li><b>Module Manager:</b> every module with the switches <span class="ui">Menu</span> (show in the menu column) and <span class="ui">On</span>; below it the built-in menus and, under <span class="ui">Sources in the source list</span>, further SDR types for the source list. The SDR in use always stays visible. In the instrument view it is under <span class="ui">Settings</span> → <span class="ui">Modules</span>.</li>
+</ul>
 
 <!-- ============================================================ -->
 <h1 id="s4" class="pb"><span class="num">4</span>Setting up the SDR</h1>
+<p>The SDR itself (device, sample rate, gain, frequency correction) is set in the <span class="ui">RF / Gain</span> window; the same is under <span class="ui">Settings</span> → <span class="ui">SDR &amp; calibration</span> → <span class="ui">SDR source</span>. The controls of the TETRA Analyzer (<span class="ui">AFC</span>, <span class="ui">Lock VFO</span>, <span class="ui">Snap to carrier</span>, <span class="ui">Auto RF gain</span>, SDR line) are below it under <span class="ui">AFC &amp; level</span>; in the classic layout in the section <span class="ui">Measurements</span>.</p>
 <h2>Basic rules</h2>
 <ul>
   <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For uplink and downlink at the same time and for additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
-  <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
+  <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage. In the modes Measure and Alignment the message line warns when the TETRA VFO is less than 15 kHz from the centre.</li>
   <li><b>Level:</b> as much gain as needed, as little as possible. <span class="ui">Auto RF gain</span> looks for the best signal-to-noise ratio: it steps up by 3 dB while the ratio still improves and steps back once the noise floor only rises with the gain. It goes down at once when any signal in the whole SDR band (not only TETRA) reaches the ADC limit. The <span class="ui">Band</span> line shows this peak and the ratio.</li>
   <li><b>Gain mode</b> (from v0.20.4): <span class="ui">Level and hold</span> finds the best step once and then keeps it fixed – all results of a measurement series are taken with the same receiver settings. If the ADC nears clipping or the ratio drops by more than 6 dB, a note appears; <span class="ui">Re-level</span> levels again. <span class="ui">Follow</span> adjusts continuously. <span class="ui">Automatic (GPS)</span> (default) follows while moving (GPS above 5 km/h, averaged over 10 s) and holds after 30 s standing still or without GPS. With a level calibration (dBm) it may follow as well: the program remembers the gain when the calibration is entered and corrects the level by the difference from the SDR's gain table (about ±1 dB, shown as "gain-corrected"). Older calibrations without a remembered gain ask to be entered again; until then it holds.</li>
   <li><b>Lock VFO:</b> the mouse no longer tunes the TETRA VFO – clicking or dragging in the spectrum and waterfall only moves the view, the wheel and the arrow keys do nothing. AFC and frequency entry still work. From v0.22.2 the VFO also keeps its frequency when the view is dragged past the band edge and the SDR is retuned; the view stops before the VFO would leave the band.</li>
   <li><b>Snap to carrier</b> (from v0.22.2, on by default): a click or drag that tunes the TETRA VFO ends on the centre of the strongest carrier within ±25 kHz – also with the view zoomed out. The program evaluates a spectrum of the raw samples around the click and puts the frequency on the 6.25 kHz raster when it is within 1 kHz of it. Without a recognisable carrier (at least 8 dB above the noise) the VFO stays where it is. Workflow: click the carrier, then tick <span class="ui">Lock VFO</span>.</li>
   <li><b>SDR line:</b> shows source and sample rate and recommends a range (tooltip). <span class="ui">Recommended view</span> sets the centre to 440 MHz − 0.45 × sample rate so the band ends just above 440 MHz; this also happens automatically at the very first start.</li>
-  <li><b>Gain control locked:</b> while Auto RF gain is active, the gain control in the source menu is locked ("Locked by TETRA Auto RF gain"). <span class="ui">Release</span> switches the automatic gain off and frees the control.</li>
+  <li><b>Gain control locked:</b> while Auto RF gain is active, the gain control of the SDR source is locked ("Locked by TETRA Auto RF gain"). <span class="ui">Release</span> switches the automatic gain off and frees the control.</li>
   <li><b>Warm-up:</b> wait 10–15 minutes after switching on before calibrating the frequency or measuring stability.</li>
 </ul>
 
@@ -263,7 +346,6 @@ sdrpp</pre></li>
 <tr><td>BladeRF</td><td>gain mode <span class="ui">Manual</span>.</td><td>overall gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>LimeSDR</td><td>suitable antenna input (<code>LNAW</code> for 70 cm).</td><td>0–73 dB; <span class="ui">Freq. corr. (ppb)</span></td></tr>
 <tr><td>SDRplay</td><td><span class="ui">IF AGC</span> off; set the LNA state manually according to the signal strength.</td><td>IF gain; <span class="ui">Freq. corr. (ppb)</span></td></tr>
-<tr><td>Spectran (HTTP)</td><td>set level (reference level) and frequency correction in the Spectran software.</td><td>not from this program</td></tr>
 </table>
 <h3>Tested devices</h3>
 <p>Our own tests – a hint for users, not a guarantee. Other SDRs supported by SDR++ should work as well but have not been tried with this edition.</p>
@@ -280,64 +362,92 @@ sdrpp</pre></li>
 <div class="box"><b class="t">Tip for Pluto/Zynq on Windows</b>If there are dropouts (“Re-locks … with timing slip”), lower the sample rate and connect the device directly to a USB 3 port without a hub. The buffers are already set to 20 ms × 8.</div>
 
 <h2 id="s4-3">Calibration</h2>
-<p>In <span class="ui">Measurements</span>, <span class="ui">Carrier vs. SYSINFO</span> shows how far the received carrier deviates from the frequency the base station itself announces. <span class="ui">Calibrate SDR</span> sets the frequency correction of the SDR so that this deviation disappears.</p>
+<p>In the section <span class="ui">Measurements</span> of the classic layout, <span class="ui">Carrier vs. SYSINFO</span> shows how far the received carrier deviates from the frequency the base station itself announces. <span class="ui">Calibrate SDR</span> sets the frequency correction of the SDR so that this deviation disappears. Both can only be reached in the classic layout in this version (<a href="#s3-3">3.3</a>); in the instrument view the line <span class="ui">Carrier error</span> shows the same value. The manual frequency correction (e.g. <span class="ui">Freq. corr. (ppb)</span>) is under <span class="ui">RF / Gain</span>.</p>
 <div class="box warn"><b class="t">Calibrate only on a trusted cell</b>The value contains the error of the base station <i>and</i> of the SDR. Only calibrate on a station whose frequency you know (GPS-disciplined, or measured beforehand with a reference-locked SDR), and only after the warm-up.</div>
 <h3>USRP: calibrating the internal clock against the reference</h3>
-<p>With the clock source <span class="ui">external</span> (10 MHz input) or <span class="ui">gpsdo</span> the USRP needs no correction: <span class="ui">Freq. corr. (ppb)</span> is locked and shows <span class="ui">external reference - no correction needed</span>. With the internal clock the field is editable, and the internal oscillator can be measured against the reference once it is connected:</p>
+<p>With the clock source <span class="ui">external</span> (10 MHz input) or <span class="ui">gpsdo</span> the USRP needs no correction: <span class="ui">Freq. corr. (ppb)</span> is locked and shows <span class="ui">external reference - no correction needed</span>. With the internal clock the field is editable; the value is stored per device (serial number). The internal oscillator can be measured against the reference once it is connected:</p>
 <ol class="steps">
   <li>Select the clock source <span class="ui">external</span> or <span class="ui">gpsdo</span>, start the SDR and tune the TETRA Analyzer to any TETRA carrier until it is locked. Its frequency accuracy does not matter: only the difference between the two clocks is measured.</li>
-  <li>Press <span class="ui">Calibrate internal clock against reference</span> in the USRP source. The TETRA Analyzer measures the carrier for 6 s with the reference, switches the USRP to its internal clock, waits for the PLL and the decoder to lock again (4 s after lock, at most 20 s), measures again for 6 s, and switches back to the reference.</li>
+  <li>Press <span class="ui">Calibrate internal clock against reference</span> in the USRP source (<span class="ui">RF / Gain</span>). The TETRA Analyzer measures the carrier for 6 s with the reference, switches the USRP to its internal clock, waits for the PLL and the decoder to lock again (4 s after lock, at most 20 s), measures again for 6 s, and switches back to the reference.</li>
   <li>The difference is the error of the internal oscillator; it is stored for this device (serial number) as <span class="ui">Freq. corr. (ppb)</span>, shown with <span class="ui">calibrated against reference</span> and the date and time. From then on it is applied whenever the internal clock is selected. Entering a value by hand (or <span class="ui">Calibrate SDR</span>) replaces it.</li>
   <li>The calibration aborts cleanly – back on the reference, nothing stored – if the lock is lost, the carrier is unstable, the result is implausible (more than 20 ppm) or <span class="ui">Cancel calibration</span> is pressed. The status line below the button tells why.</li>
 </ol>
 <div class="box warn"><b class="t">Warm up first</b>The internal TCXO drifts with temperature. Calibrate only after 20–30 minutes of operation, in the usual surroundings; repeat the calibration if the temperature changes a lot.</div>
 
 <h2 id="s4-4">Level in dBm</h2>
-<p>The SDR measures in dBFS (relative to full scale). <span class="ui">Level cal. (dB)</span> converts this to dBm: feed in a signal of known power (signal generator) and set the value so that the display is correct. The calibration only applies to the same gain and frequency – switch <span class="ui">Auto RF gain</span> off for it.</p>
+<p>The SDR measures in dBFS (relative to full scale). <span class="ui">Level cal. (dB)</span> (section <span class="ui">Measurements</span>, in this version in the classic layout only) converts this to dBm: feed in a signal of known power (signal generator) and set the value so that the display is correct. The calibration only applies to the same gain and frequency – switch <span class="ui">Auto RF gain</span> off for it.</p>
 
 <!-- ============================================================ -->
 <h1 id="s5"><span class="num">5</span>TETRA Analyzer: basics</h1>
 <ol class="steps">
-  <li>Choose the SDR in <span class="ui">Source</span> and start it with ▶.</li>
-  <li>Find the TETRA carrier in the waterfall (a 25 kHz wide, uniform band) and drag the TETRA VFO onto it or enter the frequency. The <span class="ui">AFC</span> pulls the VFO along as soon as the decoder locks.</li>
-  <li>Choose the operating mode: <span class="ui">Amateur radio</span> (duplex tables for 70 cm, call signs, talk groups) or <span class="ui">ETSI</span>.</li>
-  <li>Check: <span class="ui">RF status</span> “OK”, MER above ~15 dB, MCC/MNC and frequencies appear in the network section.</li>
+  <li>Softkey <span class="ui">RF / Gain</span>: choose and set up the SDR (<a href="#s4">chapter 4</a>), then start it with ▶ in the top bar.</li>
+  <li>In the mode <span class="ui">Monitor</span> (or <span class="ui">Measure</span> → <span class="ui">Spectrum</span>) find the TETRA carrier in the waterfall (a 25 kHz wide, uniform band) and drag the TETRA VFO onto it, click on it or enter the frequency. The <span class="ui">AFC</span> pulls the VFO along as soon as the decoder locks.</li>
+  <li>Choose the operating mode (<span class="ui">Settings</span> → <span class="ui">Network: ETSI / amateur radio</span>): <span class="ui">Amateur radio</span> (default; duplex tables for 70 cm, call signs, talk groups) or <span class="ui">ETSI</span>.</li>
+  <li>Check: the status bar shows <span class="ui">Sync</span> <b>Locked</b>, MCC-MNC and colour code under <span class="ui">Cell</span>, MER above ~15 dB; the message line reports no overload.</li>
 </ol>
 <div class="cols">
 <div>
 <h3>Constellation</h3>
-<p>π/4-DQPSK has eight target points (<span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit.</p>
-<p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display. The measurements still show it.</p>
+<p>Mode <span class="ui">Measure</span>, view <span class="ui">Constellation</span>. π/4-DQPSK has eight target points (softkey <span class="ui">8 points (pi/4)</span>) – switched off, they are folded onto four. The rings show the ETSI limits (EVM 10 % rms, 30 % peak). The points turn green when the measured EVM is within the limit, red otherwise.</p>
+<p><span class="ui">Remove I/Q offset</span> removes a carrier leakage of the transmitter (or the DC component of the receiver) from the display; EVM and colour of the points then apply without it. The residual carrier is still shown with the measured values.</p>
 <h3>Listen to – which call is played</h3>
-<p>Always <b>one</b> call is played: the ETSI speech codec has a single state, two calls decoded in turn would mix. Only the chosen timeslot goes through the codec. <span class="ui">Listen to</span> next to Audio:</p>
+<p>Always <b>one</b> call is played: the ETSI speech codec has a single state, two calls decoded in turn would mix. Only the chosen timeslot goes through the codec. <span class="ui">Listen to</span> is in the mode Monitor in the content column under <b>Audio</b>:</p>
 <ul>
   <li><span class="ui">Auto</span> – the first timeslot with speech in the TDMA frame.</li>
   <li><span class="ui">One timeslot</span> – only TS1 … TS4.</li>
-  <li><span class="ui">Priority list</span> – scanner: the first group or station of the list that is talking now; a higher one interrupts a lower one. <span class="ui">List...</span> edits the list (order, delete, enter a GSSI/ISSI); <span class="ui">Other calls when no listed one is active</span> plays the other calls otherwise. Easier: right-click a GSSI or ISSI in <span class="ui">Stations &amp; Traffic</span> → <span class="ui">Listen to this one</span> (top of the list) or <span class="ui">Add to the end</span>; list entries carry a “*” there.</li>
+  <li><span class="ui">Priority list</span> – scanner: the first group or station of the list that is talking now; a higher one interrupts a lower one. <span class="ui">List...</span> edits the list (order, delete, enter a GSSI/ISSI); <span class="ui">Other calls when no listed one is active</span> plays the other calls otherwise. New entries are a group or a station (<span class="ui">Group</span> | <span class="ui">Station</span>). Easier: right-click a GSSI or ISSI in the stations strip → <span class="ui">Listen to this one (top of the priority list)</span> or <span class="ui">Add to the end of the priority list</span>; list entries carry a “*” there.</li>
 </ul>
-<p>Which group/station uses which timeslot comes from the channel allocation of the network at call setup (readable in clear signalling only). <span class="ui">Mute encrypted</span> (on by default) mutes encrypted calls – they would only be noise. A traffic timeslot whose encryption is not known (its call setup was not received, e.g. the call started before decoding) stays muted until a call setup identifies it; <span class="ui">Playing</span> then shows <span class="ui">encryption unknown - muted</span>, for an encrypted call <span class="ui">encrypted call - muted</span>. If no signalling of a call is received for more than 320 s (longest transmission T311 = 300 s per EN 300 392-2 plus a margin), its timeslot counts as unknown again – this way a missed release cannot keep a timeslot audible. <span class="ui">Playing</span> shows the transmission (one PTT) heard now as a fixed block:</p>
+<p>Which group/station uses which timeslot comes from the channel allocation of the network at call setup (readable in clear signalling only).</p>
+<p><b>Muting encrypted calls:</b> softkey <span class="ui">Mute encrypted</span> (default ON; classic layout: checkbox <span class="ui">Mute encrypted</span>). The program cannot decode encrypted speech, it would only be noise. The state is kept <b>per timeslot</b> for the current call and linked by the call identifier: the call setup (D-SETUP, D-CONNECT) says whether the call is encrypted, D-TX-GRANTED of the same call confirms it, D-RELEASE/D-DISCONNECT ends it. A long call with many transmissions thus keeps its state.</p>
+<ul>
+  <li><b>Unknown stays muted</b> (fail-safe): if the call setup was not received – the call started before decoding began, or the block had a CRC error – the timeslot stays muted until a call setup assigns it: the late-entry setup the network repeats for ongoing group calls (if the cell sends late entry), or the next call. <span class="ui">Playing</span> then shows <span class="ui">encryption unknown - muted</span>, for an encrypted call <span class="ui">encrypted call - muted</span>.</li>
+  <li><b><span class="ui">Play anyway</span></b> appears only while a call is muted because its encryption is unknown. It releases exactly these timeslots until there has been no traffic on them for 10 s or a call setup clears the state; after that the program decides by itself again.</li>
+  <li><b>Timeout:</b> if no signalling of a call is received for more than 320 s (longest transmission T311 = 300 s per EN 300 392-2 plus a margin), its timeslot counts as unknown again – this way a missed release cannot keep a timeslot audible.</li>
+</ul>
+<p><span class="ui">Playing</span> shows the transmission (one PTT) heard now as a fixed block:</p>
 <ul>
   <li><b>What:</b> timeslot and group with name. <b>Who:</b> talker (ISSI and call sign if known).</li>
   <li><b>Duration:</b> time since the first speech burst of this talker. The call time over all transmissions of the group is in the tooltip.</li>
   <li><b>Frames OK:</b> share of speech bursts without CRC error in the transmission (bad frame indicator of the channel decoding, EN 300 395-2); green from 98 %, yellow from 90 %. Blocks stolen for signalling are not counted as errors. A low value explains poor sounding speech by the reception.</li>
   <li><b>Hang time 2 s:</b> the block stays until no speech burst came for 2 s – short gaps for signalling do not interrupt it. Afterwards it shows the last transmission in grey (“last:”, “… s ago”).</li>
-  <li><b>Arrangement:</b> one line when wide, two in the normal menu (what with duration on top, who with frames OK below), three when narrow. Numbers are right-aligned, the height stays the same, also when nothing is played.</li>
+  <li><b>Arrangement:</b> one line when wide, two in the content column or the normal menu (what with duration on top, who with frames OK below), three when narrow. Numbers are right-aligned, the height stays the same, also when nothing is played.</li>
   <li><b>Right-click:</b> add the group or the talker to the priority list. Encrypted, muted calls appear in orange as “encrypted call – muted”.</li>
 </ul>
 <h3>Encryption (indication only)</h3>
-<p>The program decrypts nothing; the encryption code of osmo-tetra is removed. Under <span class="ui">Network &amp; cell</span>, <span class="ui">Air interface encryption</span> shows whether the cell offers air interface encryption and whether a CCK is in use (security class 3). Encrypted messages appear in <span class="ui">Traffic</span> as <span class="ui">encrypted – not decoded</span>; stations with encrypted traffic carry an “E” in the TS column. If the cell sends the extended services in SYSINFO, <span class="ui">Security</span> shows the security information per EN 300 392-7 V3.5.1 (A.8.77): authentication required or not, support of class 1 MS, class 2 (with SCK number) or class 3. The algorithm (TEA1 … TEA4, “KSG number”, A.8.41) is sent on the downlink only in a D-LOCATION UPDATE COMMAND; if one passes, <span class="ui">Algorithm</span> shows it, otherwise “not seen”. Indication only.</p>
+<p>The program decrypts nothing; the encryption code of osmo-tetra is removed. In the cell information (<a href="#s7">chapter 7</a>; softkey <span class="ui">Cell details</span>), <span class="ui">Air interface encryption</span> shows whether the cell offers air interface encryption and whether a CCK is in use (security class 3). Encrypted messages appear in <span class="ui">Traffic</span> as <span class="ui">encrypted – not decoded</span>; stations with encrypted traffic carry an “E” in the TS column. If the cell sends the extended services in SYSINFO, <span class="ui">Security</span> shows the security information per EN 300 392-7 V3.5.1 (A.8.77): authentication required or not, support of class 1 MS, class 2 (with SCK number) or class 3. The algorithm (TEA1 … TEA4, “KSG number”, A.8.41) is sent on the downlink only in a D-LOCATION UPDATE COMMAND; if one passes, <span class="ui">Algorithm</span> shows it, otherwise “not seen”. Indication only.</p>
 <h3>Decoder mode</h3>
-<p>The program decodes by itself (normal case). At the very bottom of the menu, the closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> sends the symbols over UDP to an external program. Operation: select <span class="ui">NETSYMS over UDP</span>, enter the target address and port (default <code>localhost</code>, port <code>8355</code>), press <span class="ui">Net start</span>. <span class="ui">Net status</span> shows “Sending” or “Idle”; the indicators <span class="ui">Sync</span> and <span class="ui">Training sequences</span> show whether the demodulator delivers symbols. <span class="ui">Net stop</span> ends sending, <span class="ui">Built-in decoder</span> switches back. While it is active, the built-in decoder and all measurements that need it are off; a note at the top of the menu says so. From v0.20.1 on, the program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
-<p>The TETRA Analyzer header no longer has a checkbox to switch it off (a stray click switched the whole decoder off). If the module is switched off anyway, the checkbox appears again.</p>
+<p>The program decodes by itself (normal case). Under <span class="ui">Settings</span> → <span class="ui">Decoder / NETSYMS</span> (classic layout: closed section <span class="ui">NETSYMS symbol streaming (advanced)</span> at the very bottom) the symbols can be sent over UDP to an external program instead. Operation: select <span class="ui">NETSYMS over UDP</span> (segmented buttons <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>), enter the target address and port (default <code>localhost</code>, port <code>8355</code>), press <span class="ui">Net start</span>. <span class="ui">Net status</span> shows “Sending” or “Idle”; the indicators <span class="ui">Sync</span> and <span class="ui">Training sequences</span> show whether the demodulator delivers symbols. <span class="ui">Net stop</span> ends sending, <span class="ui">Built-in decoder</span> switches back. While NETSYMS is active, the built-in decoder and all measurements that need it are off; the status bar then shows <b>NETSYMS</b> at <span class="ui">Sync</span>. The program starts with the built-in decoder if NETSYMS was selected but not sending.</p>
 </div>
 <div>
-<figure><img src="shots/win_const.png"><figcaption>Fig. 4 – Constellation and measurements in an own window.</figcaption></figure>
+<figure><img src="shots/inst_const_main.png"><figcaption>Fig. 8 – View <span class="ui">Constellation</span>: eight target points with the ETSI rings, points green within the limit.</figcaption></figure>
 </div>
 </div>
 
 <!-- ============================================================ -->
-<h1 id="s6" class="pb"><span class="num">6</span>Measurements</h1>
-<p>The values are updated every second – also with the menu closed – and feed trends, CSV log and alarms.</p>
+<h1 id="s6" class="pb"><span class="num">6</span>Measured values</h1>
+<p>The values are updated every second – also when they are not shown – and feed trends, CSV log and alarms. In the instrument view they are in the mode <span class="ui">Measure</span> in the content column, each with limit and assessment: dot <b>green</b> = within, <b>yellow</b> = note, <b>red</b> = outside, <b>empty circle</b> = no assessment (no limit or no reference).</p>
+<table>
+<tr><th style="width:27%">Line</th><th style="width:22%">Limit</th><th>Assessment</th></tr>
+<tr><td colspan="3" style="color:#5a6774">Modulation</td></tr>
+<tr><td>EVM rms / peak</td><td>10 / 30 %</td><td>green when rms below 10 % and peak below 30 % (EN 300 394-1 7.3.1.2). With <span class="ui">Remove I/Q offset</span> calculated without the residual carrier.</td></tr>
+<tr><td>Error phase / ampl.</td><td>guide</td><td>none; split of the error into phase and amplitude.</td></tr>
+<tr><td>Residual carrier</td><td>−26 dB (5 %)</td><td>green below −26 dB.</td></tr>
+<tr><td>I/Q imbalance (IRR)</td><td>guide</td><td>green from 30 dB, yellow below.</td></tr>
+<tr><td>Mod. accuracy 10.1.3</td><td>10 / 30 %</td><td>measurement path per test standard (see table below): rms mean / peak and number of bursts; green when the worst rms is below 10 %, the peak below 30 % and the residual carrier below 5 %.</td></tr>
+<tr><td colspan="3" style="color:#5a6774">Frequency and clock</td></tr>
+<tr><td>Carrier error</td><td>±0.2 ppm (above 520 MHz ±0.1 ppm)</td><td>in Hz and ppm. Assessed only with the frequency reference “external 10 MHz” or “calibrated”; with “internal” it reads “indicative” without assessment (EN 300 394-1 7.3.2.2).</td></tr>
+<tr><td>Symbol clock</td><td>–</td><td>none; offset in ppm.</td></tr>
+<tr><td>Reference</td><td>–</td><td>“internal” yellow, “external 10 MHz” or “calibrated” green.</td></tr>
+<tr><td colspan="3" style="color:#5a6774">Reception</td></tr>
+<tr><td>Level</td><td>ADC</td><td>red with an ADC peak above −3 dBFS, yellow above −15 or below −45 dBFS, green otherwise.</td></tr>
+<tr><td>Raw BER</td><td>guide</td><td>green below 1·10⁻³, yellow below 1·10⁻², red otherwise.</td></tr>
+<tr><td>CRC errors</td><td>guide</td><td>last second; green below 1 %, yellow below 5 %, red otherwise.</td></tr>
+<tr><td>Re-locks with slip</td><td>0</td><td>re-synchronisations with a timing slip (lost samples); green only at 0.</td></tr>
+</table>
+<p>Raw BER, CRC errors and re-locks exist only with the built-in decoder. The topmost red value also appears in the message line. Below follow <b>Trends (10 min)</b> – level, MER and frequency error of the last 10 minutes with the current value and minimum/maximum (obvious start-up values are left out) – and <b>Last analysis results</b>: <span class="ui">ACP (±25 kHz)</span> (worse side, green down to −60 dBc, red otherwise; “*” = receiver limited, see <a href="#s3-2">3.2</a>), <span class="ui">Occupied BW</span>, <span class="ui">Burst length / ramps</span> and <span class="ui">Strongest echo</span>. They come from the views TX spectrum, Burst and Multipath and show “not measured yet” until the analysis has run once.</p>
+<p><b>Softkeys:</b> <span class="ui">Reset statistics</span> resets sums and statistics. <span class="ui">Start CSV log</span> writes one line per second into the log folder (see <a href="#s19-2">appendix</a>), plus files for events, stations, traffic and additional carriers; <span class="ui">Stop CSV log</span> closes them. <span class="ui">Create report</span>: see <a href="#s15">chapter 15</a>.</p>
+<h2>Section Measurements (classic layout)</h2>
+<p>The classic layout shows more detailed values in the section <span class="ui">Measurements</span>. Some of them – level calibration, frequency reference, <span class="ui">Calibrate SDR</span>, event list – can only be set there in this version (<a href="#s3-3">3.3</a>).</p>
 <table>
 <tr><th style="width:22%">Display</th><th>Meaning</th><th style="width:24%">Good values</th></tr>
 <tr><td>Level, RF status</td><td>power in the TETRA channel and peak value; RF status warns about overload or a too weak signal.</td><td>−35 … −20 dBFS, peak &lt; −6 dBFS</td></tr>
@@ -360,16 +470,16 @@ sdrpp</pre></li>
 <tr><td>CRC table</td><td>error rate per channel (BSCH, SB2, half slot, SCH/F) in the last second and in total.</td><td>&lt; 1 %</td></tr>
 <tr><td>Events</td><td>event list: sync losses, AFC and gain steps, alarms. <span class="ui">Clear</span> empties the list (not the file <code>…_events.csv</code>).</td><td></td></tr>
 </table>
-<p><span class="ui">Reset totals</span> resets sums and statistics. <span class="ui">Start CSV log</span> writes one line per second into the log folder (see <a href="#s19-2">appendix</a>), plus files for events, stations, traffic and additional carriers.</p>
+<p>Here the buttons are called <span class="ui">Reset totals</span> and <span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>.</p>
 
 <!-- ============================================================ -->
 <h1 id="s7"><span class="num">7</span>Network, cell and duplex tables</h1>
 <div class="cols">
 <div>
-<p>The <span class="ui">Network &amp; cell</span> section shows what the base station broadcasts about itself (broadcast per EN 300 392-2: SYNC, SYSINFO, D-NWRK-BROADCAST). It appears only with the built-in decoder. Everything is display only; the only thing set here is the duplex table.</p>
+<p>The cell information shows what the base station broadcasts about itself (broadcast per EN 300 392-2: SYNC, SYSINFO, D-NWRK-BROADCAST). It exists only with the built-in decoder. In the instrument view it is in the window <span class="ui">Cell details</span> (softkey <span class="ui">Cell details</span> in the mode Monitor) and in ETSI mode also in the strip below the waterfall; the compact cell in the content column shows the essentials. In the classic layout it is the section <span class="ui">Network &amp; cell</span>. Everything is display only; the duplex tables are under <span class="ui">Settings</span> → <span class="ui">Duplex tables</span>.</p>
 <p><b>Reading from top to bottom:</b> first the header lines (synchronisation, frame counters, frequencies, identity), then the services as coloured words, then encryption and security, below that two expandable tables with all cell parameters and the neighbour cells. As long as the decoder is not locked the values are grey; likewise after a CRC error of the last message.</p>
 </div>
-<div><figure><img src="shots/win_network.png"><figcaption>Fig. 5 – Network and cell (identities blurred).</figcaption></figure></div>
+<div><figure><img src="shots/inst_network.png"><figcaption>Fig. 9 – Network and cell in the strip below the waterfall (ETSI mode, synthetic test cell).</figcaption></figure></div>
 </div>
 
 <h3>Header lines</h3>
@@ -429,7 +539,7 @@ sdrpp</pre></li>
 <p>The uplink frequency follows from the downlink and the duplex spacing. The spacing is not transmitted directly but as an index (table 0…7) into a table per frequency band. In amateur radio mode these values apply for 70 cm, otherwise the ETSI values (ETSI TS 100 392-15):</p>
 <table class="plain"><tr><th>Index</th><th>0</th><th>1</th><th>3</th><th>4</th><th>5</th><th>7</th></tr>
 <tr><td>Spacing (kHz)</td><td>9000</td><td>7600</td><td>8000</td><td>9400</td><td>4800</td><td>7600</td></tr></table>
-<p><b>Editing</b> in the <span class="ui">Duplex spacing table</span> section:</p>
+<p><b>Editing</b> under <span class="ui">Settings</span> → <span class="ui">Duplex tables</span> (classic layout: section <span class="ui">Duplex spacing table</span>):</p>
 <ol class="steps">
   <li>Select table 0…7 at the top. The line of the band and table the received cell is using is green.</li>
   <li>In <span class="ui">ETSI</span> mode the values are read-only. In <span class="ui">Amateur radio</span> mode enter the spacing in kHz per band (−1 = undefined). Values differing from the default are shown in orange.</li>
@@ -438,15 +548,15 @@ sdrpp</pre></li>
 
 <!-- ============================================================ -->
 <h1 id="s8"><span class="num">8</span>Stations and traffic</h1>
-<p>In amateur radio mode, <span class="ui">Stations &amp; Traffic</span> collects all subscribers and groups that appear in the unencrypted signalling of the cell. The section has three tabs; the number in the tab is the number of entries. The tables can be sorted, rearranged, shown and hidden as described in <a href="#s3">chapter 3</a>. As a wide strip below the waterfall (preset <span class="ui">Measuring station</span>) they fill the whole height.</p>
+<p>In amateur radio mode the program collects all subscribers and groups that appear in the unencrypted signalling of the cell. In the instrument view they are in the mode <span class="ui">Monitor</span> in the strip below the waterfall (height set with the divider above it), in the classic layout in the section <span class="ui">Stations &amp; Traffic</span>. There are three tabs; the number in the tab is the number of entries. The tables can be sorted, rearranged, shown and hidden as described in <a href="#s3-4">chapter 3.4</a>.</p>
 
 <h3>Name lists</h3>
-<p>The state of the name lists is shown at the top. <span class="ui">Download name lists</span> loads the users (7-digit ISSI) and repeaters (6-digit) from radioid.net and the names of the Brandmeister talk groups into the configuration folder. <span class="ui">Reload files</span> reads them again, e.g. after placing them there by hand without internet (file names in the tooltip and in <a href="#s19-1">appendix 19.1</a>).</p>
+<p>The state of the name lists is shown under <span class="ui">Settings</span> → <span class="ui">Name lists</span> (classic layout: at the top of the section). Without name lists the strip shows <span class="ui">No name lists - Settings -&gt; Name lists</span>. <span class="ui">Download name lists</span> loads the users (7-digit ISSI) and repeaters (6-digit) from radioid.net and the names of the Brandmeister talk groups into the configuration folder. <span class="ui">Reload files</span> reads them again, e.g. after placing them there by hand without internet (file names in the tooltip and in <a href="#s19-1">appendix 19.1</a>).</p>
 
 <h3>Colours and operation in all tables</h3>
 <ul>
   <li>The identity (ISSI or GSSI) is <b>green</b> while the station talks or someone talks in the group, <b>yellow</b> for activity within the last 2 minutes, otherwise <b>grey</b>.</li>
-  <li><b>Right-click on an identity</b> opens the menu for the priority list: <span class="ui">Listen to this one</span> (to the top), <span class="ui">Add to the end</span> or <span class="ui">Remove</span>. Entries of the list carry a “*” after the identity (see <a href="#s5">Listen to</a>).</li>
+  <li><b>Right-click on an identity</b> opens the menu for the priority list: <span class="ui">Listen to this one (top of the priority list)</span>, <span class="ui">Add to the end of the priority list</span> or <span class="ui">Remove from the priority list</span>. Entries of the list carry a “*” after the identity (see <a href="#s5">Listen to</a>).</li>
   <li>Times in <span class="ui">Seen</span>: seconds (s), minutes (m) or hours (h) since the last activity.</li>
 </ul>
 
@@ -488,14 +598,14 @@ sdrpp</pre></li>
 <tr><td>TS</td><td>Timeslot.</td></tr>
 <tr><td>Content</td><td>Content in plain text: SDS text, status number, position (coordinates in the tooltip).</td></tr>
 </table>
-<p>Newest entries are at the top; the last 1000 are kept. <span class="ui">Hide call control</span> hides call control so that only SDS, status and encrypted messages remain. <span class="ui">Clear</span> empties the list. While a CSV log is running, stations and traffic are also written to their own files.</p>
-<figure><img src="shots/win_stations.png"><figcaption>Fig. 6 – Stations and traffic (identities blurred).</figcaption></figure>
+<p>Newest entries are at the top; the last 1000 are kept. Softkey <span class="ui">Hide call control</span> (classic layout: checkbox <span class="ui">Hide call control</span> in the tab) hides call control when ON, so that only SDS, status and encrypted messages remain. <span class="ui">Clear</span> empties the list. While a CSV log is running, stations and traffic are also written to their own files.</p>
+<figure><img src="shots/inst_stations.png" style="max-width:85%"><figcaption>Fig. 10 – Tab <span class="ui">Stations</span> in the strip below the waterfall (synthetic test cell, without name lists).</figcaption></figure>
 
 <!-- ============================================================ -->
 <h1 id="s9"><span class="num">9</span>TX analysis (spectrum)</h1>
 <div class="cols">
 <div>
-<p><span class="ui">Run analysis (250 kHz tap)</span> uses the shared 250 kHz wide analysis tap around the channel and measures:</p>
+<p>Mode <span class="ui">Measure</span>, view <span class="ui">TX spectrum (ACP)</span>. The analysis starts with the view (softkey <span class="ui">Analysis</span>: ON) and stops when the view is left; in the classic layout the checkbox <span class="ui">Run analysis (250 kHz tap)</span> switches it. It uses the shared 250 kHz wide analysis tap around the channel and measures:</p>
 <ul>
   <li><b>Channel power</b> through the TETRA filter.</li>
   <li><b>ACP</b> at ±25, ±50, ±75 kHz in dBc, with (adjustable) limits.</li>
@@ -511,10 +621,11 @@ sdrpp</pre></li>
   <li><span class="ui">Store floor</span> stores the current averaged spectrum as the measurement floor of the receiver: first switch the transmitter off or terminate the SDR input with 50 Ω, same gain and sample rate. Values close to this floor are marked grey. Without a stored floor the noise far from the carrier serves as an estimate. <span class="ui">Clear floor</span> discards it.</li>
   <li><span class="ui">ACP limits</span> (expand): limits at 25, 50 and 75 kHz in dBc, with presets from EN 300 394-1 7.1.3.2: <span class="ui">BS / MS class 1-3</span> (table 7.2: −60/−70/−70 dBc), <span class="ui">MS class 4/4L</span> (table 7.1: −55/−70/−70 dBc), <span class="ui">&gt; 700 MHz</span> (table 7.3: −55/−65/−65 dBc). The average power over the useful part is measured through the TETRA filter; the own floor of the test set-up must be below −70/−80/−80 dBc (B.1.2.3).</li>
 </ul>
+<p>The softkey <span class="ui">Channel raster</span> (default ON; classic layout: <span class="ui">25 kHz channel raster in the spectrum</span>) draws dashed channel boundaries at ±12.5 and ±37.5 kHz around the TETRA channel in the spectrum above the waterfall. The spectrum above the waterfall can be averaged under <span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Display</span> → <span class="ui">Spectrum averaging</span>: time constant in seconds (after this time a step has reached 63 %, after five times this time 99 %); <span class="ui">Power</span> averages the power and shows correct levels, <span class="ui">Log (dB)</span> averages the dB values (noise then appears about 2.5 dB too low). <span class="ui">Max hold</span> shows a second trace with the maximum that decays at the set rate in dB/s (0 = hold until switched off). For measurements this view with <span class="ui">Avg</span> is the right tool.</p>
 <p>The ACP table shows for each spacing (±25/50/75 kHz) the lower and upper value, the limit and the measurement floor. A “*” marks values less than 3 dB above the measurement floor – the true value may be lower. If the channel is closer than 15 kHz to the centre frequency of the SDR, a red line warns: the receiver's DC offset then falsifies I/Q offset and carrier leakage; tune the SDR at least ~100 kHz away.</p>
-<div class="box warn"><b class="t">Limits of the measurement</b>The adjacent channel measurement is limited by the dynamic range and phase noise of the SDR – typically −60 to −70 dBc. For values close to the limit, use a strong, clean signal and a low gain.</div>
+<div class="box warn"><b class="t">Limits of the measurement</b>The adjacent channel measurement is limited by the dynamic range and phase noise of the SDR – typically −60 to −70 dBc. For values close to the limit, use a strong, clean signal and a low gain, bring the level close to full scale with an attenuator and store the measurement floor. Values less than 3 dB above the floor are marked by the program (see “receiver limited”, <a href="#s3-2">3.2</a>).</div>
 </div>
-<div><figure><img src="shots/win_txa.png"><figcaption>Fig. 7 – TX analysis: measured spectrum, ideal TETRA spectrum (thin) and ACP windows.</figcaption></figure></div>
+<div><figure><img src="shots/inst_txa_main.png"><figcaption>Fig. 11 – View <span class="ui">TX spectrum (ACP)</span>: measured spectrum, ideal TETRA spectrum (thin) and ACP windows (synthetic test cell, channel on the SDR centre).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -522,12 +633,12 @@ sdrpp</pre></li>
 <h2>Over time</h2>
 <div class="cols">
 <div>
-<p>The <span class="ui">Trends &amp; timeslots</span> section keeps the last 24 hours with one value per second: level, MER, CRC errors, carrier offset, traffic per timeslot and bursts/s. For long time spans every pixel combines several seconds; line = mean, band = minimum to maximum, red marks = sync losses. The mouse shows the values at any point in time. The <span class="ui">Over time</span> tab contains these histories; <span class="ui">Time span</span> selects the range: 10 min, 1 h, 6 h, 12 h, 24 h or <i>All</i> (everything since the start or the whole loaded log). The same time span applies to the <a href="#s15">measurement report</a>.</p>
-<p><span class="ui">Open a CSV log</span> opens a saved log in the same view – so measurements over several days can be evaluated, too. <span class="ui">Back to live</span> returns to the running measurement.</p>
+<p>Mode <span class="ui">Measure</span>, view <span class="ui">Trends</span> (classic layout: section <span class="ui">Trends &amp; timeslots</span>). The program always records in the background and keeps the last 24 hours in memory with one value per second: level, MER, CRC errors, carrier offset, traffic per timeslot and bursts/s. For long time spans every pixel combines several seconds; line = mean, band = minimum to maximum, red marks = sync losses. The mouse shows the values at any point in time. The <span class="ui">Over time</span> tab contains these histories. The segmented buttons above choose the time span: <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span> (everything since the start or the whole loaded log). The same time span applies to the <a href="#s15">measurement report</a>. The chips after <span class="ui">Show:</span> show and hide the curves (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>).</p>
+<p>The softkey <span class="ui">Open log...</span> (classic layout: field <span class="ui">Open a CSV log</span>) opens a saved CSV log in the same view – so measurements over several days can be evaluated, too. <span class="ui">Back to live</span> returns to the running measurement. For more than 24 hours, let a CSV log run along and open the file later.</p>
 <h3>Timeslot usage</h3>
 <p>Every downlink burst announces what its timeslot is used for. The table counts traffic, assigned control, common control and free per timeslot, plus the uplink traffic. Frame 18 (always control) is left out.</p>
 </div>
-<div><figure><img src="shots/win_trends_log.png"><figcaption>Fig. 8 – Trends of a loaded 6-hour log (synthetic example data): level drop during an antenna test, traffic in the evening.</figcaption></figure></div>
+<div><figure><img src="shots/inst_trends_log.png"><figcaption>Fig. 12 – Trends of a loaded 6-hour log (synthetic example data): level drop during an antenna test, traffic in the evening.</figcaption></figure></div>
 </div>
 
 <h2>Frequency stability</h2>
@@ -535,17 +646,17 @@ sdrpp</pre></li>
 <div class="cols"><div>
 <div class="box info"><b class="t">Meaningful only with a reference</b>The value contains base station and SDR. Without a GPS-disciplined reference at the SDR you mainly measure your own crystal.</div>
 <p><b>Reading the chart:</b> the frequency over time at the top, the Allan deviation on a log-log scale below. The longest section without gaps is evaluated; seconds without synchronisation interrupt it.</p>
-</div><div><figure><img src="shots/win_stability.png" style="max-height:105mm"><figcaption>Fig. 8a – Frequency over time and Allan deviation.</figcaption></figure></div></div>
+</div><div><figure><img src="shots/inst_stability.png" style="max-height:105mm"><figcaption>Fig. 13 – Frequency over time and Allan deviation.</figcaption></figure></div></div>
 
 <h2>Level vs. quality – reception limit</h2>
 <p>The <span class="ui">Level vs. quality</span> tab sorts all seconds by level (1 dB steps) and shows CRC errors and MER for each step. The <b>reception limit</b> is the lowest level above which no step exceeds the <span class="ui">CRC limit</span> (default 1 %). It is a practical threshold for coverage maps. With a calibrated level (dBm) it is comparable between measurements.</p>
-<figure><img src="shots/win_quality.png" style="max-width:80%"><figcaption>Fig. 8b – CRC errors and MER per level step with the determined reception limit (synthetic example data).</figcaption></figure>
+<figure><img src="shots/inst_quality.png" style="max-width:80%"><figcaption>Fig. 14 – CRC errors and MER per level step with the determined reception limit (synthetic example data).</figcaption></figure>
 
 <!-- ============================================================ -->
 <h1 id="s11"><span class="num">11</span>Additional carriers</h1>
 <div class="cols">
 <div>
-<p><span class="ui">Carriers (multi-carrier)</span> evaluates up to eight additional carriers within the SDR bandwidth at the same time: level, distance to the main carrier, MER, carrier offset and synchronisation – only the main carrier is decoded.</p>
+<p>Mode <span class="ui">Measure</span>, view <span class="ui">Carriers</span> (classic layout: section <span class="ui">Carriers (multi-carrier)</span>). Up to eight additional carriers are evaluated here within the SDR bandwidth at the same time: level, distance to the main carrier, MER, carrier offset and synchronisation – only the main carrier is decoded.</p>
 <ul>
   <li><b>Adding:</b> enter the frequency in MHz (arrows: 12.5 kHz steps) → <span class="ui">Add carrier</span>. <span class="ui">Add neighbour cells (n)</span> appears once the cell has reported neighbour cells and takes all not yet listed ones at once. With eight carriers both buttons are disabled.</li>
   <li><b>Table:</b> the first line <span class="ui">Main (TETRA VFO)</span> is the main carrier for comparison. Columns: <span class="ui">Carrier</span> (name, e.g. cell identifier; colour = line in the history), <span class="ui">MHz</span>, level in <span class="ui">dBFS</span> or <span class="ui">dBm</span> (with level calibration), <span class="ui">vs. main</span> (level difference to the main carrier), <span class="ui">MER</span>, <span class="ui">Offset</span> (carrier offset in Hz) and <span class="ui">Sync</span> (yes/no). MER and offset only with synchronisation. “outside SDR span”: the carrier is outside the SDR bandwidth; “SDR stopped”: no data.</li>
@@ -553,9 +664,9 @@ sdrpp</pre></li>
   <li><b>History:</b> below, the level history of all carriers; <span class="ui">Level history</span> selects 10 min, 1 h, 6 h or 24 h.</li>
   <li>While a CSV log is running, <code>…_carriers.csv</code> is written as well. The carriers are kept over a restart.</li>
 </ul>
-<p>Each carrier costs about as much CPU time as another VFO.</p>
+<p>The carriers entered are evaluated even when the view is not shown. Each carrier costs about as much CPU time as another VFO.</p>
 </div>
-<div><figure><img src="shots/win_carriers.png"><figcaption>Fig. 9 – Comparison of several carriers.</figcaption></figure></div>
+<div><figure><img src="shots/inst_carriers_main.png"><figcaption>Fig. 15 – View <span class="ui">Carriers</span>: main carrier and one further entry (synthetic test recording; the second carrier is in the noise).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -573,9 +684,9 @@ sdrpp</pre></li>
 <p>The chart shows the shape averaged over the last bursts with the <span class="ui">Time mask</span> (red).</p>
 <h3>Operation</h3>
 <ol class="steps">
-  <li>Switch on <span class="ui">Run burst analysis</span> and choose the frequency below: <span class="ui">Uplink (SYSINFO)</span>, <span class="ui">Manual frequency</span> (enter MHz) or <span class="ui">TETRA VFO</span>. The <span class="ui">Frequency</span> line shows what is measured.</li>
+  <li>Choose the mode <span class="ui">Measure</span>, view <span class="ui">Burst (uplink)</span>: the analysis starts (softkey <span class="ui">Analysis</span>: ON) and stops when the view is left; in the classic layout the checkbox <span class="ui">Run burst analysis</span> switches it. Choose the frequency with the segmented buttons: <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> (enter MHz) | <span class="ui">TETRA VFO</span>. The <span class="ui">Frequency</span> line shows what is measured.</li>
   <li><span class="ui">Averages</span> (1…500, default 200 per EN 300 394-1 8.4) sets how many bursts are averaged; <span class="ui">Reset</span> discards the bursts so far.</li>
-  <li><span class="ui">Also:</span> adds <span class="ui">Overload check</span> (default off) and <span class="ui">Ramp spectrum</span> (both cost CPU time).</li>
+  <li>The softkeys <span class="ui">Overload check</span> (default OFF) and <span class="ui">Ramp spectrum</span> (default ON) switch the two additional measurements on (both cost CPU time); in the classic layout the chips after <span class="ui">Also:</span>.</li>
   <li>Reading: <span class="ui">Floor</span> and <span class="ui">peak</span> (noise floor and peak in the channel), <span class="ui">Bursts</span> (counted full and half bursts, bursts/s), then <span class="ui">Burst power</span> and the shape values. Green = within the mask, red = outside. “No bursts detected”: nobody transmits; “continuous carrier”: a steady carrier instead of bursts.</li>
   <li>With <span class="ui">Overload check</span> on, the program opens a second, sample-aligned tap on the TETRA VFO (downlink of the same cell; it must be inside the SDR span and more than 50 kHz away from the burst frequency) and tests whether the downlink gets weaker during the bursts (more than 1 dB = receiver overloaded, results invalid). The <span class="ui">Linearity check</span> (below) is always available and needs no downlink.</li>
 </ol>
@@ -585,7 +696,7 @@ sdrpp</pre></li>
 <p>Without the downlink, overload is checked with the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares (<span class="ui">Check again</span> restarts the check): if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
 <p><b>Transmit power of the radio:</b> the absolute limits of the standard (−36 dBm for the power outside the burst and for switching transients) refer to the antenna connector of the radio. Over the air the received level says nothing about it (path loss). Under <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> enter the transmit power (e.g. 12.6 dBm for 18 mW, 32.6 dBm for 1.8 W); the dBc limit follows as Lmin = max(−70 dBc; −36 dBm − P). Without an entry −70 dBc applies.</p>
 </div>
-<div><figure><img src="shots/win_bursts.png"><figcaption>Fig. 10 – Burst analysis with profile and ramp spectrum (synthetic test signal).</figcaption></figure></div>
+<div><figure><img src="shots/inst_burst.png"><figcaption>Fig. 16 – View <span class="ui">Burst (uplink)</span> with profile, time mask and ramp spectrum (synthetic test signal).</figcaption></figure></div>
 </div>
 
 <h3>Ramp spectrum (switching transients)</h3>
@@ -599,19 +710,19 @@ sdrpp</pre></li>
 <h1 id="s13"><span class="num">13</span>Multipath</h1>
 <div class="cols">
 <div>
-<p>Every downlink burst contains a known training sequence. From it, <span class="ui">Multipath (downlink)</span> estimates the channel impulse response and averages it into a power delay profile. The comparison with the profile of an ideal signal (green) reveals echoes:</p>
+<p>Mode <span class="ui">Measure</span>, view <span class="ui">Multipath</span> (classic layout: section <span class="ui">Multipath (downlink)</span>, checkbox <span class="ui">Run multipath analysis</span>). The analysis starts with the view (softkey <span class="ui">Analysis</span>) and stops when it is left. Every downlink burst contains a known training sequence. From it, the analysis estimates the channel impulse response and averages it into a power delay profile. The comparison with the profile of an ideal signal (green) reveals echoes:</p>
 <ul>
   <li><b>Strongest echo:</b> delay (µs), detour (km) and level of the strongest echo above −15 dB.</li>
   <li><b>Extra delay spread:</b> additional delay spread compared with the ideal signal.</li>
 </ul>
 <p>Echoes from about 55 µs (17 km detour) to 222 µs are detected; shorter ones only widen the main path. TETRA receivers cope with echoes up to about ¼ symbol (14 µs) without loss. <span class="ui">Averaging</span>: 2 s for drives, 60 s or unlimited for fixed locations.</p>
 </div>
-<div><figure><img src="shots/win_multipath.png"><figcaption>Fig. 11 – Multipath profile with an echo at 111 µs (synthetic test signal).</figcaption></figure></div>
+<div><figure><img src="shots/inst_multipath.png"><figcaption>Fig. 17 – View <span class="ui">Multipath</span>: profile with an echo at 111 µs (synthetic test signal).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
 <h1 id="s14"><span class="num">14</span>Alarms</h1>
-<p>For long-term monitoring, limits can be set under <span class="ui">Alarms</span>. <span class="ui">Monitor limits</span> switches the monitoring on; then tick each desired condition and enter the limit next to it (in dBm with level calibration, otherwise dBFS):</p>
+<p>For long-term monitoring, limits can be set under <span class="ui">Settings</span> → <span class="ui">Limits &amp; alarms</span> (classic layout: section <span class="ui">Alarms</span>). <span class="ui">Monitor limits</span> switches the monitoring on; then tick each desired condition and enter the limit next to it (in dBm with level calibration, otherwise dBFS):</p>
 <table class="plain">
 <tr><th>Condition</th><th>Example</th></tr>
 <tr><td>Level below</td><td>−90 dBFS or dBm (calibrated)</td></tr>
@@ -621,13 +732,13 @@ sdrpp</pre></li>
 <tr><td>Uplink noise above</td><td>−100 dBFS (the burst analysis must run on the uplink)</td></tr>
 <tr><td>Samples lost</td><td>immediately (SDR overflow or timing slip)</td></tr>
 </table>
-<p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. <span class="ui">Start CSV log on alarm</span> starts the CSV log at the first alarm if it is not already running; <span class="ui">Sound</span> (Windows only) adds a sound. <span class="ui">Hold time (s)</span> can be set from 1 to 600 s. Active alarms appear in red at the top of the TETRA menu.</p>
+<p>A condition must last for the <span class="ui">Hold time</span> before an alarm is raised (and as long before it ends). Alarms and their end are written to the event log and – while logging – to <code>…_events.csv</code>. <span class="ui">Start CSV log on alarm</span> starts the CSV log at the first alarm if it is not already running; <span class="ui">Sound</span> (Windows only) adds a sound. <span class="ui">Hold time (s)</span> can be set from 1 to 600 s. Active alarms appear in red in the message line (“ALARM: …”), in the classic layout at the top of the TETRA menu.</p>
 
 <!-- ============================================================ -->
 <h1 id="s15"><span class="num">15</span>Measurement report</h1>
 <div class="cols">
 <div>
-<p><span class="ui">Report</span> → <span class="ui">Create report</span> creates an HTML file in the log folder and opens it in the browser. It contains:</p>
+<p>The softkey <span class="ui">Create report</span> (in the modes Measure and Drive test) creates an HTML file in the log folder and opens it in the browser. It contains:</p>
 <ul>
   <li>summary (level, MER, EVM, CRC, sync losses, frequency offset),</li>
   <li>cell and key values, histories as charts,</li>
@@ -635,42 +746,42 @@ sdrpp</pre></li>
   <li>TX analysis, burst analysis with profile, multipath, additional carriers,</li>
   <li>the latest events.</li>
 </ul>
-<p>The period is the time span selected under <span class="ui">Trends</span> (or the loaded log). Location, antenna or occasion can be entered under <span class="ui">Notes</span>. After creating it, the file name and three buttons appear: <span class="ui">Open</span> (open in the browser), <span class="ui">Open folder</span> (log folder in the file manager) and <span class="ui">Copy path</span> (path to the clipboard). As PDF: print in the browser → “Save as PDF”.</p>
+<p>The period is the time span chosen in the view <span class="ui">Trends</span> (or the loaded log). Under <span class="ui">Settings</span> → <span class="ui">Logging &amp; report</span> (classic layout: section <span class="ui">Report</span>) location, antenna or occasion can be entered under <span class="ui">Notes:</span>; the log folder and a button <span class="ui">Create report</span> of its own are there as well. After creating it, the file name and three buttons appear there: <span class="ui">Open</span> (open in the browser), <span class="ui">Open folder</span> (log folder in the file manager) and <span class="ui">Copy path</span> (path to the clipboard). As PDF: print in the browser → “Save as PDF”.</p>
 </div>
-<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Fig. 12 – Measurement report (excerpt).</figcaption></figure></div>
+<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Fig. 18 – Measurement report (excerpt).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
 <h1 id="s16" class="pb"><span class="num">16</span>GPS, coverage measurement and maps</h1>
-<p>With a GPS mouse every second of the CSV log gets a position. From this, coverage maps with coloured measurement points and a heatmap are created.</p>
+<p>With a GPS mouse every second of the CSV log gets a position. From this, coverage maps with coloured measurement points and a heatmap are created. In the instrument view this is the mode <span class="ui">Drive test</span>: the main view holds the GPS connection, cell lock, map value and propagation diagram (classic layout: section <span class="ui">GPS &amp; coverage map</span>), the left column large value tiles, the right column the softkeys <span class="ui">Start CSV log</span>, <span class="ui">Lock cell</span>, <span class="ui">Export map</span> and <span class="ui">Create report</span>.</p>
 <figure>
 <svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <g>
   <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 Connect GPS</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">NMEA, port, baud rate</text>
-  <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Lock the cell</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">Lock current cell</text>
+  <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Lock the cell</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">softkey Lock cell</text>
   <rect x="355" y="20" width="150" height="70" rx="9" fill="#1d6fb8"/><text x="430" y="50" fill="#fff" text-anchor="middle" font-weight="700">3 Start the log</text><text x="430" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Start CSV log, drive</text>
-  <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Export</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Export map (KML + OSM)</text>
+  <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Export</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Export map</text>
   <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 View</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">browser / Google Earth</text>
   </g>
   <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
 </svg>
-<figcaption>Fig. 13 – Steps of a coverage measurement.</figcaption></figure>
+<figcaption>Fig. 19 – Steps of a coverage measurement.</figcaption></figure>
 
 <h2>Connecting the GPS mouse</h2>
 <ol class="steps">
   <li>Connect the GPS mouse (USB or serial, NMEA output). On Windows it appears as a COM port, on Linux usually as <code>/dev/ttyACM0</code> or <code>/dev/ttyUSB0</code> (add the user to the <code>dialout</code> group).</li>
-  <li>Under <span class="ui">GPS &amp; coverage map</span> choose the port (<span class="ui">Rescan</span> refreshes the list), set the baud rate (usually 4800 or 9600) and press <span class="ui">Connect</span>.</li>
+  <li>In the main view of the drive test choose the port (<span class="ui">Rescan</span> refreshes the list), set the baud rate (usually 4800 or 9600) and press <span class="ui">Connect</span>.</li>
   <li>Wait until position, number of satellites and HDOP are shown. With “Waiting for NMEA data”, port or baud rate are wrong.</li>
 </ol>
 <h2>Measurement drive</h2>
 <ol class="steps">
-  <li>Let the decoder lock onto the desired cell and press <span class="ui">Lock current cell</span>: seconds in which another cell or no cell is received then count as “no service”. The locked cell is then shown under <span class="ui">Cell lock</span> (green = received, red = not); <span class="ui">Unlock cell</span> removes the lock.</li>
-  <li>Calibrate the level if possible (<span class="ui">Level cal.</span>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
+  <li>Let the decoder lock onto the desired cell and press the softkey <span class="ui">Lock cell</span> (or <span class="ui">Lock current cell</span> in the main view): seconds in which another cell or no cell is received then count as “no service”. The locked cell is then shown under <span class="ui">Cell lock</span> (green = received, red = not); <span class="ui">Unlock cell</span> removes the lock.</li>
+  <li>Calibrate the level if possible (<span class="ui">Level cal.</span>, <a href="#s4-4">chapter 4.4</a>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
   <li><span class="ui">Start CSV log</span> and drive off. Antenna firmly on the roof, same set-up as on earlier drives.</li>
   <li>After the drive, <span class="ui">Stop CSV log</span>.</li>
 </ol>
 <h2>Creating maps</h2>
-<p><span class="ui">Map value</span> selects the colour scale: <b>Level</b> (−115…−65 dBm or −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> or <b>Quality (CRC)</b> – green up to the CRC limit from chapter 10, yellow up to ten times that, red above; black = no service. <span class="ui">Export map (KML + OSM)</span> writes two files next to the log:</p>
+<p><span class="ui">Map value</span> selects the colour scale: <b>Level</b> (−115…−65 dBm or −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> or <b>Quality (CRC)</b> – green up to the CRC limit from chapter 10, yellow up to ten times that, red above; black = no service. The softkey <span class="ui">Export map</span> (classic layout: <span class="ui">Export map (KML + OSM)</span>) writes two files next to the current or last log:</p>
 <div class="cols">
 <div>
 <h3>In the browser (OpenStreetMap)</h3>
@@ -678,13 +789,13 @@ sdrpp</pre></li>
 <h3>In Google Earth</h3>
 <p>Open <code>…_level.kml</code> in Google Earth (desktop, or web: <i>Projects → Import KML file</i>). Every point is coloured, the description contains the measured values. In Google Earth Pro the file can be combined with elevation profile and terrain.</p>
 <h3>Propagation diagram (from v0.22.2)</h3>
-<p>Under <span class="ui">GPS &amp; coverage map</span> → <span class="ui">Propagation diagram</span> enter the position of the base station (decimal degrees) or press <span class="ui">Use GPS position</span> next to it. While driving (GPS connected) the program takes 20 level values per second and forms a power average every 50 m travelled: the fast fading (half a wavelength, 35 cm) averages out, the local mean with the shadowing by terrain and buildings remains (Lee: 20–40 wavelengths are enough, 50 m are about 70 at 430 MHz). Standing still does not close a point. The polar plot shows the points around the base station (centre, north up) by distance and bearing; the scale follows the farthest point, the colour scale the smallest and largest value (<span class="ui">Level</span> or <span class="ui">MER</span>). With a locked cell (<span class="ui">Lock current cell</span>) only values of that cell count. The circle marks the current position; a tooltip shows distance, bearing, level and MER of the point under the mouse.</p>
+<p>In the main view of the drive test under <span class="ui">Propagation diagram</span> enter the position of the base station (decimal degrees) or press <span class="ui">Use GPS position</span> next to it. While driving (GPS connected) the program takes 20 level values per second and forms a power average every 50 m travelled: the fast fading (half a wavelength, 35 cm) averages out, the local mean with the shadowing by terrain and buildings remains (Lee: 20–40 wavelengths are enough, 50 m are about 70 at 430 MHz). Standing still does not close a point. The polar plot shows the points around the base station (centre, north up) by distance and bearing; the scale follows the farthest point, the colour scale the smallest and largest value (<span class="ui">Level</span> or <span class="ui">MER</span>). With a locked cell only values of that cell count. The circle marks the current position; a tooltip shows distance, bearing, level and MER of the point under the mouse.</p>
 <h3>Own evaluations</h3>
 <p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route.</p>
 </div>
 <div>
-<figure><img src="shots/map_level.png"><figcaption>Fig. 14 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
-<figure><img src="shots/map_quality.png"><figcaption>Fig. 15 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
+<figure><img src="shots/map_level.png"><figcaption>Fig. 20 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Fig. 21 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
 </div>
 </div>
 <div class="box"><b class="t">Good heatmaps</b>Drive slowly or cover the same route several times – every second is one point. At high speed the points are far apart. Do not mix measurements with different antennas or gain.</div>
@@ -697,28 +808,28 @@ sdrpp</pre></li>
 <div class="meta">Goal: modulation quality and spectrum of the base station · duration: 10 minutes</div>
 <ol class="steps">
   <li>SDR in line of sight or with a directional antenna; signal well above the noise (stable MER display). Band centre ≥ 100 kHz away from the carrier.</li>
-  <li>Let <span class="ui">Auto RF gain</span> settle, then read MER, EVM, I/Q offset, IRR and error split.</li>
-  <li><span class="ui">Run analysis</span> of the TX analysis; beforehand <span class="ui">Store floor</span> with the transmitter off (or the input terminated).</li>
-  <li>Assess ACP, occupied bandwidth, shoulders and carrier leakage; for values close to the measurement limit lower the gain.</li>
+  <li>Let <span class="ui">Auto RF gain</span> settle, then read the measured values in the mode <span class="ui">Measure</span>: EVM, error phase / ampl., residual carrier, IRR, MER (status bar).</li>
+  <li>Choose the view <span class="ui">TX spectrum (ACP)</span> (the analysis starts); beforehand <span class="ui">Store floor</span> with the transmitter off (or the input terminated).</li>
+  <li>Assess ACP, occupied bandwidth, shoulders and carrier leakage; for values close to the measurement limit (“*”, receiver limited) bring the level close to full scale with an attenuator and store the measurement floor again.</li>
   <li><span class="ui">Create report</span> for documentation.</li>
 </ol>
-<p><b>Interpretation:</b> high I/Q offset with poor MER but good <i>MER w/o offset</i> → carrier leakage of the modulator. Much phase error → phase noise of the oscillator. Pronounced shoulders → overdriven power amplifier.</p></div>
+<p><b>Interpretation:</b> high residual carrier with poor MER but good <i>MER w/o offset</i> (classic layout) or good EVM with <span class="ui">Remove I/Q offset</span> → carrier leakage of the modulator. Much phase error → phase noise of the oscillator. Pronounced shoulders → overdriven power amplifier.</p></div>
 
 <div class="scen"><h3>B · Frequency accuracy of the base station</h3>
 <div class="meta">Goal: frequency error in ppb and stability · requires a GPS-disciplined SDR (e.g. Pluto+ with 10 MHz)</div>
 <ol class="steps">
   <li>Connect the SDR to the reference, warm up for at least 15 minutes.</li>
-  <li>Watch <span class="ui">Carrier vs. SYSINFO</span> (target: ±200 ppb according to ETSI).</li>
-  <li>Under <span class="ui">Trends</span> → <span class="ui">Frequency stability</span> let it run for at least one hour; read the Allan deviation.</li>
+  <li>Set the frequency reference to “External 10 MHz” (<span class="ui">Frequency reference</span>, currently in the classic layout only, <a href="#s3-3">3.3</a>), then watch <span class="ui">Carrier error</span> in the mode Measure (target: ±200 ppb according to ETSI).</li>
+  <li>View <span class="ui">Trends</span> → tab <span class="ui">Frequency stability</span>: let it run for at least one hour; read the Allan deviation.</li>
   <li>If required, let the measurement run overnight (CSV log) and open the log later.</li>
 </ol></div>
 
 <div class="scen"><h3>C · Coverage measurement with heatmap</h3>
 <div class="meta">Goal: coverage map and practical reception limit</div>
 <ol class="steps">
-  <li>Calibrate the level (dBm), Auto RF gain off, connect GPS, lock the cell (chapter 16).</li>
+  <li>Calibrate the level (dBm), Auto RF gain off; mode <span class="ui">Drive test</span>: connect GPS, lock the cell (chapter 16).</li>
   <li>Start the CSV log, drive through the area – also to the edge of the coverage.</li>
-  <li>Open the log under <span class="ui">Trends</span> → <span class="ui">Level vs. quality</span>: read the reception limit and set the <span class="ui">CRC limit</span> accordingly.</li>
+  <li>Load the log in the view <span class="ui">Trends</span> with <span class="ui">Open log...</span> → tab <span class="ui">Level vs. quality</span>: read the reception limit and set the <span class="ui">CRC limit</span> accordingly.</li>
   <li>Export and compare the <b>Level</b> and <b>Quality (CRC)</b> maps; measure gaps (black) again specifically.</li>
 </ol></div>
 
@@ -726,8 +837,8 @@ sdrpp</pre></li>
 <div class="meta">Goal: detect outages and degradations · duration: days</div>
 <ol class="steps">
   <li>Set up a fixed receiver with stable gain (Auto RF gain off).</li>
-  <li><span class="ui">Alarms</span>: switch on level, MER, CRC and sync, hold time e.g. 30 s, “Start CSV log on alarm”.</li>
-  <li>Optionally the burst analysis on the uplink for the noise level and its alarm.</li>
+  <li><span class="ui">Settings</span> → <span class="ui">Limits &amp; alarms</span>: switch on level, MER, CRC and sync, hold time e.g. 30 s, <span class="ui">Start CSV log on alarm</span>.</li>
+  <li>Optionally the burst analysis on the uplink for the noise level and its alarm (it runs only while the view <span class="ui">Burst (uplink)</span> is shown; for continuous operation stay in this view in the mode Measure).</li>
   <li>Look at the trends daily or open the log; in case of anomalies <span class="ui">Create report</span>.</li>
 </ol></div>
 
@@ -735,7 +846,7 @@ sdrpp</pre></li>
 <div class="meta">Goal: burst shape, time mask and splatter of a radio</div>
 <ol class="steps">
   <li>Set the SDR to the uplink only (1–2 MS/s), attenuator in front of the SDR (18 mW at 1–3 m: about 20–35 dB). Source <span class="ui">Manual frequency</span> with the uplink frequency; hold the gain (<span class="ui">Level and hold</span>).</li>
-  <li>Start <span class="ui">Burst analysis</span>, switch on <span class="ui">Ramp spectrum</span>; enter the transmit power of the radio under <span class="ui">Time mask</span>.</li>
+  <li>Choose the view <span class="ui">Burst (uplink)</span>, <span class="ui">Ramp spectrum</span> ON; enter the transmit power of the radio under <span class="ui">Time mask</span>.</li>
   <li>Run the <span class="ui">Linearity check</span>; the figures are valid only once it reports “OK – linear”.</li>
   <li>Make a few transmissions with the radio (or send an SDS); receiver close to the radio (mind the attenuation!).</li>
   <li>Check burst length, ramps, ripple and mask; look at the ramp spectrum for splatter.</li>
@@ -744,22 +855,22 @@ sdrpp</pre></li>
 <div class="scen"><h3>F · Hunting interference at the repeater receiver</h3>
 <div class="meta">Goal: detect intermittent interferers on the uplink</div>
 <ol class="steps">
-  <li>Run the burst analysis on the uplink; note <span class="ui">Noise between bursts</span> as baseline.</li>
+  <li>Run the burst analysis on the uplink (view <span class="ui">Burst (uplink)</span>); note <span class="ui">Noise between bursts</span> as baseline.</li>
   <li>Set the alarm “UL noise above” a few dB above the baseline.</li>
   <li>Look for time patterns in the history (<span class="ui">Noise history</span>, 24 h) – e.g. daily times point to devices in the neighbourhood.</li>
 </ol></div>
 
 <div class="scen"><h3>G · Comparing neighbour cells</h3>
 <ol class="steps">
-  <li>Decoder on one cell; neighbour cells appear under <span class="ui">Network &amp; cell</span>.</li>
-  <li><span class="ui">Carriers</span> → <span class="ui">Add neighbour cells</span>.</li>
+  <li>Decoder on one cell; neighbour cells appear under <span class="ui">Cell details</span> → <span class="ui">Network broadcast &amp; neighbour cells</span>.</li>
+  <li>View <span class="ui">Carriers</span> → <span class="ui">Add neighbour cells</span>.</li>
   <li>Compare level differences and MER over time (e.g. from the same location at different times of day).</li>
 </ol></div>
 
 <div class="scen"><h3>H · Multipath at a new location</h3>
 <ol class="steps">
   <li>Decoder locked, MER above 15 dB.</li>
-  <li>Start <span class="ui">Multipath</span> with <span class="ui">Averaging</span> 60 s; note echoes and delay spread.</li>
+  <li>View <span class="ui">Multipath</span> with <span class="ui">Averaging</span> 60 s; note echoes and delay spread.</li>
   <li>On drives choose 2 s and compare places with strong echoes with poor MER.</li>
 </ol></div>
 
@@ -767,44 +878,47 @@ sdrpp</pre></li>
 <h1 id="s18" class="pb"><span class="num">18</span>Troubleshooting</h1>
 <table>
 <tr><th style="width:30%">Problem</th><th>Cause and remedy</th></tr>
-<tr><td>Decoder does not lock</td><td>VFO exactly on the carrier; check the level (RF status); ETSI/Amateur mode correct; band centre not on the carrier.</td></tr>
-<tr><td>“Re-locks with timing slip”, <span class="ui">Overflows</span> &gt; 0</td><td>Samples are lost (USB or computer too slow). See <a href="#s18-1">Checking USB and lost samples</a>.</td></tr>
-<tr><td>“reduce gain”, peaks close to 0 dBFS</td><td>Overload – lower the gain; watch for strong signals elsewhere in the band (waterfall).</td></tr>
+<tr><td>Decoder does not lock</td><td>VFO exactly on the carrier; check the level (status bar, message line); ETSI/Amateur mode correct; band centre not on the carrier.</td></tr>
+<tr><td><span class="ui">Re-locks with slip</span> &gt; 0, <span class="ui">Overflows</span> &gt; 0, <span class="ui">Samples lost (USB / CPU)</span></td><td>Samples are lost (USB or computer too slow). See <a href="#s18-1">Checking USB and lost samples</a>.</td></tr>
+<tr><td><span class="ui">ADC overload - reduce the gain</span>, peaks close to 0 dBFS</td><td>Overload – lower the gain; watch for strong signals elsewhere in the band (waterfall).</td></tr>
 <tr><td>Auto RF gain does nothing</td><td>SDR without interface or hardware AGC on (RTL: Tuner AGC off, Pluto/BladeRF: Manual, SDRplay: IF AGC off).</td></tr>
 <tr><td>Frequency deviates</td><td>Calibrate the SDR (chapter 4.3) or use an external reference.</td></tr>
-<tr><td>No audio</td><td>Choose an audio device for the TETRA Analyzer under <span class="ui">Sinks</span>; volume in the TETRA menu; encrypted calls cannot be heard.</td></tr>
+<tr><td>No audio</td><td>Choose an audio device for the TETRA Analyzer under <span class="ui">Settings</span> → <span class="ui">Audio &amp; recording</span> → <span class="ui">Audio output</span>; volume in the mode Monitor under Audio. Encrypted calls cannot be heard; calls with unknown encryption stay muted until a call setup arrives (<span class="ui">Play anyway</span>, <a href="#s5">chapter 5</a>).</td></tr>
 <tr><td>Burst analysis: “outside the SDR span”</td><td>The uplink lies outside the bandwidth – raise the sample rate or move the centre frequency.</td></tr>
 <tr><td>Windows blocks the download</td><td>Choose “Keep” in the browser's download list; then confirm the SmartScreen notice.</td></tr>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
-<tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only. The radio must be registered in trunked mode (TMO).</td></tr>
+<tr><td>Burst analysis finds no bursts</td><td>The analysis runs only in the view <span class="ui">Burst (uplink)</span>. The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only. The radio must be registered in trunked mode (TMO).</td></tr>
 <tr><td><span class="ui">Linearity check</span>: RECEIVER COMPRESSED</td><td>The burst power dropped by less than the added attenuation: the receiver was overloaded. Leave the attenuation in and check again with one more step until “OK – linear” appears.</td></tr>
-<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>The downlink gets weaker during the bursts: the strong radio overloads the receiver (analog, before the ADC; lowering the gain in the software is often not enough). Increase the distance, add an attenuator (30–40 dB) or use a coupler and dummy load. Limit: 1 dB, averaged over 20 bursts; needs the option <span class="ui">Overload check</span> and the downlink in the SDR span.</td></tr>
-<tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
+<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>The downlink gets weaker during the bursts: the strong radio overloads the receiver (analog, before the ADC; lowering the gain in the software is often not enough). Increase the distance, add an attenuator (30–40 dB) or use a coupler and dummy load. Limit: 1 dB, averaged over 20 bursts; needs the softkey <span class="ui">Overload check</span> ON and the downlink in the SDR span.</td></tr>
+<tr><td>Pluto shows up as a drive but not in the source list</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span> (under <span class="ui">RF / Gain</span>).</td></tr>
+<tr><td>“Last analysis results” shows “not measured yet”</td><td>TX, burst and multipath analysis run only in their view; choose the view once.</td></tr>
+<tr><td>Classic layout: no way back</td><td>See <a href="#s3-5">chapter 3.5</a>.</td></tr>
 </table>
 
 <h2 id="s18-1">Checking USB and lost samples</h2>
-<p>Poor MER with a clean spectrum and a rising <span class="ui">Re-locks with timing slip</span> count means samples are missing. Narrow it down like this (PlutoSDR on Linux; quit SDR++ first):</p>
+<p>Poor MER with a clean spectrum and a rising <span class="ui">Re-locks with slip</span> count means samples are missing. Narrow it down like this (PlutoSDR on Linux; quit SDR++ first):</p>
 <ol class="steps">
   <li><b>Device and USB alone:</b> set the rate and read a fixed number of samples while timing it. 40 million samples at 4 MS/s must take 10.0 s:
 <pre>iio_attr -u usb: -c ad9361-phy voltage0 sampling_frequency 4000000
 time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &gt; /dev/null</pre>
   Clearly more than 10 s means the Pluto drops data (USB, cable, power). Test the limit with 7 MS/s and <code>-s 70000000</code>.</li>
   <li><b>Connection:</b> keep <code>sudo dmesg -w</code> running. <code>disconnect</code> or <code>error -71</code> point to the cable, a contact or too little power (connect the Pluto's second USB port to a power supply). <code>lsusb -t</code> shows which devices share the bus (webcam, card reader).</li>
-  <li><b>In SDR++:</b> press <span class="ui">Reset totals</span> and let it run for two minutes. <span class="ui">Overflows</span> in the source menu must stay at 0. If it rises only here, the computer cannot keep up: close screen recording and other programs, lower the sample rate.</li>
+  <li><b>In the program:</b> press <span class="ui">Reset statistics</span> and let it run for two minutes. <span class="ui">Overflows</span> under <span class="ui">RF / Gain</span> must stay at 0, and the message line must not show <span class="ui">Samples lost (USB / CPU)</span>. If it rises only here, the computer cannot keep up: close screen recording and other programs, lower the sample rate.</li>
 </ol>
 
 <!-- ============================================================ -->
 <h1 id="s19" class="pb"><span class="num">19</span>Appendix</h1>
 <h2 id="s19-1">Files and folders</h2>
 <table class="plain">
-<tr><th>File / folder</th><th>Content</th></tr>
-<tr><td><code>config.json</code>, <code>*_config.json</code></td><td>settings (Windows: program folder; Linux AppImage: <code>~/.config/sdrpp_brown_appimage</code>)</td></tr>
-<tr><td><code>tetra_demodulator_config.json</code></td><td>settings of the TETRA Analyzer</td></tr>
+<tr><th style="width:36%">File / folder</th><th>Content</th></tr>
+<tr><td>configuration folder</td><td>Windows: the folder with <code>sdrpp.exe</code>. Linux AppImage: <code>~/.config/sdrpp_aia_appimage</code>. Linux, self-built: <code>~/.config/sdrpp-aia</code>. macOS: <code>~/Library/Application Support/sdrpp-aia</code>. On the first start with the new name the program copies an existing former folder (<code>sdrpp_brown_appimage</code> or <code>sdrpp-brown</code>) there once; the old folder stays where it is.</td></tr>
+<tr><td><code>config.json</code>, <code>*_config.json</code></td><td>settings (in the configuration folder)</td></tr>
+<tr><td><code>tetra_demodulator_config.json</code></td><td>settings of the TETRA Analyzer, also mode, view, language and classic layout (<code>instUi</code>)</td></tr>
 <tr><td><code>tetra_duplex_ham.json</code></td><td>duplex tables (amateur radio)</td></tr>
 <tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>name lists</td></tr>
 <tr><td><code>imgui_layout.ini</code></td><td>window positions and table columns</td></tr>
-<tr><td><code>tetra_logs/</code></td><td>CSV logs, maps, reports (folder adjustable)</td></tr>
+<tr><td>log folder</td><td>CSV logs, maps, reports; set under <span class="ui">Settings</span> → <span class="ui">Logging &amp; report</span>. Default on Linux: <code>Documents/SDRPP-AIA</code> in the home folder (folder from <code>XDG_DOCUMENTS_DIR</code>, otherwise <code>~/Documents</code>), on Windows and macOS <code>tetra_logs</code> in the configuration folder. After an update the log folder set before stays in force (it is part of the settings taken over); existing logs stay where they are.</td></tr>
 </table>
 <h2 id="s19-2">CSV log</h2>
 <p>One line per second, separator semicolon. Companion files: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>.</p>
@@ -840,6 +954,6 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 </table>
 
 <h2 id="s19-4">Origin and licences</h2>
-<p>SDR++ TETRA-SCHWARTZ is a modified version (fork) of SDR++ (Alexandre Rouma, ON5RYZ, and contributors) based on SDR++Brown, with the TETRA demodulator plugin by cropinghigh and the osmo-tetra decoder (Osmocom). Licences: GPL-3.0, for osmo-tetra AGPL-3.0; the ETSI speech codec is downloaded from ETSI at build time. Changes of this edition: © 2026 UnImAtrIXzEr0. It is intended exclusively for experimental amateur radio purposes. Details: <code>NOTICE.md</code> and the about dialog in the program. This is not an official release of SDR++ or SDR++Brown.</p>
+<p>SDR++ Air Interface Analyzer (SDR++ AIA) is a modified version (fork) of SDR++ (Alexandre Rouma, ON5RYZ, and contributors) based on SDR++Brown, with the TETRA demodulator plugin by cropinghigh and the osmo-tetra decoder (Osmocom). Licences: GPL-3.0, for osmo-tetra AGPL-3.0; the ETSI speech codec is downloaded from ETSI at build time. Changes of this edition: © 2026 UnImAtrIXzEr0. It is intended exclusively for experimental amateur radio purposes. Details: <code>NOTICE.md</code> and the about dialog in the program. This is not an official release of SDR++ or SDR++Brown. Source code: <code>github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer</code>.</p>
 
 </body></html>
