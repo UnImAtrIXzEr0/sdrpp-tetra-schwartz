@@ -137,7 +137,9 @@ jobs:
             git -c user.name=UnImAtrIXzEr0 -c user.email=UnImAtrIXzEr0@users.noreply.github.com commit -qm "Screenshots for the manual"
             git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" doc-shots
 
+        # test versions are published without manuals (faster runs)
         - name: Manuals (PDF, German and English)
+          if: ${{ !contains(env.TETRA_VERSION, '-test') }}
           continue-on-error: true
           run: |
             python3 -m pip install -q --break-system-packages playwright pypdf || python3 -m pip install -q playwright pypdf
@@ -150,7 +152,7 @@ jobs:
             ls -la manuals
 
         - name: Save manuals
-          if: always()
+          if: always() && !contains(env.TETRA_VERSION, '-test')
           continue-on-error: true
           uses: actions/upload-artifact@v4
           with:
@@ -515,10 +517,9 @@ jobs:
             mkdir -p rel
             cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-TETRA-SCHWARTZ_${V}_windows_x64.zip"
             cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-TETRA-SCHWARTZ_${V}_x86_64.AppImage"
-            cp dl/*manuals_pdf/*.pdf rel/ 2>/dev/null || echo "::warning::no manuals in this run"
             (cd rel && sha256sum * > SHA256SUMS.txt)
             ls -la rel
-            NOTES="Test version of the new user interface - not the recommended download. It uses its own settings folder (Linux AppImage: ~/.config/sdrpp_brown_appimage_test, Windows: subfolder config-test next to sdrpp.exe), so it can be used next to the stable version without changing the stable settings. The stable beta stays the recommended download. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. Manuals (German / English) as PDF. Check the downloads with SHA256SUMS.txt."
+            NOTES="Test version of the new user interface - not the recommended download. It uses its own settings folder (Linux AppImage: ~/.config/sdrpp_brown_appimage_test, Windows: subfolder config-test next to sdrpp.exe), so it can be used next to the stable version without changing the stable settings. The stable beta stays the recommended download. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. No manuals for test versions: see the manuals of the stable beta. Check the downloads with SHA256SUMS.txt."
             # a rebuild of the same version replaces its pre-release (tag on the newest commit)
             if gh release view "$V" > /dev/null 2>&1; then gh release delete "$V" --cleanup-tag -y; fi
             gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V (test version)" --notes "$NOTES" --prerelease --latest=false
