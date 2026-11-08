@@ -2483,11 +2483,27 @@ private:
         auto slotTraffic = [&](int ts) { return osmotetradecoder.getTimeslotContent(ts - 1) == 4; };
         auto owner = [&](int ts) { return subscribers.slotOwner(ts); };
         // fail-safe: a timeslot is only played when its call is known to be clear
+        // "Play anyway" for a call whose encryption is unknown (setup not received):
+        // only for that timeslot, only while the state stays unknown, and only until
+        // its traffic stops for longer than the hang time - the next call setup
+        // decides automatically again
+        double tNow = playNow();
+        int unknownMask = 0;
+        for (int ts = 1; ts <= 4; ts++) {
+            if (!listenUnkPlay[ts - 1]) { continue; }
+            if (subscribers.listenEncState(ts) != TetraSubscriberTable::LISTEN_UNKNOWN) { listenUnkPlay[ts - 1] = false; continue; }
+            if (slotTraffic(ts)) { listenUnkLast[ts - 1] = tNow; }
+            else if (tNow - listenUnkLast[ts - 1] > LISTEN_UNK_HANG_S) { listenUnkPlay[ts - 1] = false; }
+        }
         auto allowed = [&](int ts) {
             if (!listenMuteEnc) { return true; }
             int st = subscribers.listenEncState(ts);
             if (st == TetraSubscriberTable::LISTEN_CLEAR) { return true; }
-            if (slotTraffic(ts)) { encMuted = (st == TetraSubscriberTable::LISTEN_ENCRYPTED || encMuted == 1) ? 1 : 2; }
+            if (st == TetraSubscriberTable::LISTEN_UNKNOWN && listenUnkPlay[ts - 1]) { return true; }
+            if (slotTraffic(ts)) {
+                encMuted = (st == TetraSubscriberTable::LISTEN_ENCRYPTED || encMuted == 1) ? 1 : 2;
+                if (st == TetraSubscriberTable::LISTEN_UNKNOWN) { unknownMask |= 1 << (ts - 1); }
+            }
             return false;
         };
         if (listenMode == 1) {
@@ -2506,6 +2522,7 @@ private:
             for (int ts = 1; ts <= 4; ts++) { if (allowed(ts)) { mask |= 1 << (ts - 1); } }
         }
         osmotetradecoder.setListenMask(mask);
+        listenUnknownMask = unknownMask;
         // What is played: driven by the speech bursts that really went through the
         // codec (not by the timeslot content of the current frame, which is
         // signalling now and then). A "Durchgang" (one PTT) starts with the first
@@ -2788,6 +2805,8 @@ private:
                               "anyway it is only noise. Applies when the call is marked encrypted\n"
                               "(air interface encryption or end-to-end flag of the call setup).");
         }
+        // classic layout; the instrument view has the softkey "Play anyway"
+        if (!instUi && listenUnknownMask && tw::SameSmallButton(CONCAT("Play anyway##_tetra_listen_any_", name))) { listenPlayAnyway(); }
         drawPlaying();
     }
 
@@ -3547,6 +3566,7 @@ private:
         switch (instMode) {
         case IM_MONITOR:
             if (softkey("Mute encrypted", "muteenc", listenMuteEnc ? 1 : 0)) { listenMuteEnc = !listenMuteEnc; saveListen(); }
+            if (listenUnknownMask && softkey("Play anyway", "playany")) { listenPlayAnyway(); }
             if (decoder_mode == 0 && softkey("Cell details", "celldet")) { cellDetailsOpen = true; }
             if (hamMode && decoder_mode == 0) {
                 if (softkey("Hide call control", "hidecc", trafficHideControl ? 1 : 0)) { trafficHideControl = !trafficHideControl; }
@@ -6095,6 +6115,15 @@ private:
     int playMode = 2;
     float playModeAtW = -1.0f, playMaxH = 0.0f, playMaxHAtW = -1.0f;
     int listenMutedEnc = 0;           // "Mute encrypted" is muting speech: 1 encrypted call, 2 encryption unknown
+    int listenUnknownMask = 0;        // timeslots with traffic muted only because the encryption is unknown
+    bool listenUnkPlay[4] = { false, false, false, false };   // "Play anyway" given for that timeslot
+    double listenUnkLast[4] = { 0, 0, 0, 0 };                  // last traffic seen on it (s)
+    static constexpr double LISTEN_UNK_HANG_S = 10.0;          // traffic pause that ends "Play anyway"
+    void listenPlayAnyway() {
+        for (int ts = 1; ts <= 4; ts++) {
+            if (listenUnknownMask & (1 << (ts - 1))) { listenUnkPlay[ts - 1] = true; listenUnkLast[ts - 1] = playNow(); }
+        }
+    }
     double listenMutedEncT = -1e9;
     uint32_t listenAddSsi = 0;
     bool listenAddGroup = true;

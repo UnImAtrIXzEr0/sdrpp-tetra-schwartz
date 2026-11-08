@@ -53,6 +53,7 @@ namespace ui_text {
             { "Mute encrypted", "Verschlüsselt stumm" },
             { "Cell details", "Zelldetails" },
             { "Hide call control", "Rufsteuerung ausblenden" },
+            { "Play anyway", "Trotzdem abspielen" },
             { "Reset statistics", "Statistik zurücksetzen" },
             { "Remove I/Q offset", "I/Q-Offset entfernen" },
             { "Start CSV log", "CSV-Log starten" },
