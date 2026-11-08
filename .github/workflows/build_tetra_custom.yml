@@ -275,6 +275,8 @@ jobs:
           shell: pwsh
           env:
             VCPKG_BINARY_SOURCES: "files,C:/vcpkg-cache,readwrite"
+            # use the CMake preinstalled on the runner instead of downloading one from GitHub releases
+            VCPKG_FORCE_SYSTEM_BINARIES: "1"
           run: |
             try {
               git -C C:/vcpkg fetch origin 39344dff01c5a5a0134caf2624cdd492f05d30ea 2>$null
