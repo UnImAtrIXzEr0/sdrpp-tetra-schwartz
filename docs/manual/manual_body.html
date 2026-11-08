@@ -54,7 +54,7 @@
 </div>
 <div>
 <ul>
-  <li><b>Burst-Analyse</b> von Handfunkgeräten: Rampen, Länge, Welligkeit, Zeitmaske, Zeitlage, Rampen-Spektrum, Störpegel auf dem Uplink.</li>
+  <li><b>Burst-Analyse</b> von Handfunkgeräten: Rampen, Länge, Welligkeit, Zeitmaske, Rampen-Spektrum, Störpegel auf dem Uplink.</li>
   <li><b>Mehrwegeempfang</b>, <b>Frequenzstabilität</b> (Allan-Abweichung) und <b>Empfangsgrenze</b>.</li>
   <li><b>Langzeitbeobachtung:</b> Trends bis 24 h, CSV-Logs, Alarme, Messbericht.</li>
   <li><b>Versorgungsmessung</b> mit GPS-Maus und Karten für Google Earth und OpenStreetMap.</li>
@@ -80,7 +80,7 @@
   <line x1="282" y1="125" x2="330" y2="205" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <rect x="332" y="20" width="200" height="40" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="432" y="38" text-anchor="middle" font-weight="700" fill="#003a6c">TETRA-VFO (72 kS/s)</text><text x="432" y="53" text-anchor="middle" fill="#5a6774" font-size="10.5">Demodulator → Decoder</text>
   <rect x="332" y="75" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="93" text-anchor="middle" font-weight="700" fill="#003a6c">TX-Analyse (250 kHz)</text><text x="432" y="108" text-anchor="middle" fill="#5a6774" font-size="10.5">Spektrum, ACP, OBW</text>
-  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Burst / Mehrwege (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">Uplink, Downlink-Zeitraster</text>
+  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Burst / Mehrwege (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">Uplink-Bursts, Downlink-Echos</text>
   <rect x="332" y="185" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="203" text-anchor="middle" font-weight="700" fill="#003a6c">Weitere Träger (je 72 kS/s)</text><text x="432" y="218" text-anchor="middle" fill="#5a6774" font-size="10.5">Pegel, MER, Ablage</text>
   <line x1="532" y1="40" x2="590" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <rect x="592" y="15" width="255" height="50" rx="7" fill="#003a6c"/><text x="720" y="36" fill="#fff" text-anchor="middle" font-weight="700">Messwerte · Netz · Stationen · Audio</text><text x="720" y="53" fill="#cfe0f3" text-anchor="middle" font-size="10.5">jede Sekunde → Trends, CSV-Log, Alarme</text>
@@ -215,7 +215,7 @@ sdrpp</pre></li>
 <h1 id="s4" class="pb"><span class="num">4</span>SDR einrichten</h1>
 <h2>Grundsätze</h2>
 <ul>
-  <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Burst-Zeitlage (Uplink und Downlink gleichzeitig) und weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
+  <li><b>Abtastrate:</b> 1–2,4 MS/s genügen für einen Träger. Für Uplink und Downlink gleichzeitig und für weitere Träger muss die Bandbreite alle Frequenzen abdecken – bei 70-cm-Relais mit 9,4 MHz Duplexabstand also ≥ 10 MS/s, sonst die Messungen nacheinander machen.</li>
   <li><b>Mitte nicht auf den Träger legen:</b> Der Gleichanteil des SDR liegt in der Bandmitte. Den TETRA-Träger mindestens ~100 kHz daneben einstellen, sonst verfälscht er I/Q-Offset und Trägerrest.</li>
   <li><b>Pegel:</b> So viel Verstärkung wie nötig, so wenig wie möglich. <span class="ui">Auto RF gain</span> sucht den besten Signal-Rausch-Abstand: Es regelt in 3-dB-Schritten hoch, solange der Abstand noch steigt, und geht zurück, sobald der Rauschboden nur noch mitwächst. Sofort herunter geht es, wenn irgendein Signal im ganzen SDR-Band (nicht nur TETRA) die Wandlergrenze erreicht. Die Zeile <span class="ui">Band</span> zeigt diese Spitze und den Abstand.</li>
   <li><b>Betriebsart der Verstärkung</b> (ab v0.20.4): <span class="ui">Level and hold</span> sucht die beste Stufe einmal und hält sie dann fest – alle Messwerte einer Messreihe entstehen mit denselben Empfängereinstellungen. Nähert sich der Wandler der Begrenzung oder fällt der Abstand um mehr als 6 dB, erscheint ein Hinweis; <span class="ui">Re-level</span> pegelt neu ein. <span class="ui">Follow</span> regelt laufend nach. <span class="ui">Automatic (GPS)</span> (Standard) folgt bei Fahrt (GPS über 5 km/h, gemittelt über 10 s) und hält nach 30 s Stillstand oder ohne GPS. Mit Pegelkalibrierung (dBm) darf es ebenfalls folgen: Das Programm merkt sich die Verstärkung beim Eintragen der Kalibrierung und korrigiert den Pegel um die Differenz laut Gain-Tabelle des SDR (etwa ±1 dB, Anzeige „gain-corrected“). Bei älteren Kalibrierungen ohne gemerkte Verstärkung erscheint der Hinweis, sie neu einzutragen; bis dahin hält es.</li>
@@ -540,36 +540,18 @@ sdrpp</pre></li>
 <ol class="steps">
   <li><span class="ui">Run burst analysis</span> einschalten, darunter die Frequenz wählen: <span class="ui">Uplink (SYSINFO)</span>, <span class="ui">Manual frequency</span> (MHz eintragen) oder <span class="ui">TETRA VFO</span>. Die Zeile <span class="ui">Frequency</span> zeigt, was gemessen wird.</li>
   <li><span class="ui">Averages</span> (1…500, Standard 200 nach EN 300 394-1 8.4) legt fest, über wie viele Bursts gemittelt wird; <span class="ui">Reset</span> verwirft die bisherigen Bursts.</li>
-  <li><span class="ui">Also:</span> schaltet <span class="ui">Timing vs. downlink</span> und <span class="ui">Ramp spectrum</span> zu (beide kosten Rechenzeit).</li>
+  <li><span class="ui">Also:</span> schaltet das <span class="ui">Ramp spectrum</span> zu (kostet Rechenzeit).</li>
   <li>Ablesen: <span class="ui">Floor</span> und <span class="ui">peak</span> (Rauschboden und Spitze im Kanal), <span class="ui">Bursts</span> (gezählte ganze und halbe Bursts, Bursts/s), dann <span class="ui">Burst power</span> und die Formwerte. Grün = innerhalb der Maske, rot = außerhalb. „No bursts detected“: niemand sendet; „continuous carrier“: Dauerträger statt Bursts.</li>
-  <li>Läuft gleichzeitig der Downlink mit, prüft <span class="ui">Overload check</span>, ob der Downlink während der Bursts schwächer wird (mehr als 1 dB = Empfänger übersteuert, Ergebnisse ungültig). Ohne Downlink steht an dieser Stelle die <span class="ui">Linearity check</span> (unten).</li>
+  <li>Die <span class="ui">Linearity check</span> (unten) zeigt, ob der Empfänger übersteuert ist.</li>
 </ol>
 <p><b>Time mask</b> (aufklappen): <span class="ui">Check against EN 300 392-2 6.4.5</span> (Standard an) prüft nach der Norm (siehe unten); <span class="ui">Station</span> wählt <i>Mobile station (uplink)</i> oder <i>Base station, discontinuous</i>; <span class="ui">MS power class 4 / 4L</span> lockert die Grenze der Schalttransienten; <span class="ui">MS transmit power known</span> mit dBm-Wert rechnet die absoluten Grenzen in dBc um. Ohne Normprüfung gilt die eigene Maske: <span class="ui">Ripple +- dB</span> (Standard ±1 dB), <span class="ui">Outside dBc</span> (−40 dBc) und <span class="ui">Ramp max. sym</span> (Anstieg/Abfall −20…−1 dBc in höchstens 5 Symbolen) – Richtwerte zum eigenen Vergleich.</p>
-<h3>Nur Uplink messen und Linearität prüfen (Standard ab v0.22.2)</h3>
-<p>Die Messgrößen der Norm für das Endgerät – Leistung über der Zeit, Zeitmaske, Schalttransienten, Leistung außerhalb des Bursts, Nachbarkanal und Modulationsgenauigkeit – betreffen nur das Sendesignal. Den Downlink braucht man dafür nicht. Deshalb ist <span class="ui">Timing vs. downlink</span> jetzt standardmäßig aus, und das SDR kann mit kleiner Abtastrate (1–2 MS/s) nur auf dem Uplink laufen (Quelle <span class="ui">Manual frequency</span>). Das entlastet den Rechner und vermeidet das Dynamikproblem: Das Relais in einigen Kilometern Entfernung ist schwach, das nahe Funkgerät 60–80 dB stärker – mehr, als ein 12-Bit-Wandler gleichzeitig verarbeiten kann.</p>
-<p>Ohne Downlink gibt es keine Bezugsgröße für die Übersteuerung. An ihre Stelle tritt die <span class="ui">Linearity check</span> (übliches Laborverfahren): Verstärkung des Empfängers halten (<span class="ui">Level and hold</span>), <span class="ui">Note level</span> drücken, vor dem SDR die eingestellte Dämpfung zusätzlich einsetzen (Standard 10 dB, externes Dämpfungsglied), <span class="ui">Attenuator added</span> drücken. Nach 20 Bursts vergleicht das Programm (<span class="ui">Check again</span> beginnt die Prüfung von vorn): Sinkt die Burstleistung um den Dämpfungswert ±0,5 dB, ist der Empfänger linear. Sinkt sie weniger, war er vorher übersteuert – Dämpfung drinlassen und mit einem weiteren Schritt erneut prüfen. Sinkt sie mehr, hat das Funkgerät seine Leistung geändert (Leistungsregelung) oder der Dämpfungswert stimmt nicht. Die Software-Verstärkung zu senken ist kein Ersatz: Sie prüft nur die Stufen hinter dem Abschwächer.</p>
+<h3>Nur Uplink messen und Linearität prüfen</h3>
+<p>Die Messgrößen der Norm für das Endgerät – Leistung über der Zeit, Zeitmaske, Schalttransienten, Leistung außerhalb des Bursts, Nachbarkanal und Modulationsgenauigkeit – betreffen nur das Sendesignal. Den Downlink braucht man dafür nicht. Deshalb kann das SDR mit kleiner Abtastrate (1–2 MS/s) nur auf dem Uplink laufen (Quelle <span class="ui">Manual frequency</span>). Das entlastet den Rechner und vermeidet das Dynamikproblem: Das Relais in einigen Kilometern Entfernung ist schwach, das nahe Funkgerät 60–80 dB stärker – mehr, als ein 12-Bit-Wandler gleichzeitig verarbeiten kann.</p>
+<p>Die Übersteuerung prüft die <span class="ui">Linearity check</span> (übliches Laborverfahren): Verstärkung des Empfängers halten (<span class="ui">Level and hold</span>), <span class="ui">Note level</span> drücken, vor dem SDR die eingestellte Dämpfung zusätzlich einsetzen (Standard 10 dB, externes Dämpfungsglied), <span class="ui">Attenuator added</span> drücken. Nach 20 Bursts vergleicht das Programm (<span class="ui">Check again</span> beginnt die Prüfung von vorn): Sinkt die Burstleistung um den Dämpfungswert ±0,5 dB, ist der Empfänger linear. Sinkt sie weniger, war er vorher übersteuert – Dämpfung drinlassen und mit einem weiteren Schritt erneut prüfen. Sinkt sie mehr, hat das Funkgerät seine Leistung geändert (Leistungsregelung) oder der Dämpfungswert stimmt nicht. Die Software-Verstärkung zu senken ist kein Ersatz: Sie prüft nur die Stufen hinter dem Abschwächer.</p>
 <p><b>Sendeleistung des Funkgeräts:</b> Die absoluten Grenzen der Norm (−36 dBm für die Leistung außerhalb des Bursts und für Schalttransienten) beziehen sich auf den Antennenanschluss des Funkgeräts. Über die Luft sagt der Empfangspegel darüber nichts aus (Streckendämpfung). Unter <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> trägt man die Sendeleistung ein (z. B. 12,6 dBm für 18 mW, 32,6 dBm für 1,8 W); daraus wird die dBc-Grenze: Lmin = max(−70 dBc; −36 dBm − P). Ohne Eintrag gilt −70 dBc.</p>
-<h3>Zeitlage gegenüber dem Downlink (optional)</h3>
-<p>Mit <span class="ui">Timing vs. downlink</span> öffnet das Programm einen zweiten, abtastgenau ausgerichteten Abgriff auf dem TETRA-VFO (Downlink derselben Zelle), findet dort das Zeitschlitzraster und misst, wann jeder Burst nach Beginn seines Uplink-Zeitschlitzes ansteigt. Wichtig ist vor allem der <b>Vergleich zwischen Geräten</b> und die Streuung; der Absolutwert enthält auch die Laufzeitunterschiede (3,3 µs je km Umweg).</p>
 </div>
-<div><figure><img src="shots/win_bursts.png"><figcaption>Abb. 10 – Burst-Analyse mit Profil, Zeitlage und Rampen-Spektrum (synthetisches Testsignal).</figcaption></figure></div>
+<div><figure><img src="shots/win_bursts.png"><figcaption>Abb. 10 – Burst-Analyse mit Profil und Rampen-Spektrum (synthetisches Testsignal).</figcaption></figure></div>
 </div>
-<figure>
-<svg viewBox="0 0 860 150" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="11.5">
-  <text x="10" y="32" fill="#003a6c" font-weight="700">Downlink</text>
-  <text x="10" y="102" fill="#003a6c" font-weight="700">Uplink</text>
-  <g stroke="#9fb0c2" fill="#e3edf7">
-    <rect x="90" y="15" width="150" height="28"/><rect x="240" y="15" width="150" height="28"/><rect x="390" y="15" width="150" height="28"/><rect x="540" y="15" width="150" height="28"/><rect x="690" y="15" width="150" height="28"/>
-    <rect x="90" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="240" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="390" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="540" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="690" y="85" width="150" height="28" fill="#f1f5f9"/>
-  </g>
-  <g fill="#003a6c" text-anchor="middle"><text x="165" y="34">TS1</text><text x="315" y="34">TS2</text><text x="465" y="34">TS3</text><text x="615" y="34">TS4</text><text x="765" y="34">TS1</text></g>
-  <g fill="#5a6774" text-anchor="middle"><text x="165" y="104">TS3</text><text x="315" y="104">TS4</text><text x="765" y="104">TS2</text><text x="615" y="104">TS1</text></g>
-  <rect x="398" y="88" width="136" height="22" rx="3" fill="#1d6fb8"/><text x="466" y="103" fill="#fff" text-anchor="middle" font-weight="700">Burst (TS1)</text>
-  <path d="M390,65 L390,120" stroke="#c0392b" stroke-dasharray="4 3"/>
-  <path d="M390,128 L398,128" stroke="#c0392b" stroke-width="2"/><text x="400" y="142" fill="#c0392b">gemessene Zeitlage</text>
-  <path d="M90,52 C200,52 280,70 390,78" stroke="#5a6774" fill="none" marker-end="url(#ar)"/><text x="160" y="68" fill="#5a6774">Uplink = Downlink + 2 Zeitschlitze</text>
-</svg>
-<figcaption>Abb. 11 – Zeitschlitzraster: Der Uplink ist gegenüber dem Downlink um zwei Zeitschlitze (2 × 14,17 ms) verschoben.</figcaption></figure>
 
 <h3>Rampen-Spektrum (Schalttransienten)</h3>
 <p>Beim Ein- und Ausschalten entstehen die meisten Störungen in den Nachbarkanälen. <span class="ui">Ramp spectrum</span> misst die Kanalleistung bei −50, −25, ±0, +25, +50 kHz in 1,8-ms-Fenstern beim Anstieg, in der Mitte und beim Abfall, bezogen auf die Mitte. Orange: Rampe mehr als 6 dB über der Mitte (Splatter).</p>
@@ -589,7 +571,7 @@ sdrpp</pre></li>
 </ul>
 <p>Erkannt werden Echos von etwa 55 µs (17 km Umweg) bis 222 µs; kürzere verbreitern nur den Hauptpfad. TETRA-Empfänger verkraften Echos bis etwa ¼ Symbol (14 µs) ohne Verlust. <span class="ui">Averaging</span>: 2 s für Fahrten, 60 s oder unbegrenzt für feste Standorte.</p>
 </div>
-<div><figure><img src="shots/win_multipath.png"><figcaption>Abb. 12 – Mehrwegeprofil mit einem Echo bei 111 µs (synthetisches Testsignal).</figcaption></figure></div>
+<div><figure><img src="shots/win_multipath.png"><figcaption>Abb. 11 – Mehrwegeprofil mit einem Echo bei 111 µs (synthetisches Testsignal).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -620,7 +602,7 @@ sdrpp</pre></li>
 </ul>
 <p>Zeitraum ist die unter <span class="ui">Trends</span> gewählte Zeitspanne (oder der geladene Log). Unter <span class="ui">Notes</span> lassen sich Ort, Antenne oder Anlass eintragen. Nach dem Erstellen erscheinen der Dateiname und drei Knöpfe: <span class="ui">Open</span> (im Browser öffnen), <span class="ui">Open folder</span> (Log-Ordner im Dateimanager) und <span class="ui">Copy path</span> (Pfad in die Zwischenablage). Als PDF: im Browser drucken → „Als PDF speichern“.</p>
 </div>
-<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Abb. 13 – Messbericht (Ausschnitt).</figcaption></figure></div>
+<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Abb. 12 – Messbericht (Ausschnitt).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -637,7 +619,7 @@ sdrpp</pre></li>
   </g>
   <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
 </svg>
-<figcaption>Abb. 14 – Ablauf einer Versorgungsmessung.</figcaption></figure>
+<figcaption>Abb. 13 – Ablauf einer Versorgungsmessung.</figcaption></figure>
 
 <h2>GPS-Maus anschließen</h2>
 <ol class="steps">
@@ -666,8 +648,8 @@ sdrpp</pre></li>
 <p>Der CSV-Log (Spalten <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) lässt sich direkt in QGIS (<i>Getrennte Textdatei</i>, Trennzeichen Semikolon) oder einer Tabellenkalkulation öffnen, z. B. für eigene Heatmaps oder Profile entlang einer Strecke.</p>
 </div>
 <div>
-<figure><img src="shots/map_level.png"><figcaption>Abb. 15 – Versorgungskarte „Level“ mit Heatmap (synthetische Beispielfahrt).</figcaption></figure>
-<figure><img src="shots/map_quality.png"><figcaption>Abb. 16 – Karte „Quality (CRC)“ derselben Fahrt.</figcaption></figure>
+<figure><img src="shots/map_level.png"><figcaption>Abb. 14 – Versorgungskarte „Level“ mit Heatmap (synthetische Beispielfahrt).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Abb. 15 – Karte „Quality (CRC)“ derselben Fahrt.</figcaption></figure>
 </div>
 </div>
 <div class="box"><b class="t">Gute Heatmaps</b>Langsam fahren oder öfter dieselbe Strecke – jede Sekunde ist ein Punkt. Bei hoher Geschwindigkeit liegen die Punkte weit auseinander. Messungen mit unterschiedlicher Antenne oder Verstärkung nicht mischen.</div>
@@ -721,7 +703,7 @@ sdrpp</pre></li>
   <li><span class="ui">Burst analysis</span> starten, <span class="ui">Ramp spectrum</span> an; unter <span class="ui">Time mask</span> die Sendeleistung des Geräts eintragen.</li>
   <li><span class="ui">Linearity check</span> durchführen; erst wenn sie „OK – linear“ meldet, sind die Werte gültig.</li>
   <li>Mit dem Gerät einige Durchgänge sprechen (oder SDS senden); Empfänger nahe am Gerät (Dämpfung beachten!).</li>
-  <li>Burstlänge, Rampen, Welligkeit und Maske prüfen; Rampen-Spektrum auf Splatter ansehen. Die Zeitlage gegenüber dem Downlink braucht SDR-Spanne über beide Frequenzen (≥ 12 MS/s) und ähnliche Pegel – meist entbehrlich.</li>
+  <li>Burstlänge, Rampen, Welligkeit und Maske prüfen; Rampen-Spektrum auf Splatter ansehen.</li>
 </ol></div>
 
 <div class="scen"><h3>F · Störungssuche am Relais-Empfänger</h3>
@@ -757,13 +739,11 @@ sdrpp</pre></li>
 <tr><td>Frequenz weicht ab</td><td>SDR kalibrieren (Kapitel 4.3) oder externe Referenz verwenden.</td></tr>
 <tr><td>Kein Ton</td><td>Unter <span class="ui">Sinks</span> beim TETRA Demodulator ein Audiogerät wählen; Lautstärke im TETRA-Menü; verschlüsselte Rufe sind nicht hörbar.</td></tr>
 <tr><td>Burst-Analyse: „outside the SDR span“</td><td>Uplink liegt außerhalb der Bandbreite – Abtastrate erhöhen oder Mittenfrequenz verschieben.</td></tr>
-<tr><td>Timing: „slot grid not found“</td><td>TETRA-VFO muss auf dem Downlink derselben Zelle liegen und eingerastet sein.</td></tr>
 <tr><td>Windows blockiert den Download</td><td>In der Download-Liste des Browsers „Behalten“ wählen; danach SmartScreen-Hinweis bestätigen.</td></tr>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
 <tr><td>SDRplay erscheint nicht</td><td>SDRplay-API installieren und Dienst starten; unter Linux wird die API nicht mitgeliefert.</td></tr>
-<tr><td>Burst-Analyse findet keine Bursts</td><td>Uplink liegt außerhalb der SDR-Spanne (rote Meldung im Burst-Panel). Bei 9,4 MHz Duplexabstand braucht man mindestens 12 MS/s, Mitte zwischen Downlink und Uplink. Sonst Quelle <span class="ui">Manual frequency</span> und das SDR nur auf den Uplink stellen (ohne Zeitbezug zum Downlink). Das Funkgerät muss im Netzbetrieb (TMO) angemeldet sein.</td></tr>
+<tr><td>Burst-Analyse findet keine Bursts</td><td>Uplink liegt außerhalb der SDR-Spanne (rote Meldung im Burst-Panel). Bei 9,4 MHz Duplexabstand braucht man mindestens 12 MS/s, Mitte zwischen Downlink und Uplink. Sonst Quelle <span class="ui">Manual frequency</span> und das SDR nur auf den Uplink stellen. Das Funkgerät muss im Netzbetrieb (TMO) angemeldet sein.</td></tr>
 <tr><td><span class="ui">Linearity check</span>: RECEIVER COMPRESSED</td><td>Die Burstleistung ist um weniger als die zusätzliche Dämpfung gesunken: Der Empfänger war übersteuert. Dämpfung drinlassen und mit einem weiteren Schritt prüfen, bis „OK – linear“ erscheint.</td></tr>
-<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>Der Downlink wird während der Bursts schwächer: Das starke Funkgerät übersteuert den Empfänger (analog, vor dem Wandler; die Software-Verstärkung zu senken reicht oft nicht). Abstand vergrößern, Abschwächer (30–40 dB) oder Auskoppler mit Dummy-Load. Grenze: 1 dB, gemittelt über 20 Bursts; braucht den Downlink in der SDR-Spanne.</td></tr>
 <tr><td>Pluto als Laufwerk sichtbar, aber nicht in SDR++</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span>.</td></tr>
 </table>
 

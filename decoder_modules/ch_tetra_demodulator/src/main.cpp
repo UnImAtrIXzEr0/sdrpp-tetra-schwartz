@@ -191,9 +191,7 @@ public:
         if (config.conf[name].contains("crcLimit")) { evalView.crcLimit = config.conf[name]["crcLimit"]; }
         if (config.conf[name].contains("burst") && config.conf[name]["burst"].is_object()) {
             json& b = config.conf[name]["burst"];
-            // from v0.22.2 the uplink is measured alone by default (timing vs. the
-            // downlink only on request): older saved values are not taken over
-            if (b.contains("timing") && b.contains("ulOnlyV222")) { burstSt.timing = b["timing"]; }
+            // "timing" / "ulOnlyV222" (burst timing vs. the downlink, removed) are ignored
             if (b.contains("linStepDb")) { burstSt.linStepDb = std::clamp((float)b["linStepDb"], 3.0f, 30.0f); }
             if (b.contains("transients")) { burstSt.transients = b["transients"]; }
             if (b.contains("stdMask")) { burstSt.stdMask = b["stdMask"]; }
@@ -550,10 +548,9 @@ public:
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_burst_freq") {
-            // manual burst frequency in Hz, timing against the TETRA VFO
+            // manual burst frequency in Hz
             burstSt.source = 1;
             burstSt.manualMHz = atof(args.c_str()) / 1e6;
-            burstSt.timing = true;
             burstSt.transients = true;
             burstRun = true;
             return "{\"status\": \"ok\"}";
@@ -628,10 +625,10 @@ public:
                      "\"aach_count\": %u, \"aach_traffic\": %u, \"trend_points\": %d, "
                      "\"burst_n_full\": %llu, \"burst_n_half\": %llu, \"burst_len_sym\": %.2f, \"burst_rise_sym\": %.2f, \"burst_fall_sym\": %.2f, "
                      "\"burst_ripple_pos_db\": %.2f, \"burst_ripple_neg_db\": %.2f, \"burst_off_dbc\": %.1f, \"burst_floor_dbc\": %.1f, "
-                     "\"burst_gap_dbfs\": %.1f, \"burst_timing_sym\": %.3f, \"burst_timing_std\": %.3f, \"burst_timing_n\": %d, \"burst_slot_quality\": %.1f, "
+                     "\"burst_gap_dbfs\": %.1f, "
                      "\"burst_trans_up_p25\": %.1f, \"burst_trans_mid_p25\": %.1f, \"burst_trans_n\": %d, "
                      "\"mp_valid\": %s, \"mp_slots\": %d, \"mp_quality\": %.1f, \"mp_echo_us\": %.1f, \"mp_echo_db\": %.1f, \"mp_spread_us\": %.1f, "
-                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"burst_desense_db\": %.2f, \"burst_desense_n\": %d, \"freq_ref\": %d, \"vem_grid\": %s, \"vem_n\": %d, \"vem_measured\": %llu, \"vem_rejected\": %llu, \"vem_rms_pct\": %.3f, \"vem_rms_max_pct\": %.3f, \"vem_peak_pct\": %.2f, \"vem_c0_pct\": %.3f}",
+                     "\"alarms_total\": %d, \"alarm_active\": %s, \"band_valid\": %s, \"band_peak_dbfs\": %.1f, \"band_snr_db\": %.1f, \"sections\": %d, \"freq_ref\": %d, \"vem_grid\": %s, \"vem_n\": %d, \"vem_measured\": %llu, \"vem_rejected\": %llu, \"vem_rms_pct\": %.3f, \"vem_rms_max_pct\": %.3f, \"vem_peak_pct\": %.2f, \"vem_c0_pct\": %.3f}",
                      m.valid ? "true" : "false", m.symSync ? "true" : "false", m.rxState, m.merDb, m.evmPct,
                      m.iqOffsetDb, symbolExtractor.getImageRejectionDb(), symbolExtractor.getPhaseErrDeg(), symbolExtractor.getAmpErrPct(),
                      m.inputRate, m.inputRatePpm, m.bursts, m.resyncSlip,
@@ -644,11 +641,11 @@ public:
                      tsAll, tsTraffic, (int)meas.trend().copy(0).size(),
                      (unsigned long long)br.nFull, (unsigned long long)br.nHalf, nz(br.lengthSym), nz(br.riseSym), nz(br.fallSym),
                      nz(br.ripplePosDb), nz(br.rippleNegDb), nz(br.offBeforeDbc), nz(br.floorDbc),
-                     nz(br.gapDbfs), nz(br.timingMeanSym), nz(br.timingStdSym), br.timingN, (double)burstAn.slotQuality(),
+                     nz(br.gapDbfs),
                      br.transValid ? (double)br.transDbc[0][3] : -999.0, br.transValid ? (double)br.transDbc[1][3] : -999.0, br.transN,
                      mpr.valid ? "true" : "false", mpr.slots, (double)mpr.quality, nz(mpr.mp.echoDelayUs), nz(mpr.mp.echoLevelDb), nz(mpr.mp.extraSpreadUs),
                      alarmTotal, alarmActive ? "true" : "false",
-                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), nz(br.desenseDb), br.desenseN, freqRef,
+                     bandRes.valid ? "true" : "false", nz(bandRes.peakDbfs), nz(bandRes.snrDb), (int)secOrder.size(), freqRef,
                      vr.gridValid ? "true" : "false", vr.n, (unsigned long long)vr.measured, (unsigned long long)vr.rejected,
                      vr.n ? vr.rmsMean * 100.0 : -999.0, vr.n ? vr.rmsMax * 100.0 : -999.0, vr.n ? vr.peakMax * 100.0 : -999.0, vr.n ? vr.c0Mean * 100.0 : -999.0);
             return b;
@@ -3788,8 +3785,8 @@ private:
         b["msClass4"] = burstSt.msClass4;
         b["msPowerKnown"] = burstSt.msPowerKnown;
         b["msPowerDbm"] = burstSt.msPowerDbm;
-        b["timing"] = burstSt.timing;
-        b["ulOnlyV222"] = true;
+        b.erase("timing");       // removed option (burst timing vs. the downlink)
+        b.erase("ulOnlyV222");
         b["linStepDb"] = burstSt.linStepDb;
         b["transients"] = burstSt.transients;
         b["floorSpan"] = burstSt.floorSpan;
@@ -3823,9 +3820,8 @@ private:
         if (burstSt.source == 0) { f = (double)meas.get().ulFreq; }
         else if (burstSt.source == 1) { f = burstSt.manualMHz * 1e6; }
         else { f = mainVfoFreq(); }
-        double dlTap = (burstSt.timing && burstSt.source != 2) ? mainVfoFreq() : 0.0;
         burstAn.setKnownCarrier(burstSt.source == 2 && osmotetradecoder.getRxState() == 2);
-        burstAn.loop(enabled && burstRun, f, dlTap);
+        burstAn.loop(enabled && burstRun, f);
         chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
         {
             TetraMeasSnapshot vm = meas.get();

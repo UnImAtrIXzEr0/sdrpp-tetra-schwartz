@@ -54,7 +54,7 @@
 </div>
 <div>
 <ul>
-  <li><b>Burst analysis</b> of handhelds: ramps, length, ripple, time mask, timing, ramp spectrum, noise on the uplink.</li>
+  <li><b>Burst analysis</b> of handhelds: ramps, length, ripple, time mask, ramp spectrum, noise on the uplink.</li>
   <li><b>Multipath</b>, <b>frequency stability</b> (Allan deviation) and <b>reception limit</b>.</li>
   <li><b>Long-term monitoring:</b> trends up to 24 h, CSV logs, alarms, measurement report.</li>
   <li><b>Coverage measurement</b> with a GPS mouse and maps for Google Earth and OpenStreetMap.</li>
@@ -80,7 +80,7 @@
   <line x1="282" y1="125" x2="330" y2="205" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <rect x="332" y="20" width="200" height="40" rx="7" fill="#e3edf7" stroke="#1d6fb8"/><text x="432" y="38" text-anchor="middle" font-weight="700" fill="#003a6c">TETRA VFO (72 kS/s)</text><text x="432" y="53" text-anchor="middle" fill="#5a6774" font-size="10.5">demodulator → decoder</text>
   <rect x="332" y="75" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="93" text-anchor="middle" font-weight="700" fill="#003a6c">TX analysis (250 kHz)</text><text x="432" y="108" text-anchor="middle" fill="#5a6774" font-size="10.5">spectrum, ACP, OBW</text>
-  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Bursts / multipath (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">uplink, downlink slot grid</text>
+  <rect x="332" y="130" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="148" text-anchor="middle" font-weight="700" fill="#003a6c">Bursts / multipath (144 kS/s)</text><text x="432" y="163" text-anchor="middle" fill="#5a6774" font-size="10.5">uplink bursts, downlink echoes</text>
   <rect x="332" y="185" width="200" height="40" rx="7" fill="#f1f5f9" stroke="#9fb0c2"/><text x="432" y="203" text-anchor="middle" font-weight="700" fill="#003a6c">More carriers (72 kS/s each)</text><text x="432" y="218" text-anchor="middle" fill="#5a6774" font-size="10.5">level, MER, offset</text>
   <line x1="532" y1="40" x2="590" y2="40" stroke="#5a6774" stroke-width="1.3" marker-end="url(#ar)"/>
   <rect x="592" y="15" width="255" height="50" rx="7" fill="#003a6c"/><text x="720" y="36" fill="#fff" text-anchor="middle" font-weight="700">Measurements · network · stations · audio</text><text x="720" y="53" fill="#cfe0f3" text-anchor="middle" font-size="10.5">every second → trends, CSV log, alarms</text>
@@ -215,7 +215,7 @@ sdrpp</pre></li>
 <h1 id="s4" class="pb"><span class="num">4</span>Setting up the SDR</h1>
 <h2>Basic rules</h2>
 <ul>
-  <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For burst timing (uplink and downlink at the same time) and additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
+  <li><b>Sample rate:</b> 1–2.4 MS/s are enough for one carrier. For uplink and downlink at the same time and for additional carriers the bandwidth must cover all frequencies – for 70 cm repeaters with 9.4 MHz duplex spacing that means ≥ 10 MS/s; otherwise make the measurements one after the other.</li>
   <li><b>Do not put the centre on the carrier:</b> the DC component of the SDR lies in the middle of the band. Tune the TETRA carrier at least ~100 kHz away from it, otherwise it falsifies the I/Q offset and carrier leakage.</li>
   <li><b>Level:</b> as much gain as needed, as little as possible. <span class="ui">Auto RF gain</span> looks for the best signal-to-noise ratio: it steps up by 3 dB while the ratio still improves and steps back once the noise floor only rises with the gain. It goes down at once when any signal in the whole SDR band (not only TETRA) reaches the ADC limit. The <span class="ui">Band</span> line shows this peak and the ratio.</li>
   <li><b>Gain mode</b> (from v0.20.4): <span class="ui">Level and hold</span> finds the best step once and then keeps it fixed – all results of a measurement series are taken with the same receiver settings. If the ADC nears clipping or the ratio drops by more than 6 dB, a note appears; <span class="ui">Re-level</span> levels again. <span class="ui">Follow</span> adjusts continuously. <span class="ui">Automatic (GPS)</span> (default) follows while moving (GPS above 5 km/h, averaged over 10 s) and holds after 30 s standing still or without GPS. With a level calibration (dBm) it may follow as well: the program remembers the gain when the calibration is entered and corrects the level by the difference from the SDR's gain table (about ±1 dB, shown as "gain-corrected"). Older calibrations without a remembered gain ask to be entered again; until then it holds.</li>
@@ -540,36 +540,18 @@ sdrpp</pre></li>
 <ol class="steps">
   <li>Switch on <span class="ui">Run burst analysis</span> and choose the frequency below: <span class="ui">Uplink (SYSINFO)</span>, <span class="ui">Manual frequency</span> (enter MHz) or <span class="ui">TETRA VFO</span>. The <span class="ui">Frequency</span> line shows what is measured.</li>
   <li><span class="ui">Averages</span> (1…500, default 200 per EN 300 394-1 8.4) sets how many bursts are averaged; <span class="ui">Reset</span> discards the bursts so far.</li>
-  <li><span class="ui">Also:</span> adds <span class="ui">Timing vs. downlink</span> and <span class="ui">Ramp spectrum</span> (both cost CPU time).</li>
+  <li><span class="ui">Also:</span> adds the <span class="ui">Ramp spectrum</span> (costs CPU time).</li>
   <li>Reading: <span class="ui">Floor</span> and <span class="ui">peak</span> (noise floor and peak in the channel), <span class="ui">Bursts</span> (counted full and half bursts, bursts/s), then <span class="ui">Burst power</span> and the shape values. Green = within the mask, red = outside. “No bursts detected”: nobody transmits; “continuous carrier”: a steady carrier instead of bursts.</li>
-  <li>If the downlink is received as well, <span class="ui">Overload check</span> tests whether the downlink gets weaker during the bursts (more than 1 dB = receiver overloaded, results invalid). Without the downlink the <span class="ui">Linearity check</span> (below) takes this place.</li>
+  <li>The <span class="ui">Linearity check</span> (below) shows whether the receiver is overloaded.</li>
 </ol>
 <p><b>Time mask</b> (expand): <span class="ui">Check against EN 300 392-2 6.4.5</span> (default on) checks against the standard (see below); <span class="ui">Station</span> selects <i>Mobile station (uplink)</i> or <i>Base station, discontinuous</i>; <span class="ui">MS power class 4 / 4L</span> relaxes the switching transient limit; <span class="ui">MS transmit power known</span> with a dBm value converts the absolute limits to dBc. Without the standard check the own mask applies: <span class="ui">Ripple +- dB</span> (default ±1 dB), <span class="ui">Outside dBc</span> (−40 dBc) and <span class="ui">Ramp max. sym</span> (rise/fall −20…−1 dBc within at most 5 symbols) – guide values for your own comparison.</p>
-<h3>Measuring the uplink alone and checking linearity (default from v0.22.2)</h3>
-<p>The figures the standard defines for the mobile – power versus time, time mask, switching transients, power outside the burst, adjacent channel power and modulation accuracy – concern the transmitted signal only; they do not need the downlink. So <span class="ui">Timing vs. downlink</span> is now off by default, and the SDR can run on the uplink alone with a low sample rate (1–2 MS/s, source <span class="ui">Manual frequency</span>). This relieves the computer and avoids the dynamic range problem: the repeater a few kilometres away is weak, the nearby radio 60–80 dB stronger – more than a 12-bit converter handles at the same time.</p>
-<p>Without the downlink there is no reference for overload. Its place is taken by the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares (<span class="ui">Check again</span> restarts the check): if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
+<h3>Measuring the uplink alone and checking linearity</h3>
+<p>The figures the standard defines for the mobile – power versus time, time mask, switching transients, power outside the burst, adjacent channel power and modulation accuracy – concern the transmitted signal only; they do not need the downlink. So the SDR can run on the uplink alone with a low sample rate (1–2 MS/s, source <span class="ui">Manual frequency</span>). This relieves the computer and avoids the dynamic range problem: the repeater a few kilometres away is weak, the nearby radio 60–80 dB stronger – more than a 12-bit converter handles at the same time.</p>
+<p>Overload is checked with the <span class="ui">Linearity check</span> (the usual lab method): hold the receiver gain (<span class="ui">Level and hold</span>), press <span class="ui">Note level</span>, insert the set attenuation in addition in front of the SDR (default 10 dB, external attenuator), press <span class="ui">Attenuator added</span>. After 20 bursts the program compares (<span class="ui">Check again</span> restarts the check): if the burst power drops by the attenuation ±0.5 dB, the receiver is linear. If it drops less, it was overloaded before – leave the attenuation in and check again with one more step. If it drops more, the radio changed its power (power control) or the attenuation value is wrong. Lowering the software gain is no substitute: it only tests the stages after the attenuator.</p>
 <p><b>Transmit power of the radio:</b> the absolute limits of the standard (−36 dBm for the power outside the burst and for switching transients) refer to the antenna connector of the radio. Over the air the received level says nothing about it (path loss). Under <span class="ui">Time mask</span> → <span class="ui">MS transmit power known</span> enter the transmit power (e.g. 12.6 dBm for 18 mW, 32.6 dBm for 1.8 W); the dBc limit follows as Lmin = max(−70 dBc; −36 dBm − P). Without an entry −70 dBc applies.</p>
-<h3>Timing relative to the downlink (optional)</h3>
-<p>With <span class="ui">Timing vs. downlink</span> the program opens a second, sample-aligned tap on the TETRA VFO (downlink of the same cell), finds the slot grid there and measures when each burst rises after the start of its uplink timeslot. Most important is the <b>comparison between radios</b> and the spread; the absolute value also contains propagation differences (3.3 µs per km of detour).</p>
 </div>
-<div><figure><img src="shots/win_bursts.png"><figcaption>Fig. 10 – Burst analysis with profile, timing and ramp spectrum (synthetic test signal).</figcaption></figure></div>
+<div><figure><img src="shots/win_bursts.png"><figcaption>Fig. 10 – Burst analysis with profile and ramp spectrum (synthetic test signal).</figcaption></figure></div>
 </div>
-<figure>
-<svg viewBox="0 0 860 150" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="11.5">
-  <text x="10" y="32" fill="#003a6c" font-weight="700">Downlink</text>
-  <text x="10" y="102" fill="#003a6c" font-weight="700">Uplink</text>
-  <g stroke="#9fb0c2" fill="#e3edf7">
-    <rect x="90" y="15" width="150" height="28"/><rect x="240" y="15" width="150" height="28"/><rect x="390" y="15" width="150" height="28"/><rect x="540" y="15" width="150" height="28"/><rect x="690" y="15" width="150" height="28"/>
-    <rect x="90" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="240" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="390" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="540" y="85" width="150" height="28" fill="#f1f5f9"/><rect x="690" y="85" width="150" height="28" fill="#f1f5f9"/>
-  </g>
-  <g fill="#003a6c" text-anchor="middle"><text x="165" y="34">TS1</text><text x="315" y="34">TS2</text><text x="465" y="34">TS3</text><text x="615" y="34">TS4</text><text x="765" y="34">TS1</text></g>
-  <g fill="#5a6774" text-anchor="middle"><text x="165" y="104">TS3</text><text x="315" y="104">TS4</text><text x="765" y="104">TS2</text><text x="615" y="104">TS1</text></g>
-  <rect x="398" y="88" width="136" height="22" rx="3" fill="#1d6fb8"/><text x="466" y="103" fill="#fff" text-anchor="middle" font-weight="700">Burst (TS1)</text>
-  <path d="M390,65 L390,120" stroke="#c0392b" stroke-dasharray="4 3"/>
-  <path d="M390,128 L398,128" stroke="#c0392b" stroke-width="2"/><text x="400" y="142" fill="#c0392b">measured timing</text>
-  <path d="M90,52 C200,52 280,70 390,78" stroke="#5a6774" fill="none" marker-end="url(#ar)"/><text x="160" y="68" fill="#5a6774">uplink = downlink + 2 timeslots</text>
-</svg>
-<figcaption>Fig. 11 – Slot grid: the uplink is offset from the downlink by two timeslots (2 × 14.17 ms).</figcaption></figure>
 
 <h3>Ramp spectrum (switching transients)</h3>
 <p>Most of the interference in the adjacent channels is produced when switching on and off. <span class="ui">Ramp spectrum</span> measures the channel power at −50, −25, ±0, +25, +50 kHz in 1.8 ms windows during the ramp-up, in the middle and during the ramp-down, relative to the middle. Orange: ramp more than 6 dB above the middle (splatter).</p>
@@ -589,7 +571,7 @@ sdrpp</pre></li>
 </ul>
 <p>Echoes from about 55 µs (17 km detour) to 222 µs are detected; shorter ones only widen the main path. TETRA receivers cope with echoes up to about ¼ symbol (14 µs) without loss. <span class="ui">Averaging</span>: 2 s for drives, 60 s or unlimited for fixed locations.</p>
 </div>
-<div><figure><img src="shots/win_multipath.png"><figcaption>Fig. 12 – Multipath profile with an echo at 111 µs (synthetic test signal).</figcaption></figure></div>
+<div><figure><img src="shots/win_multipath.png"><figcaption>Fig. 11 – Multipath profile with an echo at 111 µs (synthetic test signal).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -620,7 +602,7 @@ sdrpp</pre></li>
 </ul>
 <p>The period is the time span selected under <span class="ui">Trends</span> (or the loaded log). Location, antenna or occasion can be entered under <span class="ui">Notes</span>. After creating it, the file name and three buttons appear: <span class="ui">Open</span> (open in the browser), <span class="ui">Open folder</span> (log folder in the file manager) and <span class="ui">Copy path</span> (path to the clipboard). As PDF: print in the browser → “Save as PDF”.</p>
 </div>
-<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Fig. 13 – Measurement report (excerpt).</figcaption></figure></div>
+<div><figure><img src="shots/report.png" onerror="this.closest('figure').style.display='none'"><figcaption>Fig. 12 – Measurement report (excerpt).</figcaption></figure></div>
 </div>
 
 <!-- ============================================================ -->
@@ -637,7 +619,7 @@ sdrpp</pre></li>
   </g>
   <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
 </svg>
-<figcaption>Fig. 14 – Steps of a coverage measurement.</figcaption></figure>
+<figcaption>Fig. 13 – Steps of a coverage measurement.</figcaption></figure>
 
 <h2>Connecting the GPS mouse</h2>
 <ol class="steps">
@@ -666,8 +648,8 @@ sdrpp</pre></li>
 <p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route.</p>
 </div>
 <div>
-<figure><img src="shots/map_level.png"><figcaption>Fig. 15 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
-<figure><img src="shots/map_quality.png"><figcaption>Fig. 16 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
+<figure><img src="shots/map_level.png"><figcaption>Fig. 14 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Fig. 15 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
 </div>
 </div>
 <div class="box"><b class="t">Good heatmaps</b>Drive slowly or cover the same route several times – every second is one point. At high speed the points are far apart. Do not mix measurements with different antennas or gain.</div>
@@ -721,7 +703,7 @@ sdrpp</pre></li>
   <li>Start <span class="ui">Burst analysis</span>, switch on <span class="ui">Ramp spectrum</span>; enter the transmit power of the radio under <span class="ui">Time mask</span>.</li>
   <li>Run the <span class="ui">Linearity check</span>; the figures are valid only once it reports “OK – linear”.</li>
   <li>Make a few transmissions with the radio (or send an SDS); receiver close to the radio (mind the attenuation!).</li>
-  <li>Check burst length, ramps, ripple and mask; look at the ramp spectrum for splatter. Timing against the downlink needs an SDR span over both frequencies (≥ 12 MS/s) and similar levels – usually not needed.</li>
+  <li>Check burst length, ramps, ripple and mask; look at the ramp spectrum for splatter.</li>
 </ol></div>
 
 <div class="scen"><h3>F · Hunting interference at the repeater receiver</h3>
@@ -757,13 +739,11 @@ sdrpp</pre></li>
 <tr><td>Frequency deviates</td><td>Calibrate the SDR (chapter 4.3) or use an external reference.</td></tr>
 <tr><td>No audio</td><td>Choose an audio device for the TETRA demodulator under <span class="ui">Sinks</span>; volume in the TETRA menu; encrypted calls cannot be heard.</td></tr>
 <tr><td>Burst analysis: “outside the SDR span”</td><td>The uplink lies outside the bandwidth – raise the sample rate or move the centre frequency.</td></tr>
-<tr><td>Timing: “slot grid not found”</td><td>The TETRA VFO must be on the downlink of the same cell and locked.</td></tr>
 <tr><td>Windows blocks the download</td><td>Choose “Keep” in the browser's download list; then confirm the SmartScreen notice.</td></tr>
 <tr><td>AppImage does not start</td><td>Install <code>libfuse2t64</code>; make the file executable.</td></tr>
 <tr><td>SDRplay does not appear</td><td>Install the SDRplay API and start the service; on Linux the API is not bundled.</td></tr>
-<tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only (no timing reference to the downlink). The radio must be registered in trunked mode (TMO).</td></tr>
+<tr><td>Burst analysis finds no bursts</td><td>The uplink is outside the SDR span (red note in the burst panel). A 9.4 MHz duplex spacing needs at least 12 MS/s, centred between downlink and uplink. Otherwise choose the source <span class="ui">Manual frequency</span> and tune the SDR to the uplink only. The radio must be registered in trunked mode (TMO).</td></tr>
 <tr><td><span class="ui">Linearity check</span>: RECEIVER COMPRESSED</td><td>The burst power dropped by less than the added attenuation: the receiver was overloaded. Leave the attenuation in and check again with one more step until “OK – linear” appears.</td></tr>
-<tr><td><span class="ui">Overload check</span>: RECEIVER OVERLOADED</td><td>The downlink gets weaker during the bursts: the strong radio overloads the receiver (analog, before the ADC; lowering the gain in the software is often not enough). Increase the distance, add an attenuator (30–40 dB) or use a coupler and dummy load. Limit: 1 dB, averaged over 20 bursts; needs the downlink in the SDR span.</td></tr>
 <tr><td>Pluto shows up as a drive but not in SDR++</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span>.</td></tr>
 </table>
 
