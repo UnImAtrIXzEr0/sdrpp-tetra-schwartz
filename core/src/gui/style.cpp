@@ -60,8 +60,8 @@ namespace style {
         // TETRA-SCHWARTZ: one family (Roboto), Regular for text, Medium for values
         std::string regular = resDir + "/fonts/Roboto-Regular.ttf";
         if (!std::filesystem::is_regular_file(wstr::str2wstr(regular))) { regular = resDir + "/fonts/Roboto-Medium.ttf"; }
-        baseFont = fonts->AddFontFromFileTTF(regular.c_str(), 16.0f * uiScale, NULL, baseRanges.Data);
-        valueFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 20.0f * uiScale, NULL, baseRanges.Data);
+        baseFont = fonts->AddFontFromFileTTF(regular.c_str(), 18.0f * uiScale, NULL, baseRanges.Data);
+        valueFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 22.0f * uiScale, NULL, baseRanges.Data);
         mediumFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 25.0f * uiScale, NULL, baseRanges.Data);
         bigFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 45.0f * uiScale, NULL, bigRanges.Data);
         hugeFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 128.0f * uiScale, NULL, hugeRanges.Data);

@@ -3270,7 +3270,7 @@ private:
         }
         // softkey column on the right and content column on the far left, both with a
         // fixed width (the width the content needs, no splitter)
-        instSideW = instSoftW() + 2.0f * ImGui::GetStyle().WindowPadding.x;
+        instSideW = instSoftW();
         gui::mainWindow.sidePanelFixed = true;
         float leftW = instContentW();
         if (!instLeftReg || std::fabs(leftW - instLeftW) > 0.5f) {
@@ -3458,7 +3458,9 @@ private:
         float rw = ImGui::CalcTextSize(ui_text::T(rl)).x + ImGui::CalcTextSize(right.c_str()).x + ImGui::GetFontSize() * 1.2f;
         float x = ImGui::GetWindowContentRegionMax().x - rw;
         ImGui::SameLine();
-        if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
+        // narrow window: the right item is left out rather than drawn over the values
+        if (x <= ImGui::GetCursorPosX()) { return; }
+        ImGui::SetCursorPosX(x);
         ImGui::TextDisabled("%s", ui_text::T(rl));
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 0.35f);
         ImGui::TextColored(rc, "%s", right.c_str());
@@ -3511,8 +3513,22 @@ private:
         if (disabled) { ImGui::TextDisabled("%s", txt); } else { ImGui::TextUnformatted(txt); }
         ImGui::PopFont();
     }
-    float instSoftW() { return (std::max)(200.0f * style::uiScale, ImGui::GetFontSize() * 14.0f); }
-
+    // softkey column: as wide as the longest softkey text in the current language
+    float instSoftW() {
+        static const char* keys[] = { "Monitor", "Measure", "Drive test", "Alignment", "Spectrum", "Constellation",
+                                      "TX spectrum (ACP)", "Burst (uplink)", "Carriers", "Trends", "Multipath",
+                                      "Reset statistics", "Start CSV log", "Stop CSV log", "Create report", "Open log...",
+                                      "Lock cell", "Unlock cell", "Export map", "Set reference", "Play anyway", "Cell details",
+                                      "RF / Gain", "Settings", "Limits: mobile station", "Limits: base station" };
+        static const char* toggles[] = { "Mute encrypted", "Hide call control", "8 points (pi/4)", "Remove I/Q offset",
+                                         "Analysis", "Channel raster", "Overload check", "Ramp spectrum", "Delta to reference", "Hold" };
+        float w = 0.0f;
+        for (const char* k : keys) { w = (std::max)(w, ImGui::CalcTextSize(ui_text::T(k)).x); }
+        float st = (std::max)(ImGui::CalcTextSize((std::string(": ") + ui_text::T("ON")).c_str()).x,
+                              ImGui::CalcTextSize((std::string(": ") + ui_text::T("OFF")).c_str()).x);
+        for (const char* k : toggles) { w = (std::max)(w, ImGui::CalcTextSize(ui_text::T(k)).x + st); }
+        return w + 2.0f * ImGui::GetStyle().FramePadding.x + 2.0f * ImGui::GetStyle().WindowPadding.x;
+    }
     // fixed column widths of the measured values: longest label / value / limit
     // in the current language
     void measColWidths(float& a, float& b, float& c) {
@@ -3550,11 +3566,12 @@ private:
         instHeader(ui_text::T("Trends (10 min)"), w);
         double dl = mainVfoFreq();
         // freq. error: against the SYSINFO frequency (ppb) where known, else the carrier offset
+        // values outside what the decoder can lock to are start-up artefacts: left out
         auto fErr = [&](const TetraTrendPoint& p) -> float {
-            if (!std::isnan(p.ppb) && dl > 1e6) { return (float)(p.ppb * dl * 1e-9); }
-            return p.carrierHz;
+            float v = (!std::isnan(p.ppb) && dl > 1e6) ? (float)(p.ppb * dl * 1e-9) : p.carrierHz;
+            return (std::fabs(v) <= 15000.0f) ? v : NAN;
         };
-        miniPlot("Level", w, [](const TetraTrendPoint& p) { return p.level; }, (miniPts.empty() || !miniPts.back().calibrated) ? "%.1f dBFS" : "%.1f dBm", 3.0f);
+        miniPlot("Level", w, [](const TetraTrendPoint& p) { return p.level > -149.0f ? p.level : NAN; }, (miniPts.empty() || !miniPts.back().calibrated) ? "%.1f dBFS" : "%.1f dBm", 3.0f);
         miniPlot("MER", w, [](const TetraTrendPoint& p) { return p.mer; }, "%.1f dB", 3.0f);
         miniPlot("Freq. error", w, fErr, "%+.0f Hz", 20.0f);
     }
