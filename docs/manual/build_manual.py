@@ -2,7 +2,7 @@
 """Render the manual (cover + body) to PDF with playwright/chromium, German and English.
 Usage: python3 build_manual.py [output folder]
 Screenshots are expected in docs/manual/shots (branch doc-shots, see e2e/doc/doc_screenshots.py)."""
-import os, pathlib, sys
+import os, pathlib, re, sys
 from playwright.sync_api import sync_playwright
 from pypdf import PdfReader, PdfWriter
 
@@ -10,7 +10,10 @@ here = pathlib.Path(__file__).resolve().parent
 outdir = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else here)
 tmp = here / "_build"
 tmp.mkdir(exist_ok=True)
-VERSION = "v0.23.7-beta"
+# version from the program source; stable versions carry "-beta", test versions not
+_src = (here.parent.parent / "decoder_modules/ch_tetra_demodulator/src/measurements.h").read_text()
+_ver = re.search(r'#define TETRA_PLUGIN_VERSION "([^"]+)"', _src).group(1)
+VERSION = f"v{_ver}" if "-test" in _ver else f"v{_ver}-beta"
 
 LANGS = {
     "de": dict(cover="manual_cover.html", body="manual_body.html",
@@ -32,8 +35,12 @@ with sync_playwright() as p:
         footer = ('<div style="width:100%;font-family:Inter,sans-serif;font-size:7.5pt;color:#5a6774;'
                   'padding:0 17mm;display:flex;justify-content:space-between">'
                   f'<span>{c["foot"]}</span><span><span class="pageNumber"></span></span></div>')
-        pg.goto((here / c["cover"]).as_uri()); pg.wait_for_load_state("networkidle")
+        # the cover carries the placeholder {VERSION}; the filled copy sits next to it (relative paths)
+        cover = here / f"_cover_{lang}.html"
+        cover.write_text((here / c["cover"]).read_text(encoding="utf-8").replace("{VERSION}", VERSION), encoding="utf-8")
+        pg.goto(cover.as_uri()); pg.wait_for_load_state("networkidle")
         pg.pdf(path=str(tmp / f"cover_{lang}.pdf"), format="A4", print_background=True, prefer_css_page_size=True)
+        cover.unlink()
         pg.goto((here / c["body"]).as_uri()); pg.wait_for_load_state("networkidle")
         pg.pdf(path=str(tmp / f"body_{lang}.pdf"), format="A4", print_background=True, prefer_css_page_size=True,
                display_header_footer=True, header_template="<div></div>", footer_template=footer)
