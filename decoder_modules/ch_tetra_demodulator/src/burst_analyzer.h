@@ -151,19 +151,19 @@ public:
     // ---- GUI ----
     // returns true when a setting was changed (to be saved)
     bool draw(const std::string& id, float width, const TetraConstellationView::Palette& pal, TetraBurstSettings& st,
-              double ulFreq, double vfoFreq, float levelCal, bool gainHeld, bool& run) {
+              double ulFreq, double vfoFreq, float levelCal, bool gainHeld, bool& run, bool inst = false) {
+        // inst: instrument view - run / overload check / ramp spectrum are softkeys there
         bool changed = false;
         ImVec4 val = tc::val(), good = tc::good(), bad = tc::bad(), warn = tc::warn();
-        if (ImGui::Checkbox(("Run burst analysis##_ba_run_" + id).c_str(), &run)) { changed = true; }
-        if (ImGui::IsItemHovered()) {
+        if (!inst && ImGui::Checkbox(("Run burst analysis##_ba_run_" + id).c_str(), &run)) { changed = true; }
+        if (!inst && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Power versus time of TETRA bursts (mobile stations on the uplink,\n"
                               "or a base station in discontinuous mode) through a 25 kHz filter.\n"
                               "Separate tap, not shown on the waterfall. The frequency must be\n"
                               "inside the SDR bandwidth.");
         }
         const char* srcNames = "Uplink (SYSINFO)\0Manual frequency\0TETRA VFO\0";
-        ImGui::SetNextItemWidth((std::min)(width, 170.0f * style::uiScale));
-        if (ImGui::Combo(("##_ba_src_" + id).c_str(), &st.source, srcNames)) { changed = true; reset(); }
+        if (tw::Segmented(("_ba_src_" + id).c_str(), &st.source, srcNames)) { changed = true; reset(); }
         if (st.source == 1) {
             tw::SameNext();
             ImGui::SetNextItemWidth((std::min)(width, 120.0f * style::uiScale));
@@ -182,7 +182,7 @@ public:
         if (tw::SameButtonOrFull(("Reset##_ba_rst_" + id).c_str())) { reset(); }
         setAverages(st.averages);
         setTransients(st.transients);
-        {
+        if (!inst) {
             std::string l0 = "Overload check##_ba_ovl_" + id, l1 = "Ramp spectrum##_ba_tr_" + id;
             tw::CheckRow row;
             row.add(l0.c_str(), &st.overloadCheck);

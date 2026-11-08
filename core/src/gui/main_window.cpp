@@ -410,7 +410,18 @@ void MainWindow::drawUpperLine(ImGui::WaterfallVFO* vfo) {
     ImGui::SameLine();
 
     ImGui::SetCursorPosY(origY);
-    if (tuningMode == tuner::TUNER_MODE_CENTER) {
+    // TETRA-SCHWARTZ: compact top bar (instrument view): normal tuning only - centre
+    // tuning would put the channel onto the DC spike in the middle of the SDR band
+    if (compactTopBar) {
+        if (tuningMode != tuner::TUNER_MODE_NORMAL) {
+            tuningMode = tuner::TUNER_MODE_NORMAL;
+            gui::waterfall.VFOMoveSingleClick = false;
+            core::configManager.acquire();
+            core::configManager.conf["centerTuning"] = false;
+            core::configManager.release(true);
+        }
+    }
+    else if (tuningMode == tuner::TUNER_MODE_CENTER) {
         ImGui::PushID(ImGui::GetID("sdrpp_ena_st_btn"));
         if (ImGui::ImageButton(icons::CENTER_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
             tuningMode = tuner::TUNER_MODE_NORMAL;
@@ -446,7 +457,8 @@ void MainWindow::drawUpperLine(ImGui::WaterfallVFO* vfo) {
 
     // VFO selector: pick which VFO the frequency display / waterfall clicks act on,
     // optionally locked so clicks inside another VFO don't switch to it.
-    {
+    // (not in the compact top bar: one VFO only)
+    if (!compactTopBar) {
         ImGui::SetCursorPosY(origY + (btnSize.y - ImGui::GetFrameHeight()) * 0.5f + 5.0f * style::uiScale);
         std::string cur = gui::waterfall.selectedVFO.empty() ? "(none)" : gui::waterfall.selectedVFO;
         ImGui::SetNextItemWidth(170.0f * style::uiScale);
@@ -477,6 +489,8 @@ void MainWindow::drawUpperLine(ImGui::WaterfallVFO* vfo) {
         ImGui::SameLine();
     }
 
+    // compact top bar: level and MER are in the module's status bar
+    if (compactTopBar) { return; }
     int snrOffset = 87.0f * style::uiScale;
     int snrWidth = std::clamp<int>(ImGui::GetWindowSize().x - ImGui::GetCursorPosX() - snrOffset, 100.0f * style::uiScale, 300.0f * style::uiScale);
     int snrPos = std::max<int>(ImGui::GetWindowSize().x - (snrWidth + snrOffset), ImGui::GetCursorPosX());

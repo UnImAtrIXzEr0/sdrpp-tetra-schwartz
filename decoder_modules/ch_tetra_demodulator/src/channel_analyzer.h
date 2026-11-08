@@ -84,10 +84,11 @@ public:
     }
 
     // ---- GUI; returns true when a setting changed ----
-    bool draw(const std::string& id, float width, const TetraConstellationView::Palette& pal, bool& run, int& memIdx) {
+    bool draw(const std::string& id, float width, const TetraConstellationView::Palette& pal, bool& run, int& memIdx, bool inst = false) {
+        // inst: instrument view - "Analysis" is a softkey there
         bool changed = false;
-        if (ImGui::Checkbox(("Run multipath analysis##_mp_run_" + id).c_str(), &run)) { changed = true; }
-        if (ImGui::IsItemHovered()) {
+        if (!inst && ImGui::Checkbox(("Run multipath analysis##_mp_run_" + id).c_str(), &run)) { changed = true; }
+        if (!inst && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Channel estimate from the training sequences of the downlink bursts of\n"
                               "the TETRA VFO (separate tap). Echoes from about 55 us (17 km detour)\n"
                               "up to 222 us are shown separately; shorter ones widen the main path.\n"

@@ -460,8 +460,53 @@ namespace tw {
         return ImGui::Button(label, ImVec2(ImGui::GetContentRegionAvail().x, 0));
     }
 
-    // A row of checkboxes: one line if everything fits, otherwise the label on
-    // its own line and the boxes in as many columns as fit (2 typically).
+    // On/off chip (pill-shaped toggle): filled = on, outlined = off. Used for
+    // "what to show" choices on the measuring surface instead of checkboxes.
+    inline float chipWidth(const char* label) { return textWidth(label) + 2.0f * ImGui::GetStyle().FramePadding.x + 2.0f; }
+    inline bool Chip(const char* label, bool* v, bool enabled = true) {
+        ImVec4 acc = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, ImGui::GetFrameHeight() * 0.5f);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Border, acc);
+        if (*v) {
+            ImGui::PushStyleColor(ImGuiCol_Button, acc);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_ButtonHovered));
+        }
+        else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImGui::GetStyleColorVec4(ImGuiCol_FrameBgHovered));
+        }
+        if (!enabled) { ImGui::BeginDisabled(); }
+        bool r = ImGui::Button(label);
+        if (!enabled) { ImGui::EndDisabled(); }
+        ImGui::PopStyleColor(3);
+        ImGui::PopStyleVar(2);
+        if (r) { *v = !*v; }
+        return r;
+    }
+
+    // One choice out of several as a row of joined buttons (like a combo,
+    // items separated by '\0', list ended by "\0\0"); returns true on a change
+    inline bool Segmented(const char* id, int* v, const char* itemsZ) {
+        bool ch = false;
+        ImVec4 on = ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(1.0f, ImGui::GetStyle().ItemSpacing.y));
+        int i = 0;
+        for (const char* p = itemsZ; *p; p += strlen(p) + 1, i++) {
+            if (i > 0) { ImGui::SameLine(); }
+            bool sel = (*v == i);
+            if (sel) { ImGui::PushStyleColor(ImGuiCol_Button, on); }
+            char lbl[160];
+            snprintf(lbl, sizeof(lbl), "%s##%s_%d", p, id, i);
+            if (ImGui::Button(lbl) && !sel) { *v = i; ch = true; }
+            if (sel) { ImGui::PopStyleColor(); }
+        }
+        ImGui::PopStyleVar();
+        return ch;
+    }
+
+    // A row of on/off chips: one line if everything fits, otherwise the label on
+    // its own line and the chips in as many columns as fit (2 typically).
     struct CheckRow {
         const char* labels[8];
         bool* values[8];
@@ -475,15 +520,13 @@ namespace tw {
             float total = textWidth(title) + st.ItemSpacing.x;
             float maxw = 0;
             for (int i = 0; i < n; i++) {
-                float w = checkboxWidth(labels[i]);
+                float w = chipWidth(labels[i]);
                 total += w + st.ItemSpacing.x;
                 maxw = (std::max)(maxw, w);
             }
             int changed = -1;
             auto box = [&](int i) {
-                if (!enabled[i]) { ImGui::BeginDisabled(); }
-                if (ImGui::Checkbox(labels[i], values[i])) { changed = i; }
-                if (!enabled[i]) { ImGui::EndDisabled(); }
+                if (Chip(labels[i], values[i], enabled[i])) { changed = i; }
             };
             if (total <= avail) {
                 ImGui::TextUnformatted(title);

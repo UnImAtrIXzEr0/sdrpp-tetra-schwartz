@@ -669,7 +669,14 @@ def test_instrument_ui():
         if not alive(ctx):
             stats.test_fail("test_instrument_ui", "SDR++ stopped while switching modes/views")
             return False
-        m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
+        # the decoder must be (or get again) locked; the views started analyses
+        # (more load), so allow a few seconds for a re-lock (e.g. at the file wrap)
+        m = None
+        for _ in range(8):
+            m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
+            if m and m.get("rx_state") == 2:
+                break
+            ctx.sleep(1.0)
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False

@@ -82,6 +82,8 @@ public:
     bool showMenu = true;
     // TETRA-SCHWARTZ: a module shows all settings itself - no menu column, no menu button
     bool menuDisabled = false;
+    // TETRA-SCHWARTZ: top bar without VFO selector, tuning-mode button and SNR meter
+    bool compactTopBar = false;
 
     // Mic stream handling
     dsp::stream<dsp::stereo_t> micStream;

@@ -38,21 +38,30 @@ bool FileSelect::render(std::string id) {
         ImGui::PopStyleColor();
     }
     ImGui::SameLine();
-    if (ImGui::Button(("..." + id + "_winselect").c_str(), ImVec2(buttonWidth - 8.0f, 0)) && !dialogOpen) {
-        dialogOpen = true;
-#if __APPLE__
-        // On macOS, run dialog synchronously on main thread to avoid WindowServer/threading issues
-        worker();
-#else
-        // On other platforms, use background thread
-        if (workerThread.joinable()) { workerThread.join(); }
-        workerThread = std::thread(&FileSelect::worker, this);
-#endif
-    }
+    if (ImGui::Button(("..." + id + "_winselect").c_str(), ImVec2(buttonWidth - 8.0f, 0))) { openDialog(); }
 
     _pathChanged |= pathChanged;
     pathChanged = false;
     return _pathChanged;
+}
+
+void FileSelect::openDialog() {
+    if (dialogOpen) { return; }
+    dialogOpen = true;
+#if __APPLE__
+    // On macOS, run dialog synchronously on main thread to avoid WindowServer/threading issues
+    worker();
+#else
+    // On other platforms, use background thread
+    if (workerThread.joinable()) { workerThread.join(); }
+    workerThread = std::thread(&FileSelect::worker, this);
+#endif
+}
+
+bool FileSelect::pollChanged() {
+    bool c = pathChanged;
+    pathChanged = false;
+    return c;
 }
 
 void FileSelect::setPath(std::string path, bool markChanged) {

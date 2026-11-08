@@ -1095,20 +1095,15 @@ private:
         tw::Text("Audio:"); ImGui::SameLine();
         sigpath::sinkManager.showVolumeSlider(_this->name, "##_tetra_vol_", menuWidth - ImGui::GetCursorPosX(), 0, 2, false);
         _this->drawListen(menuWidth);
-        if (ImGui::RadioButton(CONCAT("ETSI##_tetra_mode_etsi_", _this->name), !_this->hamMode) && _this->hamMode) {
-            _this->hamMode = false;
-            _this->applyDuplexMode();
-            config.acquire();
-            config.conf[_this->name]["hamMode"] = false;
-            config.release(true);
-        }
-        tw::SameLineFor(tw::checkboxWidth("Amateur radio"));
-        if (ImGui::RadioButton(CONCAT("Amateur radio##_tetra_mode_ham_", _this->name), _this->hamMode) && !_this->hamMode) {
-            _this->hamMode = true;
-            _this->applyDuplexMode();
-            config.acquire();
-            config.conf[_this->name]["hamMode"] = true;
-            config.release(true);
+        {
+            int hm = _this->hamMode ? 1 : 0;
+            if (tw::Segmented(CONCAT("_tetra_netmode_", _this->name), &hm, "ETSI\0Amateur radio\0")) {
+                _this->hamMode = (hm == 1);
+                _this->applyDuplexMode();
+                config.acquire();
+                config.conf[_this->name]["hamMode"] = _this->hamMode;
+                config.release(true);
+            }
         }
         if (_this->instUi) {
             if (tw::SameSmallButton(CONCAT("Settings...##_tetra_inst_set_", _this->name))) { _this->settingsOpen = true; }
@@ -1151,13 +1146,9 @@ private:
     void drawNetsyms(float menuWidth) {
         TetraDemodulatorModule* _this = this;
         {
-            if (ImGui::RadioButton(CONCAT("Built-in decoder##_tetra_mode0_", _this->name), _this->decoder_mode == 0) && _this->decoder_mode != 0) {
-                _this->decoder_mode = 0; //osmo-tetra
-                _this->setMode();
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton(CONCAT("NETSYMS over UDP##_tetra_mode1_", _this->name), _this->decoder_mode == 1) && _this->decoder_mode != 1) {
-                _this->decoder_mode = 1; //network symbol streaming
+            int dm = _this->decoder_mode == 0 ? 0 : 1;
+            if (tw::Segmented(CONCAT("_tetra_dmode_", _this->name), &dm, "Built-in decoder\0NETSYMS over UDP\0")) {
+                _this->decoder_mode = dm;   // 0 osmo-tetra, 1 network symbol streaming
                 _this->setMode();
             }
         }
@@ -2291,7 +2282,7 @@ private:
             TetraMeasSnapshot m = meas.get();
             tw::Text("Cell lock:");
             tw::SameTextColored(m.cellMatch == 1 ? good : bad, "%03d/%03d CC %d %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
-            if (ImGui::Button(CONCAT("Unlock cell##_tetra_unlock_", name), ImVec2(menuWidth, 0))) {
+            if (!instUi && ImGui::Button(CONCAT("Unlock cell##_tetra_unlock_", name), ImVec2(menuWidth, 0))) {
                 lock.active = false;
                 meas.setCellLock(lock);
             }
@@ -2308,12 +2299,13 @@ private:
         std::string logPath = meas.getLogPath();
         bool canExport = !logPath.empty() && !mapExport.busy();
         if (!canExport) { style::beginDisabled(); }
-        if (ImGui::Button(CONCAT("Export map (KML + OSM)##_tetra_map_exp_", name), ImVec2(menuWidth, 0))) {
+        // instrument view: softkey "Export map"
+        if (!instUi && ImGui::Button(CONCAT("Export map (KML + OSM)##_tetra_map_exp_", name), ImVec2(menuWidth, 0))) {
             mapExport.crcLimit = evalView.crcLimit;
             mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
         }
         if (!canExport) { style::endDisabled(); }
-        if (ImGui::IsItemHovered()) {
+        if (!instUi && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Creates a .kml (Google Earth) and a _map.html (OpenStreetMap)\nnext to the current/last CSV log. Start a CSV log with GPS connected first.");
         }
         if (logPath.empty()) {
@@ -2793,17 +2785,23 @@ private:
             ImGui::SetNextItemWidth(110.0f * style::uiScale);
             ImGui::InputScalar(CONCAT("##_ll_add_", name), ImGuiDataType_U32, &listenAddSsi);
             ImGui::SameLine();
-            ImGui::Checkbox(CONCAT("group##_ll_grp_", name), &listenAddGroup);
+            {
+                int gs = listenAddGroup ? 0 : 1;
+                if (tw::Segmented(CONCAT("_ll_grp_", name), &gs, "Group\0Station\0")) { listenAddGroup = (gs == 0); }
+            }
             ImGui::SameLine();
             if (ImGui::SmallButton(CONCAT("Add##_ll_addb_", name)) && listenAddSsi > 0 && listenAddSsi <= 0xFFFFFF) { listenAddEnd(listenAddSsi, listenAddGroup); }
             if (ImGui::Checkbox(CONCAT("Other calls when no listed one is active##_ll_oth_", name), &listenOthers)) { saveListen(); }
             ImGui::EndPopup();
         }
-        if (tw::SameCheckbox(CONCAT("Mute encrypted##_tetra_listen_enc_", name), &listenMuteEnc)) { saveListen(); }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Encrypted speech cannot be decoded (no decryption in this program); played\n"
-                              "anyway it is only noise. Applies when the call is marked encrypted\n"
-                              "(air interface encryption or end-to-end flag of the call setup).");
+        // instrument view: the softkey "Mute encrypted" does this
+        if (!instUi) {
+            if (tw::SameCheckbox(CONCAT("Mute encrypted##_tetra_listen_enc_", name), &listenMuteEnc)) { saveListen(); }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Encrypted speech cannot be decoded (no decryption in this program); played\n"
+                                  "anyway it is only noise. Applies when the call is marked encrypted\n"
+                                  "(air interface encryption or end-to-end flag of the call setup).");
+            }
         }
         // classic layout; the instrument view has the softkey "Play anyway"
         if (!instUi && listenUnknownMask && tw::SameSmallButton(CONCAT("Play anyway##_tetra_listen_any_", name))) { listenPlayAnyway(); }
@@ -3254,6 +3252,14 @@ private:
         const float k = style::uiScale;
         // all settings are in the Settings dialog: no SDR menu column, no menu button
         gui::mainWindow.menuDisabled = true;
+        // one VFO, normal tuning, level and MER in the status bar
+        gui::mainWindow.compactTopBar = true;
+        // an analysis starts when its view is chosen (like a measuring instrument)
+        int vk = instMode * 100 + instView;
+        if (vk != instViewSeen) {
+            instViewSeen = vk;
+            if (instMode == IM_MEASURE) { instViewEntered(instView); }
+        }
         if (!sideRegistered) {
             gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
             sideRegistered = true;
@@ -3306,7 +3312,9 @@ private:
         if (instMsgReg) { gui::mainWindow.setMessageBar(nullptr, 0.0f); instMsgReg = false; }
         if (instMainCur != -1) { gui::mainWindow.setMainView(nullptr); instMainCur = -1; }
         gui::mainWindow.menuDisabled = false;
+        gui::mainWindow.compactTopBar = false;
         gui::mainWindow.sidePanelFixed = false;
+        instViewSeen = -1;
         if (instLeftReg) { gui::mainWindow.setLeftPanel(nullptr, 0.0f); instLeftReg = false; }
         rfOpen = false;
         instActive = false;
@@ -3408,6 +3416,7 @@ private:
             right = std::string(alignRef.set ? ui_text::T("set") : ui_text::T("not set")) + " | " + ui_text::T(refs[std::clamp(freqRef, 0, 2)]);
             rc = freqRef == 0 ? tc::warn() : tc::good();
         }
+        else if (instMode == IM_MONITOR) { rl = nullptr; }
         else {
             double t = playNow();
             if (play.valid && t - play.lastVoice <= PLAY_HANG_S) {
@@ -3416,6 +3425,7 @@ private:
             }
             else { right = ui_text::T("nothing"); rc = tc::grey(); }
         }
+        if (!rl) { return; }
         float rw = ImGui::CalcTextSize(ui_text::T(rl)).x + ImGui::CalcTextSize(right.c_str()).x + ImGui::GetFontSize() * 1.2f;
         float x = ImGui::GetWindowContentRegionMax().x - rw;
         ImGui::SameLine();
@@ -3578,11 +3588,37 @@ private:
             }
             softGroup("SOFTKEYS");
             if (softkey("Reset statistics", "reset")) { meas.resetTotals(); }
-            if (softkey("Remove I/Q offset", "iqoff", compOriginOffset ? 1 : 0)) {
-                compOriginOffset = !compOriginOffset;
-                config.acquire();
-                config.conf[name]["compOriginOffset"] = compOriginOffset;
-                config.release(true);
+            switch (instView) {
+            case IV_CONST:
+                if (softkey("8 points (pi/4)", "c8", constellation8 ? 1 : 0)) { constellation8 = !constellation8; config.acquire(); config.conf[name]["constellation8"] = constellation8; config.release(true); }
+                if (softkey("Remove I/Q offset", "iqoff", compOriginOffset ? 1 : 0)) {
+                    compOriginOffset = !compOriginOffset;
+                    config.acquire();
+                    config.conf[name]["compOriginOffset"] = compOriginOffset;
+                    config.release(true);
+                }
+                break;
+            case IV_TXA:
+                if (softkey("Analysis", "txarun", txaRun ? 1 : 0)) { txaRun = !txaRun; saveTxaConfig(); }
+                if (softkey("Channel raster", "raster", chanRaster ? 1 : 0)) {
+                    chanRaster = !chanRaster;
+                    config.acquire();
+                    config.conf[name]["chanRaster"] = chanRaster;
+                    config.release(true);
+                }
+                break;
+            case IV_BURST:
+                if (softkey("Analysis", "burstrun", burstRun ? 1 : 0)) { burstRun = !burstRun; saveBurstConfig(); }
+                if (softkey("Overload check", "ovl", burstSt.overloadCheck ? 1 : 0)) { burstSt.overloadCheck = !burstSt.overloadCheck; burstAn.reset(); saveBurstConfig(); }
+                if (softkey("Ramp spectrum", "ramp", burstSt.transients ? 1 : 0)) { burstSt.transients = !burstSt.transients; burstAn.reset(); saveBurstConfig(); }
+                break;
+            case IV_MP:
+                if (softkey("Analysis", "mprun", mpRun ? 1 : 0)) { mpRun = !mpRun; saveMpConfig(); }
+                break;
+            case IV_TREND:
+                if (softkey("Open log...", "openlog")) { trendFile.openDialog(); }
+                break;
+            default: break;
             }
             if (softkey(logging ? "Stop CSV log" : "Start CSV log", "log")) { if (logging) { instStopLog(); } else { instStartLog(); } }
             if (softkey("Create report", "report")) { instReport(); }
@@ -3994,7 +4030,6 @@ private:
             a = ImGui::GetContentRegionAvail();
             switch (instView) {
             case IV_CONST: {
-                drawConstellationOptions("i");
                 a = ImGui::GetContentRegionAvail();
                 float side = (std::max)(80.0f * style::uiScale, (std::min)(a.x, a.y));
                 if (a.x > side) { ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (a.x - side) * 0.5f); }
@@ -4173,14 +4208,12 @@ private:
             break;
         case 5: drawModulesPage(); break;
         case 6:
-            if (ImGui::RadioButton(CONCAT("ETSI##_inst_mode_etsi_", name), !hamMode) && hamMode) {
-                hamMode = false; applyDuplexMode();
-                config.acquire(); config.conf[name]["hamMode"] = false; config.release(true);
-            }
-            ImGui::SameLine();
-            if (ImGui::RadioButton(CONCAT("Amateur radio##_inst_mode_ham_", name), hamMode) && !hamMode) {
-                hamMode = true; applyDuplexMode();
-                config.acquire(); config.conf[name]["hamMode"] = true; config.release(true);
+            {
+                int hm = hamMode ? 1 : 0;
+                if (tw::Segmented(CONCAT("_inst_netmode_", name), &hm, "ETSI\0Amateur radio\0")) {
+                    hamMode = (hm == 1); applyDuplexMode();
+                    config.acquire(); config.conf[name]["hamMode"] = hamMode; config.release(true);
+                }
             }
             break;
         case 7: drawDuplexEditor(w); break;
@@ -4652,18 +4685,19 @@ private:
     }
 
     void drawTxAnalysis(float menuWidth) {
-        if (ImGui::Checkbox(CONCAT("25 kHz channel raster in the spectrum##_tetra_raster_", name), &chanRaster)) {
+        // instrument view: softkeys "Analysis" and "Channel raster"
+        if (!instUi && ImGui::Checkbox(CONCAT("25 kHz channel raster in the spectrum##_tetra_raster_", name), &chanRaster)) {
             config.acquire();
             config.conf[name]["chanRaster"] = chanRaster;
             config.release(true);
         }
-        if (ImGui::IsItemHovered()) {
+        if (!instUi && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Dashed lines at +-12.5 kHz and +-37.5 kHz around the TETRA channel:\n"
                               "the own channel and the adjacent channels (ACP measurement).\n"
                               "Smoothing of the spectrum: Display menu -> FFT Smoothing.");
         }
-        if (ImGui::Checkbox(CONCAT("Run analysis (250 kHz tap)##_tetra_txarun_", name), &txaRun)) { saveTxaConfig(); }
-        if (ImGui::IsItemHovered()) {
+        if (!instUi && ImGui::Checkbox(CONCAT("Run analysis (250 kHz tap)##_tetra_txarun_", name), &txaRun)) { saveTxaConfig(); }
+        if (!instUi && ImGui::IsItemHovered()) {
             ImGui::SetTooltip("250 kHz wide tap around the TETRA channel (288 kS/s, not shown on the waterfall).\n"
                               "Shared with modulation accuracy and multipath: one tap at the full SDR\n"
                               "rate instead of one per analysis.");
@@ -4956,7 +4990,6 @@ private:
                 trendView.invalidate();
             }
         }
-        tw::Text("Open a CSV log:");
         std::string reqPath;
         int tabReq = -1;
         {
@@ -4965,7 +4998,14 @@ private:
             tabReq = trendTabReq;
             trendTabReq = -1;
         }
-        if (trendFile.render("##_tetra_trfile_" + name) || !reqPath.empty()) {
+        // instrument view: softkey "Open log..." opens the dialog, no path field
+        bool fileChanged;
+        if (instUi) { fileChanged = trendFile.pollChanged(); }
+        else {
+            tw::Text("Open a CSV log:");
+            fileChanged = trendFile.render("##_tetra_trfile_" + name);
+        }
+        if (fileChanged || !reqPath.empty()) {
             std::string path = reqPath.empty() ? trendFile.expandString(trendFile.path) : reqPath;
             if (!reqPath.empty() || trendFile.pathIsValid()) {
                 std::vector<TetraTrendPoint> pts;
@@ -4980,8 +5020,7 @@ private:
             }
         }
         if (!trendFileError.empty()) { tw::TextColored(tc::bad(), "%s", trendFileError.c_str()); }
-        ImGui::SetNextItemWidth((std::min)(width, 100.0f * style::uiScale));
-        if (ImGui::Combo(CONCAT("Time span##_tetra_trspan_", name), &trendView.spanIdx, TetraTrendView::spanNames())) { saveTrendConfig(); }
+        if (tw::Segmented(CONCAT("_tetra_trspan_", name), &trendView.spanIdx, TetraTrendView::spanNames())) { trendView.invalidate(); saveTrendConfig(); }
         {
             static const char* labels[TetraTrendView::P_COUNT] = { "Level", "MER", "CRC errors", "Carrier offset", "Timeslots", "Bursts/s" };
             std::string ids[TetraTrendView::P_COUNT];
@@ -5099,7 +5138,7 @@ private:
         bool run = burstRun;
         SourceGainInterface* g = findGainInterface();
         bool gainHeld = !autoGain || (gainHolding && !gainFollowNow()) || !(g && g->gainControllable());
-        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalEff, gainHeld, run)) {
+        if (burstAn.draw(name, width, constView.pal, burstSt, (double)m.ulFreq, mainVfoFreq(), levelCalEff, gainHeld, run, instUi)) {
             burstRun = run;
             saveBurstConfig();
         }
@@ -5195,7 +5234,7 @@ private:
     void drawMultipath(float width) {
         bool run = mpRun;
         int mem = mpMem;
-        bool ch = chanAn.draw(name, width, constView.pal, run, mem);
+        bool ch = chanAn.draw(name, width, constView.pal, run, mem, instUi);
         mpRun = run;
         mpMem = mem;
         if (ch) { saveMpConfig(); }
@@ -5504,7 +5543,12 @@ private:
     }
 
     void drawSubscribersBody(float menuWidth, int visibleRows) {
-        // Name databases
+        // Name databases: download / reload in Settings -> Name lists (instrument view)
+        bool listButtons = !instUi || visibleRows == 3;
+        if (!listButtons) {
+            if (radioid.userCount() == 0 && radioid.talkgroupCount() == 0) { tw::TextDisabled("%s", ui_text::T("No name lists - Settings -> Name lists")); }
+        }
+        else {
         tw::TextDisabled("%s", radioid.status().c_str());
         bool busy = radioid.busy();
         if (busy) { style::beginDisabled(); }
@@ -5521,6 +5565,7 @@ private:
         if (busy) { style::endDisabled(); }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Files: %s\n       %s\n       %s", radioid.usersPath().c_str(), radioid.rptrsPath().c_str(), radioid.tgPath().c_str());
+        }
         }
 
         std::vector<TetraSubscriber> list = subscribers.snapshot();
@@ -6074,6 +6119,12 @@ private:
     int settingsPage = 0;
     bool rfOpen = false;     // RF / Gain window (instrument UI)
     bool instLeftReg = false;   // content column registered as left panel
+    int instViewSeen = -1;      // mode*100+view last seen (an analysis starts with its view)
+    void instViewEntered(int v) {
+        if (v == IV_BURST && !burstRun) { burstRun = true; saveBurstConfig(); }
+        if (v == IV_MP && !mpRun) { mpRun = true; saveMpConfig(); }
+        if (v == IV_TXA && !txaRun) { txaRun = true; saveTxaConfig(); }
+    }
     float instLeftW = 0.0f;
     std::atomic<bool> settingsCloseReq{ false };   // debug "inst settings -1"
     struct AlignRef { bool set = false; time_t t = 0; double hz = NAN, evm = NAN, iq = NAN, ph = NAN, am = NAN, acp = NAN; };
