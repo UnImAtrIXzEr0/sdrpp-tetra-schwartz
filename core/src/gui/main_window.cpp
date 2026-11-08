@@ -639,7 +639,7 @@ void MainWindow::draw() {
     // ImGui::BeginChild("TopBarChild", ImVec2(0, 49.0f * style::uiScale), false, ImGuiWindowFlags_HorizontalScrollbar);
     ImVec2 btnSize(30 * style::uiScale, 30 * style::uiScale);
     ImGui::PushID(ImGui::GetID("sdrpp_menu_btn"));
-    if (ImGui::ImageButton(icons::MENU, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_Menu, false)) {
+    if (!menuDisabled && (ImGui::ImageButton(icons::MENU, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_Menu, false))) {
         showMenu = !showMenu;
         core::configManager.acquire();
         core::configManager.conf["showMenu"] = showMenu;
@@ -794,7 +794,7 @@ void MainWindow::draw() {
     // Handle menu resize
     ImVec2 winSize = ImGui::GetWindowSize();
     ImVec2 mousePos = ImGui::GetMousePos();
-    if (!lockWaterfallControls && showMenu && ImGui::GetTopMostPopupModal() == NULL) {
+    if (!lockWaterfallControls && showMenu && !menuDisabled && ImGui::GetTopMostPopupModal() == NULL) {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
@@ -838,7 +838,7 @@ void MainWindow::draw() {
     const float ctrlW = viewFn ? 0.0f : 60.0f * style::uiScale;
     float sideW = 0.0f;
     if (haveSide) {
-        float leftW = (showMenu ? menuWidth : 8.0f * style::uiScale) + ctrlW;
+        float leftW = ((showMenu && !menuDisabled) ? menuWidth : 8.0f * style::uiScale) + ctrlW;
         float maxW = (std::max)(160.0f * style::uiScale, (float)winSize.x - leftW - 250.0f * style::uiScale);
         // tile column: at least 18 characters wide (label + value), like the menu
         const float minSideW = (std::max)(160.0f * style::uiScale, ImGui::GetFontSize() * 18.0f);
@@ -846,7 +846,7 @@ void MainWindow::draw() {
         sideW = *sidePanelW + splitW;
     }
     const int nCols = haveSide ? 4 : 3;
-    if (showMenu) {
+    if (showMenu && !menuDisabled) {
         ImGui::Columns(nCols, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
         ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - ctrlW - sideW, 100.0f * style::uiScale));
@@ -1397,7 +1397,7 @@ void MainWindow::setMainView(std::function<void()> drawFunc) {
 }
 
 void MainWindow::drawBottomWindows(int dy) {
-    if (!showMenu) {
+    if (!showMenu || menuDisabled) {
         if (bottomWindows.size() > 0) {
             updateBottomWindowLayout();
             for (int i = 0; i < bottomWindows.size(); i++) {

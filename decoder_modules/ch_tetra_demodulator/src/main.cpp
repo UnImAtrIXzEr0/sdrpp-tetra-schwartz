@@ -363,6 +363,8 @@ public:
         if(isEnabled()) {
             disable();
         }
+        // the main window must not keep callbacks into a deleted instance
+        removePanels();
         gui::mainWindow.onWaterfallDrawn.unbindHandler(&windowDrawHandler);
         gui::menu.removeEntry(name);
         sigpath::sinkManager.unregisterStream(name);
@@ -524,21 +526,29 @@ public:
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "inst") {
-            // instrument UI: "ui 0|1", "mode 0..3", "view 0..6", "lang en|de" (tests, screenshots)
+            // instrument UI: "ui 0|1", "mode 0..3", "view 0..6", "lang en|de", "settings <page>|-1",
+            // "rf 0|1", "state" (tests, screenshots)
             std::string k = args.substr(0, args.find(' '));
             std::string v = args.find(' ') == std::string::npos ? "" : args.substr(args.find(' ') + 1);
             if (k == "ui") { instUi = (v == "1"); }
             else if (k == "mode") { instMode = std::clamp(atoi(v.c_str()), 0, (int)IM_COUNT - 1); }
             else if (k == "view") { instView = std::clamp(atoi(v.c_str()), 0, (int)IV_COUNT - 1); }
             else if (k == "lang") { ui_text::lang() = (v == "de") ? ui_text::DE : ui_text::EN; }
+            else if (k == "settings") {
+                int pg = atoi(v.c_str());
+                if (pg < 0) { settingsCloseReq = true; }
+                else { settingsPage = std::clamp(pg, 0, 9); settingsOpen = true; }
+            }
+            else if (k == "rf") { rfOpen = (v == "1"); }
             else if (k == "state") {
                 // frames: count of per-frame work runs (must keep rising with a module view);
                 // main: key of the shown main view (-1 = waterfall); bottom: strip registered
                 return "{\"mode\": " + std::to_string(instMode) + ", \"view\": " + std::to_string(instView) +
                        ", \"main\": " + std::to_string(instMainCur) + ", \"bottom\": " + (bottomRegistered ? "true" : "false") +
-                       ", \"frames\": " + std::to_string(frameCount.load()) + "}";
+                       ", \"frames\": " + std::to_string(frameCount.load()) +
+                       ", \"menuDisabled\": " + (gui::mainWindow.menuDisabled ? "true" : "false") + "}";
             }
-            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|state <value>\"}"; }
+            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|settings|rf|state <value>\"}"; }
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -1131,7 +1141,16 @@ private:
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Streams the demodulated symbols over UDP to an external decoder.\nWhile active, the built-in decoder and all measurements that need it are off.");
         }
-        if (nsOpen) {
+        if (nsOpen) { _this->drawNetsyms(menuWidth); }
+        if(!_this->enabled) {
+            style::endDisabled();
+        }
+    }
+
+    // NETSYMS symbol streaming: decoder choice, UDP target, start / stop
+    void drawNetsyms(float menuWidth) {
+        TetraDemodulatorModule* _this = this;
+        {
             if (ImGui::RadioButton(CONCAT("Built-in decoder##_tetra_mode0_", _this->name), _this->decoder_mode == 0) && _this->decoder_mode != 0) {
                 _this->decoder_mode = 0; //osmo-tetra
                 _this->setMode();
@@ -1142,7 +1161,7 @@ private:
                 _this->setMode();
             }
         }
-        if (nsOpen && _this->decoder_mode != 0) {
+        if (_this->decoder_mode != 0) {
             //NETWORK SYM STREAMING
             ImGui::BoxIndicator(ImGui::GetFontSize()*2, _this->symbolExtractor.sync ? IM_COL32(5, 230, 5, 255) : IM_COL32(230, 5, 5, 255));
             tw::SameText(" Sync");
@@ -1184,9 +1203,6 @@ private:
             } else {
                 ImGui::TextUnformatted("Idle");
             }
-        }
-        if(!_this->enabled) {
-            style::endDisabled();
         }
     }
 
@@ -3155,8 +3171,9 @@ private:
 
     // ---------------- Instrument UI (test version): one surface like a measuring instrument ----------------
     // Status bar on top, mode and softkey column on the right, message line at the
-    // bottom; each mode has a fixed arrangement. The menu (SDR menu) still holds
-    // every section, so nothing is lost; rarely needed settings are in a dialog.
+    // bottom; each mode has a fixed arrangement. There is no SDR menu: its sections
+    // (source, audio, display, modules ...) are pages of the Settings dialog, the
+    // source section also opens from the "RF / Gain" softkey.
 
     enum InstMode { IM_MONITOR = 0, IM_MEASURE, IM_DRIVE, IM_ALIGN, IM_COUNT };
     enum InstView { IV_SPECTRUM = 0, IV_CONST, IV_TXA, IV_BURST, IV_CARR, IV_TREND, IV_MP, IV_COUNT };
@@ -3216,6 +3233,8 @@ private:
     // every frame (GUI thread)
     void updateInstPanels() {
         const float k = style::uiScale;
+        // all settings are in the Settings dialog: no SDR menu column, no menu button
+        gui::mainWindow.menuDisabled = true;
         if (!sideRegistered) {
             gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
             sideRegistered = true;
@@ -3261,6 +3280,8 @@ private:
         if (instTopReg) { gui::mainWindow.setTopPanel(nullptr, 0.0f); instTopReg = false; }
         if (instMsgReg) { gui::mainWindow.setMessageBar(nullptr, 0.0f); instMsgReg = false; }
         if (instMainCur != -1) { gui::mainWindow.setMainView(nullptr); instMainCur = -1; }
+        gui::mainWindow.menuDisabled = false;
+        rfOpen = false;
         instActive = false;
     }
     void setInstMode(int m) {
@@ -3443,6 +3464,7 @@ private:
         ImGui::EndChild();
         drawSettingsDialog();
         drawCellDetailsDialog();
+        drawRfWindow();
     }
 
     // on: -1 plain key, 0/1 toggle (text ": ON/OFF" unless stateText is false; 1 = highlighted)
@@ -3554,17 +3576,12 @@ private:
             break;
         default: break;
         }
-        // settings and the SDR menu at the bottom of the column
+        // RF / Gain and the settings at the bottom of the column
         float h = (std::max)(ImGui::GetFrameHeight() * 1.45f, 34.0f * style::uiScale);
         float y = ImGui::GetWindowContentRegionMax().y - 2.0f * h - ImGui::GetStyle().ItemSpacing.y;
         if (y > ImGui::GetCursorPosY()) { ImGui::SetCursorPosY(y); }
+        if (softkey("RF / Gain", "rf", rfOpen ? 1 : 0, nullptr, false)) { rfOpen = !rfOpen; }
         if (softkey("Settings", "settings")) { settingsOpen = true; }
-        if (softkey("SDR menu", "sdrmenu", gui::mainWindow.showMenu ? 1 : 0)) {
-            gui::mainWindow.showMenu = !gui::mainWindow.showMenu;
-            core::configManager.acquire();
-            core::configManager.conf["showMenu"] = gui::mainWindow.showMenu;
-            core::configManager.release(true);
-        }
     }
 
     // ---- content of the side panel per mode ----
@@ -3978,6 +3995,62 @@ private:
         }
     }
 
+    // a section of the former SDR menu (core or another module), drawn with its
+    // original controls; entry == nullptr: heading only
+    void coreSection(const char* entry, const char* title, bool heading) {
+        if (heading) {
+            ImGui::Spacing();
+            instHeader(ui_text::T(title), ImGui::GetContentRegionAvail().x);
+        }
+        if (entry && !gui::menu.drawEntry(entry)) { tw::TextDisabled("not available"); }
+    }
+
+    // modules: the module manager and every other section of the former SDR menu
+    void drawModulesPage() {
+        coreSection("Module Manager", "Module manager", true);
+        static const char* shownElsewhere[] = { "Source", "Sinks", "Display", "Theme", "Module Manager", "Recorder", "Debug" };
+        ImGui::Spacing();
+        instHeader(ui_text::T("Other modules"), ImGui::GetContentRegionAvail().x);
+        for (const auto& opt : gui::menu.order) {
+            bool skip = (opt.name == name);
+            for (const char* n : shownElsewhere) { if (opt.name == n) { skip = true; } }
+            if (skip) { continue; }
+            ModuleManager::Instance* inst = gui::menu.entryInstance(opt.name);
+            if (!ImGui::CollapsingHeader((opt.name + "##_inst_mod_" + name).c_str())) { continue; }
+            ImGui::PushID(opt.name.c_str());
+            if (inst) {
+                bool en = inst->isEnabled();
+                if (ImGui::Checkbox(ui_text::L("Enabled", "_inst_mod_en_" + opt.name).c_str(), &en)) {
+                    // same as the checkbox in the menu header
+                    if (!en && core::configManager.conf["moduleInstances"].contains(opt.name)) {
+                        core::configManager.acquire();
+                        core::configManager.conf["moduleInstances"][opt.name]["enabled"] = false;
+                        core::configManager.release(true);
+                        core::configManager.save(true);
+                    }
+                    en ? inst->enable() : inst->disable();
+                }
+            }
+            gui::menu.drawEntry(opt.name);
+            ImGui::PopID();
+            ImGui::Spacing();
+        }
+    }
+
+    // RF / Gain: the SDR source section in a small window that stays open
+    // next to the measurement (the gain is needed often in operation)
+    void drawRfWindow() {
+        if (!rfOpen) { return; }
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2(420.0f * style::uiScale, (std::min)(vs.y * 0.7f, 620.0f * style::uiScale)), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.3f), ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.0f));
+        std::string title = std::string(ui_text::T("RF / Gain")) + "###_inst_rf_" + name;
+        if (ImGui::Begin(title.c_str(), &rfOpen, ImGuiWindowFlags_NoCollapse)) {
+            if (!gui::menu.drawEntry("Source")) { tw::TextDisabled("not available"); }
+        }
+        ImGui::End();
+    }
+
     void drawSettingsDialog() {
         if (settingsOpen) { ImGui::OpenPopup(CONCAT("###_inst_settings_", name)); settingsOpen = false; }
         ImVec2 vs = ImGui::GetMainViewport()->Size;
@@ -3986,14 +4059,16 @@ private:
         bool open = true;
         std::string title = std::string(ui_text::T("Settings")) + "###_inst_settings_" + name;
         if (!ImGui::BeginPopupModal(title.c_str(), &open)) { return; }
-        static const char* pages[] = { "Display & operation", "SDR & calibration", "Logging & report", "Limits & alarms",
-                                       "Network: ETSI / amateur radio", "Duplex tables", "Name lists", "Decoder / NETSYMS" };
+        if (settingsCloseReq.exchange(false)) { ImGui::CloseCurrentPopup(); }
+        static const char* pages[] = { "Display & operation", "SDR & calibration", "Audio & recording", "Logging & report",
+                                       "Limits & alarms", "Modules", "Network: ETSI / amateur radio", "Duplex tables",
+                                       "Name lists", "Decoder / NETSYMS" };
         const int nPages = (int)(sizeof(pages) / sizeof(pages[0]));
         float navW = (std::max)(190.0f * style::uiScale, ImGui::GetFontSize() * 14.0f);
         ImGui::BeginChild(CONCAT("##_inst_set_nav_", name), ImVec2(navW, 0), true);
         for (int i = 0; i < nPages; i++) {
             if (i == 0) { ImGui::TextDisabled("%s", ui_text::T("Device")); }
-            if (i == 4) { ImGui::Spacing(); ImGui::TextDisabled("%s", ui_text::T("Application TETRA")); }
+            if (i == 6) { ImGui::Spacing(); ImGui::TextDisabled("%s", ui_text::T("Application TETRA")); }
             if (ImGui::Selectable(ui_text::L(pages[i], std::string("_inst_setp_") + std::to_string(i) + name).c_str(), settingsPage == i)) { settingsPage = i; }
         }
         ImGui::EndChild();
@@ -4017,15 +4092,20 @@ private:
                 saveInstConfig();
                 if (classic) { gui::mainWindow.showMenu = true; }
             }
-            tw::TextDisabled("Touch mode, theme and fonts: SDR menu -> Display.");
+            coreSection("Display", "Display", true);
+            coreSection("Theme", "Theme", true);
             break;
         }
         case 1:
-            drawAfcGain(w, m);
-            ImGui::Separator();
-            drawSdrAdvice(w);
+            coreSection("Source", "SDR source", true);
+            coreSection(nullptr, "AFC & level", true);
+            drawAfcGain(w, m);   // includes the SDR advice line
             break;
         case 2:
+            coreSection("Sinks", "Audio output", true);
+            if (gui::menu.entryInstance("Recorder")) { coreSection("Recorder", "Recording", true); }
+            break;
+        case 3:
             tw::Text("Log folder:");
             if (logFolder.render("##_inst_logdir_" + name) && logFolder.pathIsValid()) {
                 config.acquire();
@@ -4035,12 +4115,13 @@ private:
             ImGui::Separator();
             drawReport(w);
             break;
-        case 3:
+        case 4:
             drawAlarms(w);
             ImGui::Separator();
             tw::TextDisabled("ACP limits and the burst time mask are set in their views (Measure).");
             break;
-        case 4:
+        case 5: drawModulesPage(); break;
+        case 6:
             if (ImGui::RadioButton(CONCAT("ETSI##_inst_mode_etsi_", name), !hamMode) && hamMode) {
                 hamMode = false; applyDuplexMode();
                 config.acquire(); config.conf[name]["hamMode"] = false; config.release(true);
@@ -4051,12 +4132,15 @@ private:
                 config.acquire(); config.conf[name]["hamMode"] = true; config.release(true);
             }
             break;
-        case 5: drawDuplexEditor(w); break;
-        case 6:
+        case 7: drawDuplexEditor(w); break;
+        case 8:
             if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 3); }
             else { tw::TextDisabled("Only in amateur radio mode."); }
             break;
-        case 7: tw::TextDisabled("NETSYMS: SDR menu -> TETRA Analyzer -> NETSYMS symbol streaming."); break;
+        case 9:
+            tw::TextDisabled("Streams the demodulated symbols over UDP to an external decoder.\nWhile active, the built-in decoder and all measurements that need it are off.");
+            drawNetsyms(w);
+            break;
         default: break;
         }
         ImGui::EndChild();
@@ -5937,6 +6021,8 @@ private:
     std::string instWorstText;
     bool settingsOpen = false, cellDetailsOpen = false;
     int settingsPage = 0;
+    bool rfOpen = false;     // RF / Gain window (instrument UI)
+    std::atomic<bool> settingsCloseReq{ false };   // debug "inst settings -1"
     struct AlignRef { bool set = false; time_t t = 0; double hz = NAN, evm = NAN, iq = NAN, ph = NAN, am = NAN, acp = NAN; };
     AlignRef alignRef;
     bool alignDelta = true, alignHold = false, alignMs = false;

@@ -17,6 +17,18 @@ static bool showEnableBox(const std::string& name, ModuleManager::Instance* inst
     return core::moduleManager.getInstanceModuleName(name) != "ch_tetra_demodulator";
 }
 
+bool Menu::drawEntry(const std::string& name) {
+    auto it = items.find(name);
+    if (it == items.end()) { return false; }
+    it->second.drawHandler(it->second.ctx);
+    return true;
+}
+
+ModuleManager::Instance* Menu::entryInstance(const std::string& name) {
+    auto it = items.find(name);
+    return (it == items.end()) ? nullptr : it->second.inst;
+}
+
 void Menu::registerEntry(std::string name, void (*drawHandler)(void* ctx), void* ctx, ModuleManager::Instance* inst) {
     MenuItem_t item;
     item.drawHandler = drawHandler;

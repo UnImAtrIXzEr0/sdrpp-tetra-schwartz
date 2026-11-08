@@ -646,9 +646,24 @@ def test_instrument_ui():
         if s2.get("main") != -1 or s3.get("main") != -1 or not s2.get("bottom"):
             stats.test_fail("test_instrument_ui", f"waterfall not back after a module view: spectrum {s2}, monitor {s3}")
             return False
+        # all settings pages (the former SDR menu sections are drawn there) and the
+        # RF / Gain window; no SDR menu while the instrument UI is active
+        if not st().get("menuDisabled"):
+            stats.test_fail("test_instrument_ui", "SDR menu still available in the instrument UI")
+            return False
+        for page in range(10):
+            ctx.module_cmd("TETRA Analyzer", "inst", "settings %d" % page)
+            ctx.sleep(0.6)
+        ctx.module_cmd("TETRA Analyzer", "inst", "settings -1")
+        ctx.module_cmd("TETRA Analyzer", "inst", "rf 1")
+        ctx.sleep(1.0)
+        ctx.module_cmd("TETRA Analyzer", "inst", "rf 0")
         # switch to the classic layout and back (panels are removed and registered again)
         ctx.module_cmd("TETRA Analyzer", "inst", "ui 0")
         ctx.sleep(1.0)
+        if st().get("menuDisabled"):
+            stats.test_fail("test_instrument_ui", "SDR menu not back in the classic layout")
+            return False
         ctx.module_cmd("TETRA Analyzer", "inst", "ui 1")
         ctx.sleep(1.0)
         if not alive(ctx):
@@ -658,7 +673,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, no SDR menu, classic and back")
     return True
 
 

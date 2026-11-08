@@ -76,6 +76,8 @@ public:
 
     bool logWindow = false;
     bool showMenu = true;
+    // TETRA-SCHWARTZ: a module shows all settings itself - no menu column, no menu button
+    bool menuDisabled = false;
 
     // Mic stream handling
     dsp::stream<dsp::stereo_t> micStream;
