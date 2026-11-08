@@ -54,6 +54,11 @@ namespace ui_text {
             { "Cell details", "Zelldetails" },
             { "Hide call control", "Rufsteuerung ausblenden" },
             { "Play anyway", "Trotzdem abspielen" },
+            { "receiver limited", "empfängerbegrenzt" },
+            { "Within 3 dB of the measurement floor: the transmitter may be better.\n"
+              "Raise the level (close to full scale, with an attenuator) and store the floor.",
+              "Weniger als 3 dB über der Messgrenze: der Sender kann besser sein.\n"
+              "Pegel anheben (nahe Vollaussteuerung, mit Dämpfungsglied) und Rauschboden speichern." },
             { "Analysis", "Analyse" },
             { "Channel raster", "Kanalraster" },
             { "Overload check", "Übersteuerungsprüfung" },

@@ -5,6 +5,7 @@
 #include <core.h>
 #include <gui/style.h>
 #include <gui/gui.h>
+#include <initializer_list>
 #include <signal_path/signal_path.h>
 #include <module.h>
 // #include <unistd.h>
@@ -3258,8 +3259,10 @@ private:
         int vk = instMode * 100 + instView;
         if (vk != instViewSeen) {
             if (instViewSeen >= 100 && instViewSeen < 200) { instViewLeft(instViewSeen - 100); }
+            if (instViewSeen >= 300 && instViewSeen < 400) { instViewLeft(IV_TXA); }   // alignment uses the TX analysis (ACP)
             instViewSeen = vk;
             if (instMode == IM_MEASURE) { instViewEntered(instView); }
+            if (instMode == IM_ALIGN) { instViewEntered(IV_TXA); }
         }
         if (!sideRegistered) {
             gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
@@ -3275,8 +3278,9 @@ private:
             gui::mainWindow.setLeftPanel([this]() { drawInstContent(); }, instLeftW);
             instLeftReg = true;
         }
-        // Measure -> Trends shows the trends as main view: no second copy below it
-        bool wantBottom = !(instMode == IM_MEASURE && instView == IV_TREND);
+        // strip below the main view only in Monitor (stations / network); the trends
+        // are a view of their own (recorded in the background all the time)
+        bool wantBottom = (instMode == IM_MONITOR);
         if (wantBottom && !bottomRegistered) {
             gui::mainWindow.setBottomPanel([this]() { drawInstBottom(); }, &instBottomH);
             bottomRegistered = true;
@@ -3348,11 +3352,27 @@ private:
     }
 
     // ---- status bar ----
-    void statusItem(const char* label, ImVec4 col, const char* value) {
+    // widest: longest text the value can have - the field keeps that width, so
+    // nothing moves when a value changes its length; right: numbers right-aligned
+    void statusItem(const char* label, ImVec4 col, const char* value, const char* widest = nullptr, bool right = false) {
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.1f);
         ImGui::TextDisabled("%s", ui_text::T(label));
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 0.35f);
+        float tw = ImGui::CalcTextSize(value).x;
+        float fw = widest ? (std::max)(tw, ImGui::CalcTextSize(widest).x) : tw;
+        ImVec2 start = ImGui::GetCursorPos();
+        if (right) { ImGui::SetCursorPosX(start.x + fw - tw); }
         ImGui::TextColored(col, "%s", value);
+        float lh = ImGui::GetItemRectSize().y;
+        ImGui::SetCursorPos(start);
+        ImGui::Dummy(ImVec2(fw, lh));
+    }
+    // longest of several translated texts (field width of a status item)
+    const char* longestT(std::initializer_list<const char*> l) {
+        const char* best = "";
+        float bw = -1.0f;
+        for (const char* t : l) { float w = ImGui::CalcTextSize(ui_text::T(t)).x; if (w > bw) { bw = w; best = ui_text::T(t); } }
+        return best;
     }
     void drawStatusBar() {
         const float k = style::uiScale;
@@ -3373,32 +3393,33 @@ private:
         // sync / decoder
         int st = osmotetradecoder.getRxState();
         bool sym = symbolExtractor.sync;
-        if (decoder_mode != 0) { statusItem("Sync", sym ? tc::good() : tc::bad(), sym ? "NETSYMS" : ui_text::T("No sync")); }
-        else if (st == 2) { statusItem("Sync", tc::good(), ui_text::T("Locked")); }
-        else if (sym) { statusItem("Sync", tc::warn(), ui_text::T("Searching")); }
-        else { statusItem("Sync", tc::bad(), ui_text::T("No sync")); }
+        const char* wSync = longestT({ "Locked", "Searching", "No sync", "NETSYMS" });
+        if (decoder_mode != 0) { statusItem("Sync", sym ? tc::good() : tc::bad(), sym ? "NETSYMS" : ui_text::T("No sync"), wSync); }
+        else if (st == 2) { statusItem("Sync", tc::good(), ui_text::T("Locked"), wSync); }
+        else if (sym) { statusItem("Sync", tc::warn(), ui_text::T("Searching"), wSync); }
+        else { statusItem("Sync", tc::bad(), ui_text::T("No sync"), wSync); }
         if (decoder_mode == 0 && st == 2 && osmotetradecoder.getMcc() != 0) {
             snprintf(b, sizeof(b), "%03d-%d CC %d", osmotetradecoder.getMcc(), osmotetradecoder.getMnc(), osmotetradecoder.getCc());
-            statusItem("Cell", tc::val(), b);
+            statusItem("Cell", tc::val(), b, "888-88888 CC 88");
         }
-        else { statusItem("Cell", tc::grey(), "--"); }
+        else { statusItem("Cell", tc::grey(), "--", "888-88888 CC 88"); }
         snprintf(b, sizeof(b), "%.4f MHz", mainVfoFreq() / 1e6);
-        statusItem("DL", tc::val(), b);
+        statusItem("DL", tc::val(), b, "8888.8888 MHz", true);
         bool cal = levelCalEff != 0.0f;
         if (m.valid) { snprintf(b, sizeof(b), cal ? "%.1f dBm" : "%.1f dBFS", m.levelDbfs + (cal ? levelCalEff : 0.0f)); }
         else { snprintf(b, sizeof(b), "--"); }
-        statusItem("Level", m.valid && m.peakDbfs > -3.0f ? tc::bad() : tc::val(), b);
+        statusItem("Level", m.valid && m.peakDbfs > -3.0f ? tc::bad() : tc::val(), b, cal ? "-188.8 dBm" : "-188.8 dBFS", true);
         if (m.valid && m.symSync) { snprintf(b, sizeof(b), "%.1f dB", m.merDb); } else { snprintf(b, sizeof(b), "--"); }
-        statusItem("MER", tc::val(), b);
+        statusItem("MER", tc::val(), b, "88.8 dB", true);
         if (m.absErrValid) { snprintf(b, sizeof(b), "%+.0f Hz", m.absErrHz); }
         else if (m.valid && m.symSync) { snprintf(b, sizeof(b), "%+.0f Hz*", m.carrierOffsetHz); }
         else { snprintf(b, sizeof(b), "--"); }
-        statusItem("Freq. error", tc::val(), b);
+        statusItem("Freq. error", tc::val(), b, "+88888 Hz*", true);
         if (decoder_mode == 0) {
             uint32_t ok = 0, fail = 0;
             for (int i = 0; i < 4; i++) { ok += m.crcOk[i]; fail += m.crcFail[i]; }
             if (ok + fail > 0) { snprintf(b, sizeof(b), "%.1f %%", 100.0 * fail / (ok + fail)); } else { snprintf(b, sizeof(b), "--"); }
-            statusItem("CRC errors", tc::val(), b);
+            statusItem("CRC errors", tc::val(), b, "188.8 %", true);
         }
         // right: what matters in this mode
         std::string right;
@@ -3881,19 +3902,32 @@ private:
     }
 
     // one meter: value, unit, scale lo..hi, green band zlo..zhi, reference marker
+    // zlo..zhi is the good zone. limited: the value is set by the receiver's floor,
+    // not by the transmitter (shown grey with a note)
     void alignMeter(const char* title, const char* limTxt, double v, const char* fmt, const char* unit, double lo, double hi,
-                    double zlo, double zhi, double ref, bool valid, float w, float h) {
+                    double zlo, double zhi, double ref, bool valid, float w, float h, bool limited = false) {
         const float k = style::uiScale;
         ImGui::BeginChild((std::string("##_am_") + title + name).c_str(), ImVec2(w, h), true, ImGuiWindowFlags_NoScrollbar);
         float cw = ImGui::GetContentRegionAvail().x;
         instHeader(ui_text::T(title), cw, limTxt);
         char vb[64];
         if (valid) { snprintf(vb, sizeof(vb), fmt, v); } else { snprintf(vb, sizeof(vb), "--"); }
+        // good: inside the zone, or past the end of the scale that the zone reaches
+        bool inZone = valid && ((v >= zlo && v <= zhi) || (v < lo && zlo <= lo) || (v > hi && zhi >= hi));
+        ImVec4 vc = !valid ? tc::grey() : limited ? tc::grey() : (inZone ? tc::good() : tc::bad());
         ImGui::PushFont(style::bigFont);
-        ImGui::TextColored(tc::val(), "%s", vb);
+        ImGui::TextColored(vc, "%s", vb);
         ImGui::PopFont();
         ImGui::SameLine();
         ImGui::TextDisabled("%s", unit);
+        if (valid && limited) {
+            ImGui::SameLine();
+            ImGui::TextColored(tc::warn(), "%s", ui_text::T("receiver limited"));
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", ui_text::T("Within 3 dB of the measurement floor: the transmitter may be better.\n"
+                                                   "Raise the level (close to full scale, with an attenuator) and store the floor."));
+            }
+        }
         if (valid && alignDelta && alignRef.set && !std::isnan(ref)) {
             char db[48];
             snprintf(db, sizeof(db), "%+.*f %s", std::fabs(hi - lo) < 30.0 ? 1 : 0, v - ref, ui_text::T("to ref."));
@@ -3921,6 +3955,14 @@ private:
         if (valid) {
             float xv = xOf(v);
             dl->AddRectFilled(ImVec2(xv - 2.0f * k, p.y - 5.0f * k), ImVec2(xv + 2.0f * k, p.y + bh + 5.0f * k), ImGui::GetColorU32(tc::val()), 2.0f);
+            // outside the scale: an arrow at the end it went past
+            if (v > hi || v < lo) {
+                bool right = v > hi;
+                float xa = right ? p.x + cw - 6.0f * k : p.x + 6.0f * k;
+                float d = right ? -1.0f : 1.0f, my = p.y + bh * 0.5f;
+                dl->AddTriangleFilled(ImVec2(xa - d * 0.0f, my), ImVec2(xa + d * 8.0f * k, my - 6.0f * k), ImVec2(xa + d * 8.0f * k, my + 6.0f * k),
+                                      ImGui::GetColorU32(vc));
+            }
         }
         ImGui::Dummy(ImVec2(cw, bh + 6.0f * k));
         char a[32], b[32];
@@ -3955,12 +3997,17 @@ private:
         alignMeter("Residual carrier", "-26 dB (5 %)", m.iqOffsetDb, "%.1f", "dB", -60.0, -16.0, -60.0, -26.0, alignRef.iq, syn, w, h);
         ImGui::SameLine();
         double acp = NAN;
+        bool acpLimited = false;
         if (txaRun) {
             TxAnalysisResult r = txa.get();
-            if (r.valid) { acp = (std::max)(r.acpDbc[2], r.acpDbc[3]); }
+            if (r.valid) {
+                int sd = r.acpDbc[2] >= r.acpDbc[3] ? 2 : 3;   // worse side
+                acp = r.acpDbc[sd];
+                acpLimited = acp - r.acpFloorDbc[sd] < 3.0;
+            }
         }
         // ACP +-25 kHz, worse side; BS / MS classes 1-3: -60 dBc (table 7.2)
-        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : ui_text::T("TX spectrum off"), acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h);
+        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : ui_text::T("TX spectrum off"), acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h, acpLimited);
         if (!txaRun) {
             if (ImGui::SmallButton(ui_text::L("Start TX spectrum analysis", "_inst_txa_" + name).c_str())) { txaRun = true; saveTxaConfig(); }
         }
@@ -4060,11 +4107,8 @@ private:
     void drawInstBottom() {
         float w = ImGui::GetContentRegionAvail().x;
         ImGui::BeginChild(CONCAT("##_inst_bottom_", name), ImVec2(0, 0), false);
-        if (instMode == IM_MONITOR) {
-            if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 0); }
-            else if (decoder_mode == 0) { drawNetworkBody(w); }
-        }
-        else { drawTrends(w); }
+        if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 0); }
+        else if (decoder_mode == 0) { drawNetworkBody(w); }
         touch::dragScroll();
         ImGui::EndChild();
     }

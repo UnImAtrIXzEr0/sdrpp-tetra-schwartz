@@ -633,7 +633,7 @@ def test_instrument_ui():
         ctx.module_cmd("TETRA Analyzer", "inst", "view 5")
         ctx.sleep(1.0)
         if st().get("bottom", True):
-            stats.test_fail("test_instrument_ui", "Measure -> Trends still shows the trends strip below")
+            stats.test_fail("test_instrument_ui", "Measure shows a strip below the main view")
             return False
         ctx.module_cmd("TETRA Analyzer", "inst", "view 0")
         ctx.sleep(1.0)
@@ -643,7 +643,8 @@ def test_instrument_ui():
         ctx.module_cmd("TETRA Analyzer", "inst", "mode 0")
         ctx.sleep(1.0)
         s3 = st()
-        if s2.get("main") != -1 or s3.get("main") != -1 or not s2.get("bottom"):
+        # strip below the main view only in Monitor
+        if s2.get("main") != -1 or s3.get("main") != -1 or s2.get("bottom") or not s3.get("bottom"):
             stats.test_fail("test_instrument_ui", f"waterfall not back after a module view: spectrum {s2}, monitor {s3}")
             return False
         # all settings pages (the former SDR menu sections are drawn there) and the
