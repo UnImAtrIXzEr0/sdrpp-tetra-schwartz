@@ -16,7 +16,7 @@
   <div class="l1"><a href="#s4">4 SDR einrichten</a></div>
   <div class="l2"><a href="#s4-2">Empfehlungen je SDR-Typ</a></div>
   <div class="l2"><a href="#s4-3">Kalibrieren</a> · <a href="#s4-4">Pegel</a></div>
-  <div class="l1"><a href="#s5">5 TETRA-Demodulator: Grundbedienung</a></div>
+  <div class="l1"><a href="#s5">5 TETRA Analyzer: Grundbedienung</a></div>
   <div class="l1"><a href="#s6">6 Messwerte (Measurements)</a></div>
   <div class="l1"><a href="#s7">7 Netz, Zelle und Duplex-Tabellen</a></div>
   <div class="l1"><a href="#s8">8 Stationen und Verkehr</a></div>
@@ -63,7 +63,7 @@
 </div>
 </div>
 
-<figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA-Demodulator, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
+<figure><img src="shots/overview.png" style="max-height:88mm"><figcaption>Abb. 1 – Hauptfenster: links das Menü mit dem TETRA Analyzer, rechts Spektrum und Wasserfall mit dem TETRA-VFO.</figcaption></figure>
 
 <h3>Wie das Programm arbeitet</h3>
 <p>Das SDR liefert einen breiten I/Q-Datenstrom. Daraus schneidet das Programm mehrere schmale „Abgriffe“ (VFOs) heraus: den TETRA-VFO für Demodulator und Decoder, und – nur wenn eingeschaltet – weitere, unsichtbare Abgriffe für TX-Analyse, Burst-Analyse, Mehrwegeempfang und weitere Träger. Alle Abgriffe müssen innerhalb der Bandbreite des SDR liegen. Jeder Abgriff kostet Rechenzeit bei der vollen Abtastrate; deshalb teilen sich TX-Analyse, Modulationsgenauigkeit und Mehrwegeempfang ab v0.22.2 einen gemeinsamen Analyse-Abgriff (288 kS/s, für die beiden letzten exakt auf 144 kS/s halbiert – Welligkeit im Durchlass 0,0002 dB, Sperrdämpfung 100 dB; die Messwerte sind dieselben wie mit eigenen Abgriffen).</p>
@@ -166,7 +166,7 @@ sdrpp</pre></li>
 <h2 id="s2-4">Was beim ersten Start eingestellt ist</h2>
 <ul>
   <li>Startfrequenz <b>439 MHz</b> (70-cm-TETRA), Farbschema <b>RoSc light</b> (dunkle Variante: <b>RoSc dark</b>; passende Wasserfall-Farbskalen „RoSc light (paper)“, „RoSc dark (night)“, „KeSi (signal)“).</li>
-  <li>TETRA-Demodulator im Modus <span class="ui">Amateur radio</span>, 8-Punkte-Konstellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> und <span class="ui">Auto RF gain</span> an, Audio auf <span class="ui">Audio</span>.</li>
+  <li>TETRA Analyzer im Modus <span class="ui">Amateur radio</span>, 8-Punkte-Konstellation, <span class="ui">Remove I/Q offset</span>, <span class="ui">AFC</span> und <span class="ui">Auto RF gain</span> an, Audio auf <span class="ui">Audio</span>.</li>
   <li>Für TETRA nicht benötigte Module sind ausgeblendet oder aus: Radio, Frequency Manager, Band Plan, FT8/FT4, Rauschminderung, WebSDR, Rigctl, VFO Color, Debug. Alles lässt sich im <a href="#s3-2">Module Manager</a> wieder einblenden.</li>
   <li>In der Quellenliste stehen nur die unterstützten SDRs (siehe <a href="#s4-2">Kapitel 4</a>).</li>
 </ul>
@@ -175,13 +175,13 @@ sdrpp</pre></li>
 <h1 id="s3" class="pb"><span class="num">3</span>Die Oberfläche</h1>
 <div class="cols">
 <div>
-<figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Abb. 3 – Menüspalte mit dem TETRA-Demodulator.</figcaption></figure>
+<figure><img src="shots/menu.png" class="small" style="max-width:88%"><figcaption>Abb. 3 – Menüspalte mit dem TETRA Analyzer.</figcaption></figure>
 </div>
 <div>
 <h3>Bereiche</h3>
 <ul>
   <li><b>Kopfleiste:</b> Start/Stopp, Lautstärke, Frequenzanzeige (Mausrad oder Ziffern anklicken), VFO-Auswahl, Signalpegel.</li>
-  <li><b>Menüspalte</b> links: <span class="ui">Source</span> (SDR), <span class="ui">TETRA Demodulator</span>, <span class="ui">Sinks</span> (Audio), <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>. Jeder Bereich lässt sich auf- und zuklappen und per Ziehen umsortieren.</li>
+  <li><b>Menüspalte</b> links: <span class="ui">Source</span> (SDR), <span class="ui">TETRA Analyzer</span>, <span class="ui">Sinks</span> (Audio), <span class="ui">Display</span>, <span class="ui">Theme</span>, <span class="ui">Module Manager</span>. Jeder Bereich lässt sich auf- und zuklappen und per Ziehen umsortieren.</li>
   <li><b>Spektrum und Wasserfall</b> rechts. Der TETRA-VFO ist das markierte Band; Ziehen mit der Maus verschiebt ihn, ein Klick in den Wasserfall setzt ihn auf diese Frequenz.</li>
 </ul>
 <h3>Bedienhinweise</h3>
@@ -189,7 +189,7 @@ sdrpp</pre></li>
   <li>Fast jeder Messwert hat einen <b>Tooltip</b>: Maus kurz darüber halten.</li>
   <li><b>Anzeige wie ein Messgerät (ab v0.23.6):</b> Die Menüspalte ist in der Breite veränderbar; nichts wird abgeschnitten und nichts springt. Die Werte einer Zeile „Bezeichnung: Wert“ stehen in einer gemeinsamen Wertespalte. Passt ein Wert nicht mehr in die Zeile, rückt er mit seiner Einheit in eine Folgezeile unter die Wertespalte. Jeder Wert reserviert den Platz seines längsten bisherigen Textes, und bei gleicher Breite bleibt die Aufteilung fest – ein Wert, der seine Länge ändert, schiebt den Rest der Zeile nicht mehr. Erst wenn die Spalte etwa zwei Zeichen breiter wird als nötig, rückt ein umgebrochener Wert zurück. Zeilen, die nicht immer gesendet werden (z. B. <span class="ui">Security</span>), behalten ihren Platz und zeigen bis zum ersten Empfang „not broadcast yet“.</li>
   <li><b>Tabellen:</b> Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Ein Klick auf einen Spaltenkopf sortiert auf-, ein zweiter absteigend, ein dritter hebt die Sortierung auf (Pfeil im Kopf). Zellen bleiben einzeilig; zu langer Text endet mit „…“, der volle Text steht im Tooltip. Ist das Fenster schmaler als alle Spalten, lässt sich die Tabelle seitlich verschieben, die Kopfzeile bleibt stehen. Die Anordnung wird gespeichert.</li>
-  <li><b>Bereiche im TETRA Demodulator verschieben:</b> am Griff (sechs Punkte rechts in der Kopfzeile) ziehen; eine Linie zeigt das Ziel. Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Die Reihenfolge wird gespeichert.</li>
+  <li><b>Bereiche im TETRA Analyzer verschieben:</b> am Griff (sechs Punkte rechts in der Kopfzeile) ziehen; eine Linie zeigt das Ziel. Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Die Reihenfolge wird gespeichert.</li>
   <li><b>Eigenes Fenster:</b> Das Fenster-Symbol links vom Griff zeigt den Bereich in einem eigenen Fenster (Symbol blau = Fenster offen); ein zweiter Klick holt ihn zurück ins Menü. Die Konstellation ist ein eigener Bereich. Ganz oben stehen nur noch Audio, ETSI/Amateur radio und <span class="ui">Layout...</span>.</li>
   <li><b>Kanalraster:</b> Unter <span class="ui">TX analysis</span> → <span class="ui">25 kHz channel raster</span> zeigt das Spektrum gestrichelte Kanalgrenzen bei ±12,5 und ±37,5 kHz um den TETRA-Kanal. Das Spektrum über dem Wasserfall lässt sich unter <span class="ui">Display</span> → <span class="ui">Spectrum averaging</span> mitteln: Zeitkonstante in Sekunden (nach dieser Zeit hat ein Sprung 63 % erreicht, nach der fünffachen Zeit 99 %). <span class="ui">Power</span> mittelt die Leistung und zeigt richtige Pegel. <span class="ui">Log (dB)</span> mittelt die dB-Werte wie früher; Rauschen erscheint dabei etwa 2,5 dB zu niedrig. <span class="ui">Max hold</span> zeigt eine zweite Kurve mit dem Maximum, die mit der eingestellten Rate in dB/s abfällt (0 = halten bis zum Ausschalten). Für Messungen ist <span class="ui">TX analysis</span> mit <span class="ui">Avg</span> (feste Anzahl gemittelter Spektren) gedacht.</li>
 </ul>
@@ -261,7 +261,7 @@ sdrpp</pre></li>
 <p>Das SDR misst in dBFS (bezogen auf Vollaussteuerung). Mit <span class="ui">Level cal. (dB)</span> wird daraus dBm: Ein Signal bekannter Leistung (Messsender) einspeisen und den Wert so einstellen, dass die Anzeige stimmt. Die Kalibrierung gilt nur für dieselbe Verstärkung und Frequenz – <span class="ui">Auto RF gain</span> dafür ausschalten.</p>
 
 <!-- ============================================================ -->
-<h1 id="s5"><span class="num">5</span>TETRA-Demodulator: Grundbedienung</h1>
+<h1 id="s5"><span class="num">5</span>TETRA Analyzer: Grundbedienung</h1>
 <ol class="steps">
   <li>SDR unter <span class="ui">Source</span> wählen und mit ▶ starten.</li>
   <li>Im Wasserfall den TETRA-Träger suchen (25 kHz breites, gleichmäßiges Band) und den TETRA-VFO darauf ziehen oder die Frequenz eingeben. Die <span class="ui">AFC</span> zieht den VFO nach, sobald der Decoder einrastet.</li>
@@ -293,7 +293,7 @@ sdrpp</pre></li>
 <p>Das Programm entschlüsselt nichts; der Verschlüsselungscode von osmo-tetra ist entfernt. Unter <span class="ui">Network &amp; cell</span> zeigt <span class="ui">Air interface encryption</span>, ob die Zelle Luftschnittstellen-Verschlüsselung anbietet und ob ein CCK in Gebrauch ist (Sicherheitsklasse 3). Verschlüsselte Nachrichten erscheinen in <span class="ui">Traffic</span> als <span class="ui">encrypted – not decoded</span>, Stationen mit verschlüsseltem Verkehr tragen ein „E“ in der Spalte TS. Sendet die Zelle die erweiterten Dienste im SYSINFO, zeigt <span class="ui">Security</span> die Sicherheitsinformation nach EN 300 392-7 V3.5.1 (A.8.77): Authentisierung verlangt oder nicht, Unterstützung von Klasse-1-Geräten, Klasse 2 (mit SCK-Nummer) oder Klasse 3. Das Verfahren (TEA1 … TEA4, „KSG number“, A.8.41) steht im Downlink nur in einer D-LOCATION UPDATE COMMAND; kommt eine vorbei, zeigt <span class="ui">Algorithm</span> es an, sonst „not seen“. Alles nur Anzeige.</p>
 <h3>Decoder-Modus</h3>
 <p>Das Programm dekodiert selbst (Normalfall). Ganz unten im Menü liegt der zugeklappte Bereich <span class="ui">NETSYMS symbol streaming (advanced)</span>: Er schickt die Symbole per UDP an ein externes Programm. Bedienung: <span class="ui">NETSYMS over UDP</span> wählen, Zieladresse und Port eintragen (Vorgabe <code>localhost</code>, Port <code>8355</code>), <span class="ui">Net start</span> drücken. <span class="ui">Net status</span> zeigt „Sending“ oder „Idle“; die Anzeigen <span class="ui">Sync</span> und <span class="ui">Training sequences</span> zeigen, ob der Demodulator Symbole liefert. <span class="ui">Net stop</span> beendet das Senden, <span class="ui">Built-in decoder</span> schaltet zurück. Solange er aktiv ist, sind der eingebaute Decoder und alle Messungen, die ihn brauchen, aus; oben im Menü steht dann ein Hinweis. Ab v0.20.1 startet das Programm mit dem eingebauten Decoder, wenn NETSYMS gewählt war, aber nicht gesendet hat.</p>
-<p>Der Kopf des TETRA-Demodulators hat kein Häkchen mehr zum Abschalten (ein versehentlicher Klick schaltete den ganzen Decoder ab). Ist das Modul doch einmal abgeschaltet, erscheint das Häkchen wieder.</p>
+<p>Der Kopf des TETRA Analyzers hat kein Häkchen mehr zum Abschalten (ein versehentlicher Klick schaltete den ganzen Decoder ab). Ist das Modul doch einmal abgeschaltet, erscheint das Häkchen wieder.</p>
 </div>
 <div>
 <figure><img src="shots/win_const.png"><figcaption>Abb. 4 – Konstellation und Messwerte im eigenen Fenster.</figcaption></figure>
@@ -737,7 +737,7 @@ sdrpp</pre></li>
 <tr><td>„reduce gain“, Spitzen nahe 0 dBFS</td><td>Übersteuerung – Verstärkung senken; starke Signale anderswo im Band beachten (Wasserfall).</td></tr>
 <tr><td>Auto RF gain tut nichts</td><td>SDR ohne Schnittstelle oder Hardware-AGC an (RTL: Tuner AGC aus, Pluto/BladeRF: Manual, SDRplay: IF AGC aus).</td></tr>
 <tr><td>Frequenz weicht ab</td><td>SDR kalibrieren (Kapitel 4.3) oder externe Referenz verwenden.</td></tr>
-<tr><td>Kein Ton</td><td>Unter <span class="ui">Sinks</span> beim TETRA Demodulator ein Audiogerät wählen; Lautstärke im TETRA-Menü; verschlüsselte Rufe sind nicht hörbar.</td></tr>
+<tr><td>Kein Ton</td><td>Unter <span class="ui">Sinks</span> beim TETRA Analyzer ein Audiogerät wählen; Lautstärke im TETRA-Menü; verschlüsselte Rufe sind nicht hörbar.</td></tr>
 <tr><td>Burst-Analyse: „outside the SDR span“</td><td>Uplink liegt außerhalb der Bandbreite – Abtastrate erhöhen oder Mittenfrequenz verschieben.</td></tr>
 <tr><td>Windows blockiert den Download</td><td>In der Download-Liste des Browsers „Behalten“ wählen; danach SmartScreen-Hinweis bestätigen.</td></tr>
 <tr><td>AppImage startet nicht</td><td><code>libfuse2t64</code> installieren; Datei ausführbar machen.</td></tr>
@@ -764,7 +764,7 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 <table class="plain">
 <tr><th>Datei / Ordner</th><th>Inhalt</th></tr>
 <tr><td><code>config.json</code>, <code>*_config.json</code></td><td>Einstellungen (Windows: Programmordner; Linux-AppImage: <code>~/.config/sdrpp_brown_appimage</code>)</td></tr>
-<tr><td><code>tetra_demodulator_config.json</code></td><td>Einstellungen des TETRA-Demodulators</td></tr>
+<tr><td><code>tetra_demodulator_config.json</code></td><td>Einstellungen des TETRA Analyzers</td></tr>
 <tr><td><code>tetra_duplex_ham.json</code></td><td>Duplex-Tabellen (Amateurfunk)</td></tr>
 <tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>Namenslisten</td></tr>
 <tr><td><code>imgui_layout.ini</code></td><td>Fensterpositionen und Tabellenspalten</td></tr>

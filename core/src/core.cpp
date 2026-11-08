@@ -602,7 +602,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["menuElements"][1]["open"] = true;
 
     // HAM-TETRA edition: TETRA right after Radio, then Sinks
-    defConfig["menuElements"][2]["name"] = "TETRA Demodulator";
+    defConfig["menuElements"][2]["name"] = "TETRA Analyzer";
     defConfig["menuElements"][2]["open"] = true;
 
     defConfig["menuElements"][3]["name"] = "Sinks";
@@ -707,8 +707,8 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["moduleInstances"]["FT8/FT4 Decoder"]["enabled"] = false;
     defConfig["moduleInstances"]["VHF Digital Modes"]["module"] = "ch_extravhf_decoder";
     defConfig["moduleInstances"]["VHF Digital Modes"]["enabled"] = true;
-    defConfig["moduleInstances"]["TETRA Demodulator"]["module"] = "ch_tetra_demodulator";
-    defConfig["moduleInstances"]["TETRA Demodulator"]["enabled"] = true;
+    defConfig["moduleInstances"]["TETRA Analyzer"]["module"] = "ch_tetra_demodulator";
+    defConfig["moduleInstances"]["TETRA Analyzer"]["enabled"] = true;
     // defConfig["moduleInstances"]["Rigctl Client"] = "rigctl_client";
     // TODO: Enable rigctl_client when ready
     // defConfig["moduleInstances"]["Scanner"] = "scanner";
@@ -747,9 +747,9 @@ int sdrpp_main(int argc, char* argv[]) {
 
     defConfig["streams"]["Radio"]["muted"] = false;
     defConfig["streams"]["Radio"]["sink"] = "None";   // TETRA edition: radio audio off by default
-    defConfig["streams"]["TETRA Demodulator"]["muted"] = false;
-    defConfig["streams"]["TETRA Demodulator"]["sink"] = "Audio";
-    defConfig["streams"]["TETRA Demodulator"]["volume"] = 1.0f;
+    defConfig["streams"]["TETRA Analyzer"]["muted"] = false;
+    defConfig["streams"]["TETRA Analyzer"]["sink"] = "Audio";
+    defConfig["streams"]["TETRA Analyzer"]["volume"] = 1.0f;
     defConfig["streams"]["Radio"]["volume"] = 1.0f;
 
     defConfig["windowSize"]["h"] = 720;
@@ -921,6 +921,29 @@ int sdrpp_main(int argc, char* argv[]) {
         core::configManager.conf["min"] = -110.0;
         core::configManager.conf["max"] = -40.0;
         core::configManager.conf["hamTetraDefaults8"] = 1;
+    }
+    // v0.24: the module instance "TETRA Demodulator" is now "TETRA Analyzer"
+    // (module id ch_tetra_demodulator unchanged). Every top-level map keyed by the
+    // instance name and the menu entry are renamed; the module moves its own
+    // settings (tetra_demodulator_config.json) itself.
+    if (!core::configManager.conf.contains("tetraAnalyzerName")) {
+        auto& c = core::configManager.conf;
+        const std::string oldN = "TETRA Demodulator", newN = "TETRA Analyzer";
+        for (auto it = c.begin(); it != c.end(); ++it) {
+            json& v = it.value();
+            // a "TETRA Analyzer" entry next to the old one only comes from the
+            // defaults merged in by load(): the user's settings win
+            if (v.is_object() && v.contains(oldN)) {
+                v[newN] = v[oldN];
+                v.erase(oldN);
+            }
+        }
+        if (c.contains("menuElements") && c["menuElements"].is_array()) {
+            for (auto& e : c["menuElements"]) {
+                if (e.contains("name") && e["name"] == oldN) { e["name"] = newN; }
+            }
+        }
+        c["tetraAnalyzerName"] = 1;
     }
     // Theme "Professional 2" was renamed to "RoSc" (v0.12.1)
     if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string() &&

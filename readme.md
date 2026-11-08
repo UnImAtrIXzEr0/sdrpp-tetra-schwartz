@@ -89,7 +89,7 @@ On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz
 2. Choose your SDR under **Source** and a sample rate (2–4 MS/s is enough for
    one carrier; uplink and downlink together need more than the duplex spacing).
 3. Press **Play**, click on the TETRA carrier in the spectrum (**Snap to
-   carrier** puts the VFO on its centre), switch on **TETRA Demodulator**.
+   carrier** puts the VFO on its centre), switch on **TETRA Analyzer**.
 4. Choose **ETSI** or **Amateur radio** (own duplex tables) at the top of the
    TETRA menu, **Layout…** for a tile layout (measuring station, drive test).
 5. For comparable values: **Level and hold** for the gain, a dBm calibration

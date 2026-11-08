@@ -37,13 +37,13 @@ def base_cfg(rec):
     cfg["moduleInstances"].pop("Radio", None)   # hidden by default in this edition
     cfg["streams"].pop("Radio", None)
     cfg["vfoOffsets"] = {}
-    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
     cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
     cfg["File Source"] = {"path": rec, "filename": rec}
     cfg["windowSize"] = {"w": W, "h": H}
     cfg["menuWidth"] = 360
     cfg["source"] = "File"
-    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
     return cfg
 
 
@@ -87,7 +87,7 @@ def make_demo_log(path, hours=6.0):
 
 def solo(ctx, win, rect):
     x, y, w, h = rect
-    ctx.module_cmd("TETRA Demodulator", "only_window", f"{win} {x} {y} {w} {h}")
+    ctx.module_cmd("TETRA Analyzer", "only_window", f"{win} {x} {y} {w} {h}")
     time.sleep(2.5)
     grab("win_" + win, rect)
 
@@ -106,12 +106,12 @@ def session_a():
         time.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
-        ctx.module_cmd("TETRA Demodulator", "set_afc", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_txa", "1")
-        m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
+        ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_txa", "1")
+        m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
         if m.get("center_hz"):
-            ctx.module_cmd("TETRA Demodulator", "add_carrier", str(int(m["center_hz"]) + 60000))
+            ctx.module_cmd("TETRA Analyzer", "add_carrier", str(int(m["center_hz"]) + 60000))
         time.sleep(40.0)
         grab("overview")
         rect = (380, 30, 860, 950)
@@ -120,31 +120,31 @@ def session_a():
         # trends, stability and quality from a synthetic 6-hour log
         demo = os.path.join(tmp, "tetra_demo_log.csv")
         make_demo_log(demo)
-        ctx.module_cmd("TETRA Demodulator", "only_window", "trends 380 30 860 950")
+        ctx.module_cmd("TETRA Analyzer", "only_window", "trends 380 30 860 950")
         time.sleep(1.0)
-        ctx.module_cmd("TETRA Demodulator", "load_trend_csv", demo)
+        ctx.module_cmd("TETRA Analyzer", "load_trend_csv", demo)
         time.sleep(2.5)
         grab("win_trends_log", rect)
-        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "1")
         time.sleep(2.5)
         grab("win_stability", rect)
-        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "2")
+        ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "2")
         time.sleep(2.5)
         grab("win_quality", rect)
-        ctx.module_cmd("TETRA Demodulator", "set_trend_tab", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_windows", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_windows", "0")
         time.sleep(1.5)
         grab("menu", (0, 0, 380, H))
-        ctx.module_cmd("TETRA Demodulator", "set_layout", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_layout", "1")
         time.sleep(3.0)
         grab("overview_tiles")
-        ctx.module_cmd("TETRA Demodulator", "set_layout", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_layout", "0")
         time.sleep(1.0)
-        ctx.module_cmd("TETRA Demodulator", "make_report", "1")
+        ctx.module_cmd("TETRA Analyzer", "make_report", "1")
         rp = ""
         for _ in range(20):   # the report is written in the GUI thread
             time.sleep(1.0)
-            rp = ctx.module_cmd("TETRA Demodulator", "get_report", timeout=8.0).get("path", "")
+            rp = ctx.module_cmd("TETRA Analyzer", "get_report", timeout=8.0).get("path", "")
             if rp:
                 break
         print("report:", rp)
@@ -164,10 +164,10 @@ def session_b():
         time.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
-        ctx.module_cmd("TETRA Demodulator", "set_afc", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "100000")
-        ctx.module_cmd("TETRA Demodulator", "set_burst_freq", "438900000")
-        ctx.module_cmd("TETRA Demodulator", "set_multipath", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
+        ctx.module_cmd("TETRA Analyzer", "set_burst_freq", "438900000")
+        ctx.module_cmd("TETRA Analyzer", "set_multipath", "1")
         time.sleep(30.0)
         grab("overview_b")
         rect = (380, 30, 860, 950)

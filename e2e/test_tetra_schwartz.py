@@ -123,11 +123,11 @@ def test_tetra_chain():
     stats.info(f"recording: {'upsampled to 256 kS/s' if upsampled else 'original 32 kS/s (numpy missing)'}")
 
     cfg = get_base_config()
-    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
     cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
     cfg["source"] = "File"
     cfg["File Source"] = {"path": rec, "filename": rec}
-    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
     cfg["theme"] = "RoSc light"
 
     with SDRPPTestContext() as ctx:
@@ -139,17 +139,17 @@ def test_tetra_chain():
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
         # signal centre of the recording is about -3 kHz
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
-        ctx.module_cmd("TETRA Demodulator", "set_afc", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_txa", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
+        ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_txa", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_windows", "1")
         # burst analysis on the (continuous) downlink and a second carrier
-        ctx.module_cmd("TETRA Demodulator", "set_bursts", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_multipath", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_alarm_test", "1")
-        m0 = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+        ctx.module_cmd("TETRA Analyzer", "set_bursts", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_multipath", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_alarm_test", "1")
+        m0 = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
         if m0.get("center_hz"):
-            ctx.module_cmd("TETRA Demodulator", "add_carrier", str(int(m0["center_hz"]) + 60000))
+            ctx.module_cmd("TETRA Analyzer", "add_carrier", str(int(m0["center_hz"]) + 60000))
 
         best = None
         locked = False
@@ -160,7 +160,7 @@ def test_tetra_chain():
             if not alive(ctx):
                 stats.test_fail("test_tetra_chain", "SDR++ stopped while decoding")
                 return False
-            m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+            m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
             if "error" in m:
                 stats.test_fail("test_tetra_chain", f"module not responding: {m['error']}")
                 return False
@@ -178,16 +178,16 @@ def test_tetra_chain():
         # (v0.23.3 crashed with bad_function_call going from a layout with the strip
         # below the waterfall to touch / classic)
         for lay in ("1", "3", "1", "0", "2", "3", "0"):
-            ctx.module_cmd("TETRA Demodulator", "set_layout", lay)
+            ctx.module_cmd("TETRA Analyzer", "set_layout", lay)
             ctx.sleep(0.6)
             if not alive(ctx):
                 stats.test_fail("test_tetra_chain", f"SDR++ stopped after switching to layout {lay}")
                 return False
 
         # windows off again and analysis off: must not block either
-        ctx.module_cmd("TETRA Demodulator", "set_windows", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_txa", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_bursts", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_windows", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_txa", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_bursts", "0")
         ctx.sleep(1.5)
         if not alive(ctx):
             stats.test_fail("test_tetra_chain", "SDR++ stopped after closing windows / analysis")
@@ -229,9 +229,9 @@ def test_tetra_chain():
         if best and best.get("alarms_total", 0) < 1:
             problems.append("test alarm was not raised")
         # report
-        ctx.module_cmd("TETRA Demodulator", "make_report", "1")
+        ctx.module_cmd("TETRA Analyzer", "make_report", "1")
         ctx.sleep(1.5)
-        rp = ctx.module_cmd("TETRA Demodulator", "get_report", timeout=8.0).get("path", "")
+        rp = ctx.module_cmd("TETRA Analyzer", "get_report", timeout=8.0).get("path", "")
         if not rp or rp.startswith("!") or not os.path.exists(rp):
             problems.append(f"report not written ({rp})")
         else:
@@ -363,11 +363,11 @@ def test_timing_multipath():
     rec = os.path.join(tmpdir, "baseband_430000000Hz_12-00-00_01-01-2026.wav")
     make_two_freq_recording(rec)
     cfg = get_base_config()
-    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
     cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
     cfg["source"] = "File"
     cfg["File Source"] = {"path": rec, "filename": rec}
-    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
     with SDRPPTestContext() as ctx:
         ctx.write_configs(cfg)
         if not ctx.start():
@@ -376,11 +376,11 @@ def test_timing_multipath():
         ctx.sleep(1.0)
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
-        ctx.module_cmd("TETRA Demodulator", "set_afc", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "100000")
-        ctx.module_cmd("TETRA Demodulator", "set_burst_freq", "429900000")
-        ctx.module_cmd("TETRA Demodulator", "set_multipath", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
+        ctx.module_cmd("TETRA Analyzer", "set_burst_freq", "429900000")
+        ctx.module_cmd("TETRA Analyzer", "set_multipath", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_windows", "1")
         best = None
         t0 = time.time()
         while time.time() - t0 < 30.0:
@@ -388,7 +388,7 @@ def test_timing_multipath():
             if not alive(ctx):
                 stats.test_fail("test_timing_multipath", "SDR++ stopped")
                 return False
-            m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+            m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
             if "error" in m:
                 stats.test_fail("test_timing_multipath", f"module not responding: {m['error']}")
                 return False
@@ -433,11 +433,11 @@ def test_bursts():
     rec = os.path.join(tmpdir, "baseband_430000000Hz_12-00-00_01-01-2026.wav")
     make_burst_recording(rec)
     cfg = get_base_config()
-    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
     cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
     cfg["source"] = "File"
     cfg["File Source"] = {"path": rec, "filename": rec}
-    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
     with SDRPPTestContext() as ctx:
         ctx.write_configs(cfg)
         if not ctx.start():
@@ -446,9 +446,9 @@ def test_bursts():
         ctx.sleep(1.0)
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "0")
-        ctx.module_cmd("TETRA Demodulator", "set_bursts", "1")
-        ctx.module_cmd("TETRA Demodulator", "set_windows", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "0")
+        ctx.module_cmd("TETRA Analyzer", "set_bursts", "1")
+        ctx.module_cmd("TETRA Analyzer", "set_windows", "1")
         best = None
         t0 = time.time()
         while time.time() - t0 < 25.0:
@@ -456,7 +456,7 @@ def test_bursts():
             if not alive(ctx):
                 stats.test_fail("test_bursts", "SDR++ stopped during the burst analysis")
                 return False
-            m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+            m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
             if "error" in m:
                 stats.test_fail("test_bursts", f"module not responding: {m['error']}")
                 return False
@@ -508,11 +508,11 @@ def test_layout_stability():
         cfg = get_base_config()
         cfg["moduleInstances"].pop("Radio", None)
         cfg["streams"].pop("Radio", None)
-        cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+        cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
         cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
         cfg["source"] = "File"
         cfg["File Source"] = {"path": rec, "filename": rec}
-        cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+        cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
         # tall enough that "Network & cell" with all its lines is on the screen
         # (the CI display is 1600x1400 for this)
         scr_h = int(os.environ.get("E2E_SCREEN_H", "1400"))
@@ -526,13 +526,13 @@ def test_layout_stability():
             ctx.sleep(2.0)
             ctx.module_cmd("File Source", "set_filename", rec)
             http_get(ctx.base_url, "/sdr/start")
-            ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
-            ctx.module_cmd("TETRA Demodulator", "set_layout", "1")   # tiles: Network & cell stays in the menu
+            ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
+            ctx.module_cmd("TETRA Analyzer", "set_layout", "1")   # tiles: Network & cell stays in the menu
             locked = False
             t0 = time.time()
             while time.time() - t0 < 30.0:
                 ctx.sleep(1.0)
-                m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+                m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
                 if m.get("rx_state") == 2 and m.get("sync"):
                     locked = True
                     break
@@ -550,7 +550,7 @@ def test_layout_stability():
             for _ in range(50):   # 10 s
                 ctx.sleep(0.2)
                 img = grab.gray(*region)
-                m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+                m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
                 now_locked = m.get("rx_state") == 2
                 # the looped recording loses the lock at the wrap ("Decoder: Unlocked"):
                 # a real content change, not a movement - skip those grabs
@@ -584,13 +584,13 @@ def test_instrument_ui():
     cfg = get_base_config()
     cfg["moduleInstances"].pop("Radio", None)
     cfg["streams"].pop("Radio", None)
-    cfg["moduleInstances"]["TETRA Demodulator"] = {"module": "ch_tetra_demodulator", "enabled": True}
+    cfg["moduleInstances"]["TETRA Analyzer"] = {"module": "ch_tetra_demodulator", "enabled": True}
     cfg["moduleInstances"]["File Source"] = {"module": "file_source", "enabled": True}
     cfg["source"] = "File"
     cfg["File Source"] = {"path": rec, "filename": rec}
-    cfg["streams"]["TETRA Demodulator"] = {"muted": False, "sink": "None", "volume": 1.0}
+    cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
     cfg["showMenu"] = False
-    cfg["TETRA Demodulator"] = {"instUi": True, "hamMode": True}
+    cfg["TETRA Analyzer"] = {"instUi": True, "hamMode": True}
     with SDRPPTestContext() as ctx:
         ctx.write_configs(cfg)
         if not ctx.start():
@@ -599,26 +599,26 @@ def test_instrument_ui():
         ctx.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
         http_get(ctx.base_url, "/sdr/start")
-        ctx.module_cmd("TETRA Demodulator", "set_offset", "-3000")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.sleep(6.0)
         for lang in ("en", "de"):
-            ctx.module_cmd("TETRA Demodulator", "inst", "lang " + lang)
+            ctx.module_cmd("TETRA Analyzer", "inst", "lang " + lang)
             for mode in range(4):
-                ctx.module_cmd("TETRA Demodulator", "inst", "mode %d" % mode)
+                ctx.module_cmd("TETRA Analyzer", "inst", "mode %d" % mode)
                 ctx.sleep(1.0)
-            ctx.module_cmd("TETRA Demodulator", "inst", "mode 1")
+            ctx.module_cmd("TETRA Analyzer", "inst", "mode 1")
             for view in range(7):
-                ctx.module_cmd("TETRA Demodulator", "inst", "view %d" % view)
+                ctx.module_cmd("TETRA Analyzer", "inst", "view %d" % view)
                 ctx.sleep(1.0)
         # switch to the classic layout and back (panels are removed and registered again)
-        ctx.module_cmd("TETRA Demodulator", "inst", "ui 0")
+        ctx.module_cmd("TETRA Analyzer", "inst", "ui 0")
         ctx.sleep(1.0)
-        ctx.module_cmd("TETRA Demodulator", "inst", "ui 1")
+        ctx.module_cmd("TETRA Analyzer", "inst", "ui 1")
         ctx.sleep(1.0)
         if not alive(ctx):
             stats.test_fail("test_instrument_ui", "SDR++ stopped while switching modes/views")
             return False
-        m = ctx.module_cmd("TETRA Demodulator", "get_measurements", timeout=8.0)
+        m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False

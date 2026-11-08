@@ -209,7 +209,7 @@ public:
             errOut = "Cannot open " + logPath;
             return false;
         }
-        fprintf(logFile, "# TETRA demodulator v" TETRA_PLUGIN_VERSION "\n");
+        fprintf(logFile, "# TETRA Analyzer v" TETRA_PLUGIN_VERSION "\n");
         fprintf(logFile, "time;level_dbfs;mer_db;evm_rms_pct;evm_peak_pct;carrier_offset_hz;carrier_ppm;ref_freq_hz;"
                          "symbol_rate_ppm;rx_state;bursts;bursts_tolerated;sync_lost;ber;"
                          "crc_bsch_ok;crc_bsch_fail;crc_sb2_ok;crc_sb2_fail;crc_ndb_ok;crc_ndb_fail;crc_schf_ok;crc_schf_fail;"

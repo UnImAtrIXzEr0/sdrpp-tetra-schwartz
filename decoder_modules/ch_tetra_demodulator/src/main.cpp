@@ -83,7 +83,7 @@
 
 SDRPP_MOD_INFO {
     /* Name:            */ "ch_tetra_demodulator",
-    /* Description:     */ "Tetra demodulator for SDR++(output can be fed to tetra-rx from osmo-tetra)",
+    /* Description:     */ "TETRA Analyzer: TETRA air interface analysis for SDR++ (based on the TETRA demodulator plugin and osmo-tetra)",
     /* Author:          */ "cropinghigh",
     /* Version:         */ 0, 22, 1,
     /* Max instances    */ 1 // decoder core uses global state, a second instance would corrupt it
@@ -98,6 +98,11 @@ public:
 
         // Load config
         config.acquire();
+        // v0.24: the instance "TETRA Demodulator" is now "TETRA Analyzer" - keep its settings
+        if (name == "TETRA Analyzer" && !config.conf.contains(name) && config.conf.contains("TETRA Demodulator")) {
+            config.conf[name] = config.conf["TETRA Demodulator"];
+            config.conf.erase("TETRA Demodulator");
+        }
         if (!config.conf.contains(name) || !config.conf[name].contains("mode")) {
             config.conf[name]["mode"] = decoder_mode;
             config.conf[name]["hostname"] = "localhost";
@@ -830,7 +835,7 @@ private:
             bool warnSt = !loss && std::fabs(m.inputRatePpm) > tol;
             tw::TextColored(loss ? bad : (warnSt ? warn : good), "%.0f S/s (%+.0f +-%.0f ppm)", m.inputRate, m.inputRatePpm, m.inputRateUncPpm);
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Samples per second arriving at the TETRA demodulator (nominal 72000),\n"
+                ImGui::SetTooltip("Samples per second arriving at the TETRA Analyzer (nominal 72000),\n"
                                   "least-squares rate over the last %.0f s against the PC clock.\n"
                                   "+-: statistical uncertainty (SDRs deliver samples in blocks).\n"
                                   "Red = clearly fewer samples than nominal: samples are lost (USB, CPU,\n"
@@ -1062,7 +1067,7 @@ private:
             style::beginDisabled();
         }
 
-        tw::TextDisabled("TETRA demodulator v" TETRA_PLUGIN_VERSION);
+        tw::TextDisabled("TETRA Analyzer v" TETRA_PLUGIN_VERSION);
         if (_this->alarmSt.enabled && _this->alarms.any()) {
             tw::TextColored(tc::bad(), "ALARM: %s", _this->alarms.activeText().c_str());
         }
@@ -4018,7 +4023,7 @@ private:
             if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 3); }
             else { tw::TextDisabled("Only in amateur radio mode."); }
             break;
-        case 7: tw::TextDisabled("NETSYMS: SDR menu -> TETRA demodulator -> NETSYMS symbol streaming."); break;
+        case 7: tw::TextDisabled("NETSYMS: SDR menu -> TETRA Analyzer -> NETSYMS symbol streaming."); break;
         default: break;
         }
         ImGui::EndChild();

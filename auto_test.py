@@ -5,7 +5,7 @@ SDR++Brown Automated TETRA Test Script
 1. Starts SDR++ with minimal config (just module references)
 2. Uses HTTP debug protocol to configure everything at runtime:
    - Select File source, load the TETRA WAV file
-   - Select NullAudioSink for TETRA Demodulator's stream
+   - Select NullAudioSink for TETRA Analyzer's stream
    - Set TETRA VFO offset to tune to the actual signal frequency
    - Start playback, monitor TETRA demodulator status
    - Verify TETRA decoder achieves sync
@@ -138,7 +138,7 @@ def create_minimal_config():
         "moduleInstances": {
             "NullAudioSink": {"module": "null_audio_sink", "enabled": True},
             "File Source": {"module": "file_source", "enabled": True},
-            "TETRA Demodulator": {"module": "ch_tetra_demodulator", "enabled": True},
+            "TETRA Analyzer": {"module": "ch_tetra_demodulator", "enabled": True},
         },
         "showMenu": True,
         "source": "None",
@@ -154,7 +154,7 @@ def create_minimal_config():
     with open(os.path.join(CONFIG_DIR, "file_source_config.json"), "w") as f:
         f.write('{"path": ""}')
     with open(os.path.join(CONFIG_DIR, "tetra_demodulator_config.json"), "w") as f:
-        f.write('{"TETRA Demodulator": {"mode": 0, "hostname": "localhost", "port": 8355, "sending": false}}')
+        f.write('{"TETRA Analyzer": {"mode": 0, "hostname": "localhost", "port": 8355, "sending": false}}')
 
     print(f"[OK] Minimal config created at {CONFIG_DIR}")
     print(f"     WAV: {TETRA_WAV}")
@@ -188,9 +188,9 @@ def run_test():
 
         time.sleep(1.5)
 
-        # Step 2: Select NullAudioSink for the TETRA Demodulator's stream
-        print("\n[STEP] Selecting NullAudioSink for TETRA Demodulator stream...")
-        resp = module_command("NullAudioSink", "select", "TETRA Demodulator")
+        # Step 2: Select NullAudioSink for the TETRA Analyzer's stream
+        print("\n[STEP] Selecting NullAudioSink for TETRA Analyzer stream...")
+        resp = module_command("NullAudioSink", "select", "TETRA Analyzer")
         print(f"       Response: {resp}")
         time.sleep(0.5)
 
@@ -209,13 +209,13 @@ def run_test():
         # Step 5: Set TETRA VFO offset to tune to the actual signal
         # This shifts the VFO from source center to the TETRA signal frequency
         print(f"\n[STEP] Setting TETRA VFO offset to {VFO_OFFSET_HZ} Hz...")
-        resp = vfo_set_offset("TETRA Demodulator", VFO_OFFSET_HZ)
+        resp = vfo_set_offset("TETRA Analyzer", VFO_OFFSET_HZ)
         print(f"       Response: {resp}")
         time.sleep(0.3)
 
-        # Step 6: Check initial TETRA Demodulator status
-        print("\n[STEP] Checking TETRA Demodulator initial status...")
-        resp = module_command_get("TETRA Demodulator", "get_status")
+        # Step 6: Check initial TETRA Analyzer status
+        print("\n[STEP] Checking TETRA Analyzer initial status...")
+        resp = module_command_get("TETRA Analyzer", "get_status")
         print(f"       Status: {resp}")
         time.sleep(0.5)
 
@@ -236,7 +236,7 @@ def run_test():
             time.sleep(1)
 
             # Check TETRA status
-            tetra_resp = module_command_get("TETRA Demodulator", "get_status")
+            tetra_resp = module_command_get("TETRA Analyzer", "get_status")
             try:
                 tetra_data = json.loads(tetra_resp)
                 tetra_state = tetra_data.get("decoder_state", "?")
@@ -293,7 +293,7 @@ def run_test():
         if tetra_synced:
             print(f"\n[PASS] TETRA demodulator successfully decoded the signal!")
             # Get final status for display
-            final = module_command_get("TETRA Demodulator", "get_status")
+            final = module_command_get("TETRA Analyzer", "get_status")
             print(f"Final status: {final}")
             return True
         else:
@@ -305,9 +305,9 @@ def run_test():
             # Try a few nearby frequencies
             for try_offset in [-684000, -685000, -686597, -688000, -689000]:
                 print(f"\n  Trying offset {try_offset} Hz...")
-                vfo_set_offset("TETRA Demodulator", try_offset)
+                vfo_set_offset("TETRA Analyzer", try_offset)
                 time.sleep(2)
-                resp = module_command_get("TETRA Demodulator", "get_status")
+                resp = module_command_get("TETRA Analyzer", "get_status")
                 try:
                     data = json.loads(resp)
                     if data.get("sync"):

@@ -4,7 +4,7 @@ E2E Test: Frequency Manager with TETRA VFO (non-RadioModuleInterface)
 
 Fixed behavior under test:
 - SDR++ must NOT crash when the selected VFO has no RadioModuleInterface
-  (e.g. "TETRA Demodulator"). All frequency-manager radio derefs are
+  (e.g. "TETRA Analyzer"). All frequency-manager radio derefs are
   null-guarded (loadByName / refreshWaterfallBookmarks / saveByName /
   updateModeList / Add button / importBookmarks / table / tooltip).
 - Bookmarks store the radio (VFO) name in JSON ("vfo" field). Applying a
@@ -13,7 +13,7 @@ Fixed behavior under test:
   (vfo_available=false) and applying it is a safe no-op.
 
 Reproduction config: no "Radio" module instance, so the only VFO is
-"TETRA Demodulator" and gui::waterfall.selectedVFO has no
+"TETRA Analyzer" and gui::waterfall.selectedVFO has no
 RadioModuleInterface from the very first frame.
 
 Environment Variables:
@@ -30,13 +30,13 @@ from e2e_common import (
 
 
 def get_tetra_only_config():
-    """Config with TETRA Demodulator as the only VFO-creating module."""
+    """Config with TETRA Analyzer as the only VFO-creating module."""
     main_config = get_base_config()
     # Remove Radio: its VFO is the one that normally provides RadioModuleInterface
     main_config["moduleInstances"].pop("Radio", None)
     main_config["streams"].pop("Radio", None)
     main_config["vfoOffsets"].pop("Radio", None)
-    main_config["moduleInstances"]["TETRA Demodulator"] = {
+    main_config["moduleInstances"]["TETRA Analyzer"] = {
         "module": "ch_tetra_demodulator",
         "enabled": True
     }
@@ -145,8 +145,8 @@ def test_frequency_manager_tetra():
         if tetra2 is None:
             stats.test_fail("test_add_bookmark", "TETRA2 not found after add")
             return False
-        if tetra2.get("vfo") != "TETRA Demodulator":
-            stats.test_fail("test_add_bookmark", f"Expected vfo='TETRA Demodulator', got {tetra2.get('vfo')!r}")
+        if tetra2.get("vfo") != "TETRA Analyzer":
+            stats.test_fail("test_add_bookmark", f"Expected vfo='TETRA Analyzer', got {tetra2.get('vfo')!r}")
             return False
         stats.test_pass("test_add_bookmark", f"vfo={tetra2.get('vfo')!r} stored")
 
@@ -166,11 +166,11 @@ def test_frequency_manager_tetra():
         # Test: apply_bookmark targets the bookmark's own radio
         stats.subsection("Test: apply_bookmark targets stored radio")
         resp = ctx.module_cmd("Frequency Manager", "apply_bookmark", "TETRA2")
-        ok, msg = assert_field_equals(resp, "vfo", "TETRA Demodulator", "Apply bookmark")
+        ok, msg = assert_field_equals(resp, "vfo", "TETRA Analyzer", "Apply bookmark")
         if not ok:
             stats.test_fail("test_apply_stored_radio", msg)
             return False
-        stats.test_pass("test_apply_stored_radio", "Applied to TETRA Demodulator (stored radio)")
+        stats.test_pass("test_apply_stored_radio", "Applied to TETRA Analyzer (stored radio)")
 
         # Test: persistence across restart (vfo survives save/load)
         stats.subsection("Test: bookmark vfo persists across restart")
@@ -188,7 +188,7 @@ def test_frequency_manager_tetra():
         if tetra2 is None:
             stats.test_fail("test_persistence", "TETRA2 lost after restart")
             return False
-        if tetra2.get("vfo") != "TETRA Demodulator":
+        if tetra2.get("vfo") != "TETRA Analyzer":
             stats.test_fail("test_persistence", f"vfo not persisted, got {tetra2.get('vfo')!r}")
             return False
         if ghost is None or ghost.get("vfo_available") is not False:

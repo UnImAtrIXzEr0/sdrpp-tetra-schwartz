@@ -191,7 +191,7 @@ This channel is generic. A module must implement `handleDebugCommand` to support
 | `get_samples` | none | Return monotonically increasing sample counter |
 | `get_status` | none | Return sample count, sample rate, active status |
 
-`TETRA Demodulator` instance:
+`TETRA Analyzer` instance:
 
 | Command | Args | Description |
 |---------|------|-------------|
@@ -471,7 +471,7 @@ curl -s http://localhost:8080/status
 # 2. Tell NullAudioSink to consume TETRA stream
 curl -X POST http://localhost:8080/module/NullAudioSink/command \
   -H 'Content-Type: application/json' \
-  -d '{"cmd":"select","args":"TETRA Demodulator"}'
+  -d '{"cmd":"select","args":"TETRA Analyzer"}'
 
 # 3. Select File source
 curl -X POST http://localhost:8080/proc/source/type -d 'File'
@@ -487,7 +487,7 @@ curl "http://localhost:8080/vfo/set_offset?name=TETRA%20Demodulator&offset=-6865
 # 6. Assign sink provider to that stream
 curl -X POST http://localhost:8080/sink/select \
   -H 'Content-Type: application/json' \
-  -d '{"stream":"TETRA Demodulator","sink":"NullAudioSink"}'
+  -d '{"stream":"TETRA Analyzer","sink":"NullAudioSink"}'
 
 # 7. Start playback
 curl -s http://localhost:8080/sdr/start

@@ -320,7 +320,7 @@ def get_base_config(build_dir: str = DEFAULT_BUILD_DIR, root_dev: str = DEFAULT_
         # the tests use the menu; a fresh config starts with it closed (TETRA-SCHWARTZ)
         "showMenu": True,
         # the existing tests use the classic layout; the instrument UI has its own test
-        "TETRA Demodulator": {"instUi": False},
+        "TETRA Analyzer": {"instUi": False},
         "moduleInstances": {
             "Radio": {"module": "radio", "enabled": True},
             "NullAudioSink": {"module": "null_audio_sink", "enabled": True},
@@ -428,10 +428,10 @@ class SDRPPTestContext:
         # the TETRA module keeps its settings in its own file
         # (tetra_demodulator_config.json, keyed by the instance name)
         main_config = dict(main_config)
-        tetra = main_config.pop("TETRA Demodulator", None)
+        tetra = main_config.pop("TETRA Analyzer", None)
         if tetra is not None:
             with open(f"{self.temp_dir}/tetra_demodulator_config.json", 'w') as f:
-                json.dump({"TETRA Demodulator": tetra}, f, indent=2)
+                json.dump({"TETRA Analyzer": tetra}, f, indent=2)
         with open(f"{self.temp_dir}/config.json", 'w') as f:
             json.dump(main_config, f, indent=2)
         

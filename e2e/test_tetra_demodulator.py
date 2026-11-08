@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-E2E Test: TETRA Demodulator with File Source
+E2E Test: TETRA Analyzer with File Source
 
 Tests that TETRA module can demodulate a recorded TETRA signal from a WAV file.
 The test uses a baseband recording and verifies that:
@@ -44,7 +44,7 @@ def test_tetra_demodulator():
     
     # Create base configuration with TETRA module enabled
     main_config = get_base_config()
-    main_config["moduleInstances"]["TETRA Demodulator"] = {
+    main_config["moduleInstances"]["TETRA Analyzer"] = {
         "module": "ch_tetra_demodulator",
         "enabled": True
     }
@@ -102,7 +102,7 @@ def test_tetra_demodulator():
         stats.info(f"File loaded: {resp.get('filename', 'unknown')}")
         
         # Step 2: Verify TETRA module is present and get initial status
-        resp = ctx.module_cmd("TETRA Demodulator", "get_status")
+        resp = ctx.module_cmd("TETRA Analyzer", "get_status")
         stats.debug("TETRA initial status", resp)
         
         ok, msg = assert_response_ok(resp, "get_status")
@@ -118,7 +118,7 @@ def test_tetra_demodulator():
         stats.info("Testing TETRA mode switching...")
         
         # Switch to network syms mode
-        resp = ctx.module_cmd("TETRA Demodulator", "set_mode", "1")
+        resp = ctx.module_cmd("TETRA Analyzer", "set_mode", "1")
         stats.debug("Set mode 1 response", resp)
         
         if "error" in resp:
@@ -128,7 +128,7 @@ def test_tetra_demodulator():
         ctx.sleep(0.5)
         
         # Verify mode switched
-        resp = ctx.module_cmd("TETRA Demodulator", "get_status")
+        resp = ctx.module_cmd("TETRA Analyzer", "get_status")
         if resp.get("mode") != 1:
             stats.test_fail("test_tetra_demodulator", f"Mode switch failed, still mode {resp.get('mode')}")
             return False
@@ -136,7 +136,7 @@ def test_tetra_demodulator():
         stats.info("[OK] Successfully switched to network syms mode")
         
         # Switch back to osmo-tetra mode
-        resp = ctx.module_cmd("TETRA Demodulator", "set_mode", "0")
+        resp = ctx.module_cmd("TETRA Analyzer", "set_mode", "0")
         stats.debug("Set mode 0 response", resp)
         
         if "error" in resp:
@@ -146,7 +146,7 @@ def test_tetra_demodulator():
         ctx.sleep(0.5)
         
         # Verify mode switched back
-        resp = ctx.module_cmd("TETRA Demodulator", "get_status")
+        resp = ctx.module_cmd("TETRA Analyzer", "get_status")
         stats.debug("Final status", resp)
         
         if resp.get("mode") != 0:
