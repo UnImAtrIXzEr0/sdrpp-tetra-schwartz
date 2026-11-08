@@ -15,6 +15,7 @@ namespace style {
     ImFont* bigFont;
     ImFont* mediumFont;
     ImFont* hugeFont;
+    ImFont* valueFont;
     ImVector<ImWchar> baseRanges;
     ImVector<ImWchar> bigRanges;
     ImVector<ImWchar> hugeRanges;
@@ -36,6 +37,9 @@ namespace style {
         ImFontGlyphRangesBuilder baseBuilder;
         baseBuilder.AddRanges(fonts->GetGlyphRangesDefault());
         baseBuilder.AddRanges(fonts->GetGlyphRangesCyrillic());
+        // TETRA-SCHWARTZ: Greek capital delta, en dash, ellipsis, <= >= (all in Roboto)
+        static const ImWchar extraRange[] = { 0x0394, 0x0394, 0x2013, 0x2013, 0x2026, 0x2026, 0x2264, 0x2265, 0 };
+        baseBuilder.AddRanges(extraRange);
         baseBuilder.BuildRanges(&baseRanges);
 
         // Create big font range
@@ -43,6 +47,7 @@ namespace style {
 //        const ImWchar bigRange[] = { '.', '9', '+', '-', 0 };
 //        bigBuilder.AddRanges(bigRange);
         bigBuilder.AddRanges(fonts->GetGlyphRangesDefault());
+        bigBuilder.AddRanges(extraRange);
         bigBuilder.BuildRanges(&bigRanges);
 
         // Create huge font range
@@ -52,7 +57,11 @@ namespace style {
         hugeBuilder.BuildRanges(&hugeRanges);
         
         // Add bigger fonts for frequency select and title
-        baseFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 16.0f * uiScale, NULL, baseRanges.Data);
+        // TETRA-SCHWARTZ: one family (Roboto), Regular for text, Medium for values
+        std::string regular = resDir + "/fonts/Roboto-Regular.ttf";
+        if (!std::filesystem::is_regular_file(wstr::str2wstr(regular))) { regular = resDir + "/fonts/Roboto-Medium.ttf"; }
+        baseFont = fonts->AddFontFromFileTTF(regular.c_str(), 16.0f * uiScale, NULL, baseRanges.Data);
+        valueFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 20.0f * uiScale, NULL, baseRanges.Data);
         mediumFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 25.0f * uiScale, NULL, baseRanges.Data);
         bigFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 45.0f * uiScale, NULL, bigRanges.Data);
         hugeFont = fonts->AddFontFromFileTTF(((std::string)(resDir + "/fonts/Roboto-Medium.ttf")).c_str(), 128.0f * uiScale, NULL, hugeRanges.Data);

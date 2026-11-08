@@ -3289,7 +3289,7 @@ private:
             gui::mainWindow.setBottomPanel(nullptr, nullptr);
             bottomRegistered = false;
         }
-        float topH = ImGui::GetFrameHeight() + 10.0f * k;
+        float topH = (std::max)(ImGui::GetFrameHeight(), style::valueFont->FontSize + 4.0f * k) + 10.0f * k;
         if (!instTopReg || std::fabs(topH - instTopH) > 0.5f) {
             instTopH = topH;
             gui::mainWindow.setTopPanel([this]() { drawStatusBar(); }, instTopH);
@@ -3355,15 +3355,22 @@ private:
     // widest: longest text the value can have - the field keeps that width, so
     // nothing moves when a value changes its length; right: numbers right-aligned
     void statusItem(const char* label, ImVec4 col, const char* value, const char* widest = nullptr, bool right = false) {
+        // all items of the bar start on the same line top (lineY); the label in the
+        // smaller base font is moved down to sit centred next to the value
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.1f);
+        float lineY = ImGui::GetCursorPosY();
+        ImGui::SetCursorPosY(lineY + 0.5f * (style::valueFont->FontSize - style::baseFont->FontSize));
         ImGui::TextDisabled("%s", ui_text::T(label));
         ImGui::SameLine(0.0f, ImGui::GetFontSize() * 0.35f);
+        ImGui::PushFont(style::valueFont);
         float tw = ImGui::CalcTextSize(value).x;
         float fw = widest ? (std::max)(tw, ImGui::CalcTextSize(widest).x) : tw;
-        ImVec2 start = ImGui::GetCursorPos();
+        ImVec2 start(ImGui::GetCursorPosX(), lineY);
+        ImGui::SetCursorPos(start);
         if (right) { ImGui::SetCursorPosX(start.x + fw - tw); }
         ImGui::TextColored(col, "%s", value);
         float lh = ImGui::GetItemRectSize().y;
+        ImGui::PopFont();
         ImGui::SetCursorPos(start);
         ImGui::Dummy(ImVec2(fw, lh));
     }
@@ -3497,6 +3504,13 @@ private:
     }
 
     // ---- side panel: content + softkey column ----
+    // label in the base font next to a value in style::valueFont: centred on the value's line
+    void baseTextBesideValue(bool disabled, const char* txt) {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 0.5f * (style::valueFont->FontSize - style::baseFont->FontSize));
+        ImGui::PushFont(style::baseFont);
+        if (disabled) { ImGui::TextDisabled("%s", txt); } else { ImGui::TextUnformatted(txt); }
+        ImGui::PopFont();
+    }
     float instSoftW() { return (std::max)(200.0f * style::uiScale, ImGui::GetFontSize() * 14.0f); }
 
     // fixed column widths of the measured values: longest label / value / limit
@@ -3507,8 +3521,10 @@ private:
                                         "Raw BER", "CRC errors", "Re-locks with slip", "Modulation", "Frequency and clock", "Reception" };
         a = 0.0f;
         for (const char* l : labels) { a = (std::max)(a, ImGui::CalcTextSize(ui_text::T(l)).x); }
-        b = ImGui::CalcTextSize("+1234 Hz | +2.345 ppm").x;   // longest value
-        const char* lims[] = { "-26 dB (5 %)", "10 / 30 %", "+-0.2 ppm", ui_text::T("guide"), ui_text::T("indicative") };
+        ImGui::PushFont(style::valueFont);
+        b = ImGui::CalcTextSize("+1234 Hz | +2.345 ppm").x;   // longest value (value font)
+        ImGui::PopFont();
+        const char* lims[] = { "-26 dB (5 %)", "10 / 30 %", "±0.2 ppm", ui_text::T("guide"), ui_text::T("indicative") };
         c = 0.0f;
         for (const char* l : lims) { c = (std::max)(c, ImGui::CalcTextSize(l).x); }
     }
@@ -3524,13 +3540,111 @@ private:
         float tiles = 2.0f * (big + 2.0f * st.WindowPadding.x) + st.ItemSpacing.x;
         return (std::max)(table, tiles) + st.ScrollbarSize + st.ItemSpacing.x;
     }
+    // ---- mini trends (Measure, below the measured values): last 10 minutes ----
+    std::vector<TetraTrendPoint> miniPts;
+    double miniT = 0.0;
+    void drawMiniTrends(float w) {
+        double t = playNow();
+        if (t - miniT > 1.0) { miniT = t; miniPts = meas.trend().copy(time(nullptr) - 600); }
+        ImGui::Spacing();
+        instHeader(ui_text::T("Trends (10 min)"), w);
+        double dl = mainVfoFreq();
+        // freq. error: against the SYSINFO frequency (ppb) where known, else the carrier offset
+        auto fErr = [&](const TetraTrendPoint& p) -> float {
+            if (!std::isnan(p.ppb) && dl > 1e6) { return (float)(p.ppb * dl * 1e-9); }
+            return p.carrierHz;
+        };
+        miniPlot("Level", w, [](const TetraTrendPoint& p) { return p.level; }, (miniPts.empty() || !miniPts.back().calibrated) ? "%.1f dBFS" : "%.1f dBm", 3.0f);
+        miniPlot("MER", w, [](const TetraTrendPoint& p) { return p.mer; }, "%.1f dB", 3.0f);
+        miniPlot("Freq. error", w, fErr, "%+.0f Hz", 20.0f);
+    }
+    template <class F>
+    void miniPlot(const char* title, float w, F get, const char* fmt, float minSpan) {
+        const float k = style::uiScale;
+        float lo = INFINITY, hi = -INFINITY, last = NAN;
+        for (const auto& p : miniPts) {
+            float v = get(p);
+            if (std::isnan(v)) { continue; }
+            lo = (std::min)(lo, v); hi = (std::max)(hi, v); last = v;
+        }
+        char vb[48] = "--";
+        if (!std::isnan(last)) { snprintf(vb, sizeof(vb), fmt, last); }
+        ImGui::TextDisabled("%s", ui_text::T(title));
+        ImGui::SameLine();
+        ImGui::PushFont(style::valueFont);
+        float vw = ImGui::CalcTextSize(vb).x;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (std::max)(0.0f, ImGui::GetContentRegionAvail().x - vw));
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 0.5f * (style::valueFont->FontSize - style::baseFont->FontSize));
+        ImGui::TextColored(tc::val(), "%s", vb);
+        ImGui::PopFont();
+        float h = ImGui::GetFontSize() * 2.2f;
+        ImVec2 p0 = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + h), ImGui::GetColorU32(ImGuiCol_FrameBg), 2.0f);
+        dl->AddRect(p0, ImVec2(p0.x + w, p0.y + h), ImGui::GetColorU32(ImGuiCol_Border), 2.0f);
+        if (lo <= hi && miniPts.size() > 1) {
+            if (hi - lo < minSpan) { float c = 0.5f * (hi + lo); lo = c - 0.5f * minSpan; hi = c + 0.5f * minSpan; }
+            time_t t1 = time(nullptr), t0 = t1 - 600;
+            auto X = [&](time_t t) { return p0.x + 2.0f + (float)(t - t0) / 600.0f * (w - 4.0f); };
+            auto Y = [&](float v) { return p0.y + h - 3.0f - (v - lo) / (hi - lo) * (h - 6.0f); };
+            ImU32 col = ImGui::GetColorU32(ImGuiCol_PlotLines);
+            bool have = false;
+            ImVec2 prev;
+            for (const auto& p : miniPts) {
+                float v = get(p);
+                if (std::isnan(v)) { have = false; continue; }
+                ImVec2 pt(X(p.t), Y(v));
+                if (have) { dl->AddLine(prev, pt, col, 1.2f * k); }
+                prev = pt;
+                have = true;
+            }
+            char rb[48];
+            snprintf(rb, sizeof(rb), fmt, hi);
+            dl->AddText(ImVec2(p0.x + 4.0f, p0.y + 1.0f), ImGui::GetColorU32(ImGuiCol_TextDisabled), rb);
+            snprintf(rb, sizeof(rb), fmt, lo);
+            dl->AddText(ImVec2(p0.x + 4.0f, p0.y + h - ImGui::GetFontSize() - 1.0f), ImGui::GetColorU32(ImGuiCol_TextDisabled), rb);
+        }
+        ImGui::Dummy(ImVec2(w, h));
+    }
+
+    // ---- last results of the analyses (they run only in their own view) ----
+    void drawLastResults(float w) {
+        ImGui::Spacing();
+        instHeader(ui_text::T("Last analysis results"), w);
+        if (!ImGui::BeginTable(CONCAT("##_inst_lastres_", name), 2, ImGuiTableFlags_SizingFixedFit)) { return; }
+        auto row = [&](const char* l) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(l)); ImGui::TableSetColumnIndex(1); };
+        TxAnalysisResult r = txa.get();
+        row("ACP (±25 kHz)");
+        if (r.valid) {
+            int sd = r.acpDbc[2] >= r.acpDbc[3] ? 2 : 3;
+            bool lim = r.acpDbc[sd] - r.acpFloorDbc[sd] < 3.0;
+            ImGui::TextColored(lim ? tc::grey() : (r.acpDbc[sd] <= -60.0 ? tc::good() : tc::bad()), "%.1f dBc%s", r.acpDbc[sd], lim ? " *" : "");
+            if (lim && ImGui::IsItemHovered()) { ImGui::SetTooltip("%s", ui_text::T("receiver limited")); }
+            row("Occupied BW");
+            ImGui::TextColored(tc::val(), "%.2f kHz", r.obwHz / 1000.0);
+        }
+        else { ImGui::TextDisabled("%s", ui_text::T("not measured yet")); }
+        TetraBurstResult br = burstAn.get();
+        row("Burst length / ramps");
+        if (br.state == 2 && !std::isnan(br.lengthSym)) {
+            ImGui::TextColored(tc::val(), "%.1f sym  %.1f / %.1f sym", br.lengthSym, br.riseSym, br.fallSym);
+        }
+        else { ImGui::TextDisabled("%s", ui_text::T("not measured yet")); }
+        TetraChannelResult mr = chanAn.get();
+        row("Strongest echo");
+        if (mr.valid && !std::isnan(mr.mp.echoDelayUs)) { ImGui::TextColored(tc::warn(), "%+.0f us  %.1f dB", mr.mp.echoDelayUs, mr.mp.echoLevelDb); }
+        else if (mr.valid) { ImGui::TextColored(tc::good(), "%s", ui_text::T("none")); }
+        else { ImGui::TextDisabled("%s", ui_text::T("not measured yet")); }
+        ImGui::EndTable();
+    }
+
     // content column (far left): what belongs to the mode
     void drawInstContent() {
         ImGui::BeginChild(CONCAT("##_inst_content_", name), ImVec2(0, 0), false);
         float w = ImGui::GetContentRegionAvail().x;
         switch (instMode) {
         case IM_MONITOR: drawInstMonitorSide(w); break;
-        case IM_MEASURE: drawMeasTable(w); break;
+        case IM_MEASURE: drawMeasTable(w); drawMiniTrends(w); drawLastResults(w); break;
         case IM_DRIVE: drawInstDriveSide(w); break;
         case IM_ALIGN: drawAlignSide(w); break;
         default: break;
@@ -3712,7 +3826,9 @@ private:
         const tetra_display_state* d = osmotetradecoder.getDisplay();
         ImGuiTableFlags tf = ImGuiTableFlags_SizingFixedFit;
         if (!ImGui::BeginTable(CONCAT("##_inst_cell_", name), 2, tf)) { return; }
-        auto lbl = [&](const char* t) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(t)); ImGui::TableSetColumnIndex(1); };
+        // values in the value font, labels in the base font
+        ImGui::PushFont(style::valueFont);
+        auto lbl = [&](const char* t) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); baseTextBesideValue(true, ui_text::T(t)); ImGui::TableSetColumnIndex(1); };
         lbl("DL / UL");
         ImGui::TextColored(tc::val(), "%.4f / %.4f MHz", osmotetradecoder.getDlFreq() / 1e6, osmotetradecoder.getUlFreq() / 1e6);
         if (d && d->sysinfo_valid) {
@@ -3764,6 +3880,7 @@ private:
             first = false;
         }
         ImGui::EndTable();
+        ImGui::PopFont();
     }
 
     void drawInstDriveSide(float w) {
@@ -3796,10 +3913,10 @@ private:
         vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
         ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(label));
-        ImGui::TableSetColumnIndex(1); ImGui::TextColored(tc::val(), "%s", buf);
-        ImGui::TableSetColumnIndex(2); ImGui::TextDisabled("%s", limit ? limit : "");
-        ImGui::TableSetColumnIndex(3); instDot(st);
+        ImGui::TableSetColumnIndex(0); baseTextBesideValue(true, ui_text::T(label));
+        ImGui::TableSetColumnIndex(1); ImGui::PushFont(style::valueFont); ImGui::TextColored(tc::val(), "%s", buf); ImGui::PopFont();
+        ImGui::TableSetColumnIndex(2); baseTextBesideValue(true, limit ? limit : "");
+        ImGui::TableSetColumnIndex(3); ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 0.5f * (style::valueFont->FontSize - style::baseFont->FontSize)); instDot(st);
         if (st > instWorst) {
             instWorst = st;
             if (st == ST_BAD) { instWorstText = std::string(ui_text::T(label)) + ": " + buf + "  (" + (limit ? limit : "") + ")"; }
@@ -3855,7 +3972,7 @@ private:
             double ppm = m.absErrValid ? m.absErrHz / (m.refFreqHz > 1e6 ? m.refFreqHz : 1e6) * 1e6 : m.carrierPpm;
             double hz = m.absErrValid ? m.absErrHz : m.carrierOffsetHz;
             if (freqRef == 0) { measRow("Carrier error", ST_NONE, ui_text::T("indicative"), "%+.0f Hz | %+.3f ppm", hz, ppm); }
-            else { measRow("Carrier error", std::fabs(ppm) <= (high ? 0.1 : 0.2) ? ST_OK : ST_BAD, high ? "+-0.1 ppm" : "+-0.2 ppm", "%+.0f Hz | %+.3f ppm", hz, ppm); }
+            else { measRow("Carrier error", std::fabs(ppm) <= (high ? 0.1 : 0.2) ? ST_OK : ST_BAD, high ? "±0.1 ppm" : "±0.2 ppm", "%+.0f Hz | %+.3f ppm", hz, ppm); }
             measRow("Symbol clock", ST_NONE, "", "%+.1f ppm", m.symbolRatePpm);
         }
         else { measRow("Carrier error", ST_NONE, "", "--"); }
@@ -3989,7 +4106,7 @@ private:
         // frequency: BS +-0.2 ppm (+-0.1 above 520 MHz), MS +-100 Hz (EN 300 394-1 7.3.2.2)
         double limHz = alignMs ? 100.0 : fref * (fref > 520e6 ? 0.1e-6 : 0.2e-6);
         char lt[48];
-        snprintf(lt, sizeof(lt), alignMs ? "+-100 Hz (MS)" : "+-%.0f Hz (BS)", limHz);
+        snprintf(lt, sizeof(lt), alignMs ? "±100 Hz (MS)" : "±%.0f Hz (BS)", limHz);
         alignMeter("Freq. error", lt, hz, "%+.0f", "Hz", -2.0 * limHz, 2.0 * limHz, -limHz, limHz, alignRef.hz, syn, w, h);
         ImGui::SameLine();
         double evm = compOriginOffset ? 100.0 * pow(10.0, -m.merExclDb / 20.0) : m.evmPct;
@@ -4007,7 +4124,7 @@ private:
             }
         }
         // ACP +-25 kHz, worse side; BS / MS classes 1-3: -60 dBc (table 7.2)
-        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : ui_text::T("TX spectrum off"), acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h, acpLimited);
+        alignMeter("Adjacent channel", txaRun ? "-60 dBc (±25 kHz)" : ui_text::T("TX spectrum off"), acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h, acpLimited);
         if (!txaRun) {
             if (ImGui::SmallButton(ui_text::L("Start TX spectrum analysis", "_inst_txa_" + name).c_str())) { txaRun = true; saveTxaConfig(); }
         }
@@ -4822,7 +4939,7 @@ private:
             ImGui::TableSetupColumn("limit");
             ImGui::TableSetupColumn("floor");
             ImGui::TableHeadersRow();
-            const char* lbl[3] = { "+-25 kHz", "+-50 kHz", "+-75 kHz" };
+            const char* lbl[3] = { "±25 kHz", "±50 kHz", "±75 kHz" };
             for (int i = 0; i < 3; i++) {
                 int lo = 2 - i, hi = 3 + i;
                 ImGui::TableNextRow();

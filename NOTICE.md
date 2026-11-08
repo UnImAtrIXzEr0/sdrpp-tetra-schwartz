@@ -84,6 +84,11 @@ The SDRplay source module needs the SDRplay API installed on the computer
 
 Their own terms of use apply. The data is only downloaded on request.
 
+## Fonts
+
+- Roboto Regular and Roboto Medium (Google), Apache License 2.0 – see
+  `res/fonts/LICENSE-Roboto.txt` (in the program folder: `share/sdrpp/fonts` or `res/fonts`).
+
 ## Trademarks and names
 
 - **About the name:** “TETRA-SCHWARTZ” is a homage to the film comedy

@@ -54,6 +54,13 @@ namespace ui_text {
             { "Cell details", "Zelldetails" },
             { "Hide call control", "Rufsteuerung ausblenden" },
             { "Play anyway", "Trotzdem abspielen" },
+            { "Trends (10 min)", "Verläufe (10 min)" },
+            { "Last analysis results", "Letzte Analyse-Ergebnisse" },
+            { "Occupied BW", "Belegte Bandbreite" },
+            { "Burst length / ramps", "Burstlänge / Rampen" },
+            { "Strongest echo", "Stärkstes Echo" },
+            { "not measured yet", "noch nicht gemessen" },
+            { "none", "keines" },
             { "receiver limited", "empfängerbegrenzt" },
             { "Within 3 dB of the measurement floor: the transmitter may be better.\n"
               "Raise the level (close to full scale, with an attenuator) and store the floor.",

@@ -10,6 +10,8 @@ namespace style {
     SDRPP_EXPORT ImFont* bigFont;
     SDRPP_EXPORT ImFont* mediumFont;
     SDRPP_EXPORT ImFont* hugeFont;
+    // TETRA-SCHWARTZ: Roboto Medium 20 px for prominent values (base text is Roboto Regular 16 px)
+    SDRPP_EXPORT ImFont* valueFont;
     SDRPP_EXPORT float uiScale;
 
     bool setDefaultStyle(std::string resDir);
