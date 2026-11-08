@@ -666,6 +666,38 @@ def test_listen_mute():
     return True
 
 
+def test_clock_cal():
+    """Calibration of the SDR's internal clock against its reference
+    (clock_cal.h, requested by the USRP source): simulated source and carrier
+    measurement - result, abort on lock loss / no relock / cancel, always back
+    on the reference."""
+    stats.test_start("test_clock_cal")
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    d = os.path.join(root, "decoder_modules", "ch_tetra_demodulator", "src")
+    cxx = os.environ.get("CXX", "g++")
+    if shutil.which(cxx) is None:
+        stats.test_pass("test_clock_cal", f"skipped (no C++ compiler '{cxx}')")
+        return True
+    tmpdir = tempfile.mkdtemp(prefix="tetra_clkcal_")
+    exe = os.path.join(tmpdir, "test_clock_cal")
+    r = subprocess.run([cxx, "-std=c++17", "-DTETRA_CLOCK_CAL_STANDALONE", "-I" + os.path.join(root, "core", "src"), "-I" + d,
+                        os.path.join(here, "gen", "test_clock_cal.cpp"), "-o", exe],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        stats.test_fail("test_clock_cal", "compile error: " + r.stderr[-400:])
+        return False
+    r = subprocess.run([exe], capture_output=True, text=True, timeout=30)
+    stats.info(r.stdout.strip())
+    if r.returncode != 0:
+        bad = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+        stats.test_fail("test_clock_cal", "; ".join(bad) or "failed")
+        return False
+    stats.test_pass("test_clock_cal", "internal clock error found, aborts cleanly, always back on the reference")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
@@ -677,7 +709,8 @@ if __name__ == "__main__":
     r5 = test_layout_stability()
     r6 = test_instrument_ui()
     r7 = test_listen_mute()
-    res = [r1, r2, r3, r4, r5, r6, r7]
+    r8 = test_clock_cal()
+    res = [r1, r2, r3, r4, r5, r6, r7, r8]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

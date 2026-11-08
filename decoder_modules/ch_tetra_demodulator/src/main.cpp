@@ -59,6 +59,7 @@
 #include "gps.h"
 #include "propagation.h"
 #include "map_export.h"
+#include "clock_cal.h"
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
 #include "const_view.h"
@@ -4755,6 +4756,7 @@ private:
         // overload check: downlink tap on the TETRA VFO (not when the bursts are measured there)
         double dlTap = (burstSt.overloadCheck && burstSt.source != 2) ? mainVfoFreq() : 0.0;
         burstAn.loop(enabled && burstRun, f, dlTap);
+        clockCal.loop(enabled && vfo != nullptr && decoder_mode == 0, meas.get());
         chanAn.loop(enabled && mpRun && vfo != nullptr, mainVfoFreq());
         {
             TetraMeasSnapshot vm = meas.get();
@@ -5823,6 +5825,7 @@ private:
     TetraCarrierMonitor carrierMon;
     bool carrDetached = false, focusCarrWin = false;
     TetraBurstAnalyzer burstAn;
+    TetraClockCal clockCal;       // internal clock of the SDR against its reference (requested by the source)
     TetraBurstSettings burstSt;
     bool burstRun = false;
     bool burstDetached = false, focusBurstWin = false;

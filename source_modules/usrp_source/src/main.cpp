@@ -14,6 +14,8 @@
 #include <utils/optionlist.h>
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
+#include <signal_path/source_clock_cal_interface.h>
+#include <ctime>
 #include <cstring>
 #include <cmath>
 #include <utils/freq_formatting.h>
@@ -57,12 +59,13 @@ static void start(void* ctx);
 static void stop(void* ctx);
 static void tune(double freq, void* ctx);
 
-class USRPSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface {
+class USRPSourceModule : public ModuleManager::Instance, public SourceGainInterface, public SourceFreqCorrInterface, public SourceClockCalInterface {
 public:
     // ---- SourceGainInterface (TETRA automatic gain): 1 dB steps over the gain range ----
     void* getInterface(const char* iname) override {
         if (!strcmp(iname, "SourceGainInterface")) { return (SourceGainInterface*)this; }
         if (!strcmp(iname, "SourceFreqCorrInterface")) { return (SourceFreqCorrInterface*)this; }
+        if (!strcmp(iname, "SourceClockCalInterface")) { return (SourceClockCalInterface*)this; }
         return nullptr;
     }
     std::string gainSourceName() override { return "USRP"; }
@@ -80,7 +83,9 @@ public:
     }
     // Frequency correction (SDR calibration): no oscillator trim through UHD, the
     // tuning frequency is corrected instead (positive ppm = oscillator runs fast).
-    // Not needed with an external 10 MHz reference: then disabled and not applied.
+    // Not needed with an external 10 MHz reference or a GPSDO: then disabled and
+    // not applied. The correction for the internal clock can be calibrated against
+    // the reference (SourceClockCalInterface below).
     std::string corrSourceName() override { return "USRP"; }
     bool corrAvailable() override { return !selectedSer.empty() && !externalRef(); }
     double corrPpm() override { return ppm; }
@@ -90,16 +95,61 @@ public:
         if (running && dev) {
             try { setRxFreq(freq); } catch (const std::exception& e) { flog::error("USRP retune: {}", e.what()); }
         }
+        calTime.clear();   // set again by clockCalStore() for a calibration against the reference
         if (!selectedSer.empty()) {
             config.acquire();
             config.conf["devices"][selectedSer]["ppm"] = ppm;
+            config.conf["devices"][selectedSer].erase("calTime");
             config.release(true);
         }
     }
-    bool externalRef() { return clockSources.size() > 0 && clockSources.key(csId) == "external"; }
+    // clock source with an external reference (10 MHz input or GPSDO)
+    bool externalRef() {
+        if (clockSources.size() == 0) { return false; }
+        std::string c = clockSources.key(csId);
+        return c == "external" || c == "gpsdo";
+    }
+    // the device runs on the reference now (not switched to the internal clock for a calibration)
+    bool refActive() { return externalRef() && !calInternal; }
     // frequency to request for 'f' at the antenna; the DSP shift runs from the same
     // reference, so correcting the target corrects the whole tuning
-    double hwFreq(double f) { return externalRef() ? f : f / (1.0 + ppm * 1e-6); }
+    double hwFreq(double f) { return refActive() ? f : f / (1.0 + ppm * 1e-6); }
+
+    // ---- SourceClockCalInterface: internal clock against the reference ----
+    // The button below only places the request; the TETRA demodulator measures
+    // the carrier with both clocks and calls back (see clock_cal.h there).
+    std::string clockCalSourceName() override { return "USRP"; }
+    bool clockCalTakeRequest() override { bool r = calRequest; calRequest = false; return r; }
+    bool clockCalTakeCancel() override { bool c = calCancel; calCancel = false; return c; }
+    bool clockCalPossible() override { return running && dev && externalRef(); }
+    bool clockCalUseInternal(bool internal) override {
+        if (!running || !dev) { calInternal = false; return !internal; }   // stopped: the next start uses the selected clock
+        std::string clk = internal ? std::string("internal") : clockSources.key(csId);
+        try {
+            dev->set_clock_source(clk);
+            dev->set_time_source(clk == "external" ? "external" : "internal");
+            calInternal = internal;
+            setRxFreq(freq);
+            return true;
+        } catch (const std::exception& e) {
+            flog::error("USRP clock calibration: switching to '{}' failed: {}", clk, e.what());
+            return false;
+        }
+    }
+    double clockCalPpm() override { return ppm; }
+    void clockCalStore(double v) override {
+        setCorrPpm(v);
+        char b[32];
+        time_t t = time(nullptr);
+        strftime(b, sizeof(b), "%Y-%m-%d %H:%M", localtime(&t));
+        calTime = b;
+        if (!selectedSer.empty()) {
+            config.acquire();
+            config.conf["devices"][selectedSer]["calTime"] = calTime;
+            config.release(true);
+        }
+    }
+    void clockCalStatus(const std::string& text, bool busy) override { calStatus = text; calBusy = busy; }
     void setRxFreq(double f) {
         double lo_offset = sampleRate / 2.0;
         uhd::tune_request_t tune_req(hwFreq(f));
@@ -174,6 +224,10 @@ public:
         config.acquire();
         if (config.conf["devices"][selectedSer].contains("ppm") && config.conf["devices"][selectedSer]["ppm"].is_number()) {
             ppm = std::clamp(config.conf["devices"][selectedSer]["ppm"].get<double>(), -500.0, 500.0);
+        }
+        calTime.clear();
+        if (config.conf["devices"][selectedSer].contains("calTime") && config.conf["devices"][selectedSer]["calTime"].is_string()) {
+            calTime = config.conf["devices"][selectedSer]["calTime"].get<std::string>();
         }
         config.release();
 
@@ -618,6 +672,7 @@ private:
             ringCount = 0;
         }
 
+        _this->calInternal = false;   // start() sets the selected clock source
         _this->running = true;
         _this->workerThread = std::thread(&USRPSourceModule::worker, _this);
         _this->consumerThread = std::thread(&USRPSourceModule::consumer, _this);
@@ -791,10 +846,14 @@ private:
             }
         }
 
+        bool calRun = _this->calBusy || _this->calRequest;
         if (_this->clockSources.size() > 1) {
             SmGui::LeftLabel("Clock");
             SmGui::FillWidth();
-            if (SmGui::Combo(CONCAT("##_usrp_clk_sel_", _this->name), &_this->csId, _this->clockSources.txt)) {
+            if (calRun) { SmGui::BeginDisabled(); }
+            bool clkChanged = SmGui::Combo(CONCAT("##_usrp_clk_sel_", _this->name), &_this->csId, _this->clockSources.txt);
+            if (calRun) { SmGui::EndDisabled(); }
+            if (clkChanged) {
                 if (_this->running && _this->dev) {
                     try {
                         std::string target_clk = _this->clockSources.key(_this->csId);
@@ -834,6 +893,28 @@ private:
                 SmGui::EndDisabled();
                 SmGui::Text("external reference - no correction needed");
             }
+            if (!_this->calTime.empty()) {
+                SmGui::Text(("calibrated against reference " + _this->calTime).c_str());
+            }
+            // internal clock against the reference: measured by the TETRA demodulator
+            if (calRun) {
+                if (SmGui::Button(CONCAT("Cancel calibration##_usrp_calc_", _this->name))) {
+                    if (_this->calRequest) { _this->calRequest = false; _this->calStatus = "cancelled"; }
+                    else { _this->calCancel = true; }
+                }
+                if (_this->calRequest) { SmGui::Text("waiting for the TETRA demodulator (locked to a carrier)"); }
+            }
+            else {
+                bool can = _this->running && _this->dev && ext;
+                if (!can) { SmGui::BeginDisabled(); }
+                if (SmGui::Button(CONCAT("Calibrate internal clock against reference##_usrp_cal_", _this->name))) {
+                    _this->calRequest = true;
+                    _this->calCancel = false;
+                    _this->calStatus.clear();
+                }
+                if (!can) { SmGui::EndDisabled(); }
+            }
+            if (!_this->calStatus.empty()) { SmGui::Text(_this->calStatus.c_str()); }
         }
 
         // ADVANCED NATIVE UHD PROPERTY CONTROLS
@@ -901,6 +982,10 @@ private:
     std::string selectedChan = "";
     float gain = 0.0f;
     double ppm = 0.0;   // frequency correction, per device (config "ppm")
+    std::string calTime;          // date/time of the calibration against the reference (config "calTime")
+    bool calRequest = false, calCancel = false, calBusy = false;
+    bool calInternal = false;     // switched to the internal clock for a calibration
+    std::string calStatus;
     
     // Probing Feature Flag Cache Properties
     bool hasDcOffsetControl = false;
