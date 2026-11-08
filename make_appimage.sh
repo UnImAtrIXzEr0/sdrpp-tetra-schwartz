@@ -12,10 +12,10 @@ rm -rf "$APPDIR"
 DESTDIR="$APPDIR" cmake --install "$BUILD_DIR" --prefix /usr
 
 # Licence and origin notices (GPL-3.0, AGPL-3.0 for osmo-tetra, NOTICE)
-mkdir -p "$APPDIR/usr/share/doc/sdrpp-tetra-schwartz"
-cp "$SRC_DIR/license" "$APPDIR/usr/share/doc/sdrpp-tetra-schwartz/LICENSE-GPL-3.0.txt"
-cp "$SRC_DIR/decoder_modules/ch_tetra_demodulator/src/decoder/COPYING" "$APPDIR/usr/share/doc/sdrpp-tetra-schwartz/LICENSE-AGPL-3.0-osmo-tetra.txt"
-cp "$SRC_DIR/NOTICE.md" "$APPDIR/usr/share/doc/sdrpp-tetra-schwartz/NOTICE.md"
+mkdir -p "$APPDIR/usr/share/doc/sdrpp-aia"
+cp "$SRC_DIR/license" "$APPDIR/usr/share/doc/sdrpp-aia/LICENSE-GPL-3.0.txt"
+cp "$SRC_DIR/decoder_modules/ch_tetra_demodulator/src/decoder/COPYING" "$APPDIR/usr/share/doc/sdrpp-aia/LICENSE-AGPL-3.0-osmo-tetra.txt"
+cp "$SRC_DIR/NOTICE.md" "$APPDIR/usr/share/doc/sdrpp-aia/NOTICE.md"
 
 # Desktop entry and icon with AppImage-friendly names
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
@@ -25,8 +25,8 @@ cat > "$APPDIR/usr/share/applications/sdrpp.desktop" <<'EOF'
 Type=Application
 Terminal=false
 Exec=sdrpp
-Name=SDR++ TETRA-SCHWARTZ
-Comment=Amateur radio TETRA edition based on SDR++Brown (experimental beta)
+Name=SDR++ Air Interface Analyzer
+Comment=Air interface analyzer (TETRA) based on SDR++Brown (experimental beta)
 Icon=sdrpp
 Categories=HamRadio;Network;
 EOF
@@ -34,9 +34,13 @@ EOF
 # Launcher: separate config root (paths differ from a normal install) and
 # SDRPP_APPDIR so the core resolves modules/resources inside the mount.
 # A test build (OPT_TETRA_TEST_BUILD=ON) gets its own config root as well.
-ROOT_NAME="sdrpp_brown_appimage"
+# v0.24: the folder is named after "SDR++ Air Interface Analyzer"; the settings of
+# the former folder (sdrpp_brown_appimage...) are copied over once.
+ROOT_NAME="sdrpp_aia_appimage"
+OLD_ROOT_NAME="sdrpp_brown_appimage"
 if grep -Eiq '^OPT_TETRA_TEST_BUILD:[A-Z]*=(ON|1|TRUE|YES|Y)$' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
-    ROOT_NAME="sdrpp_brown_appimage_test"
+    ROOT_NAME="sdrpp_aia_appimage_test"
+    OLD_ROOT_NAME="sdrpp_brown_appimage_test"
 fi
 cat > "$(pwd)/AppRun.sh" <<'EOF'
 #!/bin/sh
@@ -47,10 +51,12 @@ for a in "$@"; do
     case "$a" in -r|--root|-r=*|--root=*) exec "$HERE/usr/bin/sdrpp" "$@";; esac
 done
 ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/@ROOT_NAME@"
+OLD="${XDG_CONFIG_HOME:-$HOME/.config}/@OLD_ROOT_NAME@"
+if [ ! -e "$ROOT" ] && [ -d "$OLD" ]; then cp -a "$OLD" "$ROOT"; fi
 mkdir -p "$ROOT"
 exec "$HERE/usr/bin/sdrpp" -r "$ROOT" "$@"
 EOF
-sed -i "s/@ROOT_NAME@/$ROOT_NAME/" "$(pwd)/AppRun.sh"
+sed -i "s/@ROOT_NAME@/$ROOT_NAME/; s/@OLD_ROOT_NAME@/$OLD_ROOT_NAME/" "$(pwd)/AppRun.sh"
 chmod +x "$(pwd)/AppRun.sh"
 
 # Collect dependencies of the binary, the core and every plugin
@@ -61,7 +67,7 @@ done
 
 export NO_STRIP=1
 export LD_LIBRARY_PATH="$APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export LDAI_OUTPUT="SDRPP-TETRA-SCHWARTZ${TETRA_VERSION:+-v$TETRA_VERSION}-beta-x86_64.AppImage"
+export LDAI_OUTPUT="SDRPP-AIA${TETRA_VERSION:+_v$TETRA_VERSION}-x86_64.AppImage"
 "$LINUXDEPLOY" --appimage-extract-and-run \
     --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/sdrpp" \

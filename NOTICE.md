@@ -1,13 +1,13 @@
-# SDR++ TETRA-SCHWARTZ – notice of origin, modifications and licences
+# SDR++ Air Interface Analyzer – notice of origin, modifications and licences
 
-SDR++ TETRA-SCHWARTZ is a **modified version (fork)** of SDR++ for amateur
+SDR++ Air Interface Analyzer is a **modified version (fork)** of SDR++ for amateur
 radio TETRA, created and maintained by **UnImAtrIXzEr0**.
 It is an experimental beta, built and adapted for the maintainer's own needs
 and published as it is: **no support** and no promise of answers, fixes or
 new functions; suggestions are welcome, their implementation is reserved. It is **not an official release** of SDR++ or
 SDR++Brown and is **not endorsed by their authors**. Please report problems
 with this edition only here:
-<https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues>,
+<https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/issues>,
 not to the authors of SDR++ or SDR++Brown.
 
 ## Origin
@@ -19,7 +19,7 @@ not to the authors of SDR++ or SDR++Brown.
 | TETRA demodulator plugin | cropinghigh | GPL-3.0 | <https://github.com/cropinghigh/sdrpp-tetra-demodulator> |
 | osmo-tetra (TETRA lower/upper MAC decoder) | Harald Welte, Sylvain Munaut, Holger Hans Peter Freyther and contributors (Osmocom) | AGPL-3.0 | <https://gitea.osmocom.org/tetra/osmo-tetra> |
 | TETRA speech codec | ETSI, reference code of ETSI EN 300 395-2 (downloaded from ETSI at build time) | ETSI terms | <https://www.etsi.org> |
-| Modifications of this edition | © 2026 UnImAtrIXzEr0 | GPL-3.0 | <https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz> |
+| Modifications of this edition | © 2026 UnImAtrIXzEr0 | GPL-3.0 | <https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer> |
 
 The full list of SDR++ contributors, libraries, hardware donators and
 patrons is kept unchanged in the program (Info / credits screen) and in
@@ -91,10 +91,9 @@ Their own terms of use apply. The data is only downloaded on request.
 
 ## Trademarks and names
 
-- **About the name:** “TETRA-SCHWARTZ” is a homage to the film comedy
-  *Spaceballs* (Mel Brooks, 1987) and its “Schwartz” (“May the Schwartz be
-  with you”). It has no relation to any company, brand or product with a
-  similar-sounding name.
+- **About the name:** “Air Interface Analyzer” describes what the program
+  does: it analyses radio air interfaces (currently TETRA). Up to v0.23 the
+  edition was called “SDR++ TETRA-SCHWARTZ”.
 - Theme names and the program name are invented names. This project is not
   affiliated with, sponsored or endorsed by any manufacturer or rights holder
   and uses no third-party logos.

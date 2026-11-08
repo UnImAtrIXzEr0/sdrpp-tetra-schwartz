@@ -1,4 +1,4 @@
-name: Build SDR++ TETRA-SCHWARTZ (AppImage + Windows)
+name: Build SDR++ Air Interface Analyzer (AppImage + Windows)
 
 on:
     push:
@@ -88,8 +88,8 @@ jobs:
         - name: Save AppImage
           uses: actions/upload-artifact@v4
           with:
-              name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_linux_appimage_x86_64
-              path: SDRPP-TETRA-SCHWARTZ-v${{ env.TETRA_VERSION }}-beta-x86_64.AppImage
+              name: SDRPP-AIA_v${{ env.TETRA_VERSION }}_linux_appimage_x86_64
+              path: SDRPP-AIA_v${{ env.TETRA_VERSION }}-x86_64.AppImage
 
         - name: Headless tests (fresh start, TETRA chain with recording)
           run: |
@@ -156,7 +156,7 @@ jobs:
           continue-on-error: true
           uses: actions/upload-artifact@v4
           with:
-              name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_manuals_pdf
+              name: SDRPP-AIA_v${{ env.TETRA_VERSION }}_manuals_pdf
               path: manuals/*.pdf
               if-no-files-found: ignore
 
@@ -422,6 +422,7 @@ jobs:
 
         - name: Report compiler warnings in edition code
           if: always()
+          continue-on-error: true   # a report only, never fails the build
           working-directory: ${{runner.workspace}}/build
           shell: pwsh
           run: |
@@ -430,7 +431,7 @@ jobs:
               $w = Select-String -Path build.log -Pattern 'warning C[0-9]+' |
                 ForEach-Object { $_.Line -replace '[\r\n]', ' ' } |
                 Where-Object { $_ -match 'ch_tetra_demodulator|plutosdr_source|airspy_source|usrp_source|rtl_sdr_source|audio_sink|module_manager|menus\\source|theme_manager|loading_screen|credits|core\.cpp' } |
-                ForEach-Object { if ($_ -match '([A-Za-z0-9_\\.\-]+\(\d+,\d+\)): warning (C\d+)') { ($matches[1] -replace '^.*sdrpp-tetra-schwartz\\', '') + ' ' + $matches[2] } } |
+                ForEach-Object { if ($_ -match '([A-Za-z0-9_\\.\-]+\(\d+,\d+\)): warning (C\d+)') { ($matches[1] -replace ('^.*' + [regex]::Escape($Env:GITHUB_WORKSPACE.Split('\\')[-1]) + '\\'), '') + ' ' + $matches[2] } } |
                 Sort-Object -Unique
               Write-Host "warning locations: $($w.Count)"
               $w | ForEach-Object { Write-Host $_ }
@@ -451,7 +452,7 @@ jobs:
         - name: Save Archive
           uses: actions/upload-artifact@v4
           with:
-              name: SDRPP-TETRA-SCHWARTZ_v${{ env.TETRA_VERSION }}-beta_windows_x64
+              name: SDRPP-AIA_v${{ env.TETRA_VERSION }}_windows_x64
               path: ${{runner.workspace}}/sdrpp_windows_x64.zip
 
 
@@ -476,15 +477,15 @@ jobs:
           run: |
             V="v${TETRA_VERSION}-beta"
             mkdir -p rel
-            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-TETRA-SCHWARTZ_${V}_windows_x64.zip"
-            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-TETRA-SCHWARTZ_${V}_x86_64.AppImage"
+            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-AIA_${V}_windows_x64.zip"
+            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-AIA_${V}_x86_64.AppImage"
             cp dl/*manuals_pdf/*.pdf rel/ 2>/dev/null || echo "::warning::no manuals in this run"
             (cd rel && sha256sum * > SHA256SUMS.txt)
             ls -la rel
-            NOTES="Experimental beta for amateur radio TETRA. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. Manuals (German / English) as PDF. Changes: see the commit history. Check the downloads with SHA256SUMS.txt."
+            NOTES="SDR++ Air Interface Analyzer (formerly SDR++ TETRA-SCHWARTZ) - experimental beta for amateur radio TETRA. Settings of the former version are taken over automatically on the first start. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. Manuals (German / English) as PDF. Changes: see the commit history. Check the downloads with SHA256SUMS.txt."
             # a rebuild of the same version replaces its release (tag on the newest commit)
             if gh release view "$V" > /dev/null 2>&1; then gh release delete "$V" --cleanup-tag -y; fi
-            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V" --notes "$NOTES" --latest
+            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ Air Interface Analyzer $V" --notes "$NOTES" --latest
             # the dependency cache release must not keep old history reachable
             git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_SHA:refs/tags/build-cache" || true
 
@@ -515,11 +516,11 @@ jobs:
               *) echo "::error::version '$TETRA_VERSION' is not a test version (expected e.g. 0.24.0-test.1)"; exit 1;;
             esac
             mkdir -p rel
-            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-TETRA-SCHWARTZ_${V}_windows_x64.zip"
-            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-TETRA-SCHWARTZ_${V}_x86_64.AppImage"
+            cp dl/*windows_x64/sdrpp_windows_x64.zip "rel/SDRPP-AIA_${V}_windows_x64.zip"
+            cp dl/*linux_appimage_x86_64/*.AppImage "rel/SDRPP-AIA_${V}_x86_64.AppImage"
             (cd rel && sha256sum * > SHA256SUMS.txt)
             ls -la rel
-            NOTES="Test version of the new user interface - not the recommended download. It uses its own settings folder (Linux AppImage: ~/.config/sdrpp_brown_appimage_test, Windows: subfolder config-test next to sdrpp.exe), so it can be used next to the stable version without changing the stable settings. The stable beta stays the recommended download. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. No manuals for test versions: see the manuals of the stable beta. Check the downloads with SHA256SUMS.txt."
+            NOTES="Test version of the new user interface - not the recommended download. It uses its own settings folder (Linux AppImage: ~/.config/sdrpp_aia_appimage_test, Windows: subfolder config-test next to sdrpp.exe), so it can be used next to the stable version without changing the stable settings. The stable beta stays the recommended download. Windows: unpack the zip and start sdrpp.exe. Linux: chmod +x the AppImage and start it. No manuals for test versions: see the manuals of the stable beta. Check the downloads with SHA256SUMS.txt."
             # a rebuild of the same version replaces its pre-release (tag on the newest commit)
             if gh release view "$V" > /dev/null 2>&1; then gh release delete "$V" --cleanup-tag -y; fi
-            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ TETRA-SCHWARTZ $V (test version)" --notes "$NOTES" --prerelease --latest=false
+            gh release create "$V" rel/* --target "$GITHUB_SHA" --title "SDR++ Air Interface Analyzer $V (test version)" --notes "$NOTES" --prerelease --latest=false

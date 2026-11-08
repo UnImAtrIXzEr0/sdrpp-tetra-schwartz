@@ -35,7 +35,7 @@ namespace credits {
         ImGui::TextUnformatted("A modified version (fork) of SDR++ by Alexandre Rouma (ON5RYZ),");
         ImGui::TextUnformatted("revised and extended for amateur radio TETRA by UnImAtrIXzEr0.");
         ImGui::TextDisabled("Not an official release of SDR++ or SDR++Brown and not endorsed by their authors.");
-        ImGui::TextDisabled("Please report problems with this edition only at github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/issues");
+        ImGui::TextDisabled("Please report problems with this edition only at github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/issues");
         ImGui::EndGroup();
         ImGui::SameLine(0.0f, 40.0f * style::uiScale);
         ImGui::Image(icons::LOGO, imageSize);
@@ -56,7 +56,7 @@ namespace credits {
                 { "TETRA demodulator plugin", "cropinghigh", "GPL-3.0, github.com/cropinghigh/sdrpp-tetra-demodulator" },
                 { "osmo-tetra (TETRA decoder)", "Harald Welte, Sylvain Munaut, Holger H. P. Freyther and contributors (Osmocom)", "AGPL-3.0, gitea.osmocom.org/tetra/osmo-tetra" },
                 { "TETRA speech codec", "ETSI (reference code of EN 300 395-2)", "ETSI terms, downloaded from etsi.org at build time" },
-                { "Modifications of this edition", "(C) 2026 UnImAtrIXzEr0", "GPL-3.0, github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz" },
+                { "Modifications of this edition", "(C) 2026 UnImAtrIXzEr0", "GPL-3.0, github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer" },
             };
             for (auto& r : rows) {
                 ImGui::TableNextRow();

@@ -1,7 +1,7 @@
-# Building SDR++ TETRA-SCHWARTZ from source
+# Building SDR++ Air Interface Analyzer from source
 
 The ready-made downloads on the
-[Releases page](https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz/releases/latest)
+[Releases page](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer/releases/latest)
 cover most users:
 
 | Package | Runs on | Notes |
@@ -89,8 +89,8 @@ packages of the libraries named above.
 ### 2.4 Configure, build, start
 
 ```sh
-git clone https://github.com/UnImAtrIXzEr0/sdrpp-tetra-schwartz.git
-cd sdrpp-tetra-schwartz
+git clone https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer.git
+cd sdrpp-air-interface-analyzer
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
     -DOPT_BUILD_CH_TETRA_DEMODULATOR=ON -DOPT_BUILD_NEW_PORTAUDIO_SINK=ON \
     -DOPT_BUILD_USRP_SOURCE=ON -DOPT_BUILD_BLADERF_SOURCE=ON -DOPT_BUILD_LIMESDR_SOURCE=ON

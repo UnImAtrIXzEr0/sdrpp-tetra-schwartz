@@ -66,7 +66,7 @@ namespace LoadingScreen {
 
         // Centre block: logo, name, version
         const char* l1 = "SDR++";
-        const char* l2 = "TETRA-SCHWARTZ";
+        const char* l2 = "Air Interface Analyzer";
         ImFont* big = style::bigFont;
         ImVec2 s1 = textSize(big, l1);
         ImVec2 s2 = textSize(big, l2);
@@ -106,7 +106,7 @@ namespace LoadingScreen {
         text(dl, style::baseFont, ImVec2(p0.x + (sz.x - ms.x) * 0.5f, b0.y + barH + 10.0f * s), COL_GREY, msg.c_str());
 
         // Footer
-        const char* foot = "SDR++ by Alexandre Rouma (ON5RYZ)  -  SDR++Brown by sannysanoff  -  TETRA-SCHWARTZ by UnImAtrIXzEr0";
+        const char* foot = "SDR++ by Alexandre Rouma (ON5RYZ)  -  SDR++Brown by sannysanoff  -  Air Interface Analyzer by UnImAtrIXzEr0";
         ImFont* tf = style::tinyFont ? style::tinyFont : style::baseFont;
         ImVec2 fs = textSize(tf, foot);
         dl->AddRectFilled(ImVec2(p0.x, p1.y - fs.y - 20.0f * s), p1, IM_COL32(220, 225, 230, 255));

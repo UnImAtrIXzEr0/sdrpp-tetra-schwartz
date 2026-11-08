@@ -4,6 +4,8 @@
 // TETRA-SCHWARTZ: a test build (OPT_TETRA_TEST_BUILD) uses its own default config
 // folder so it can be used next to the stable version; -r still overrides it.
 // Android keeps its folder (modules and resources live below the root there).
+// v0.24 (rename to "SDR++ Air Interface Analyzer"): the default folder is
+// "sdrpp-aia"; core.cpp copies an existing "sdrpp-brown" folder over once.
 #ifdef TETRA_TEST_BUILD
 #define TETRA_ROOT_SUFFIX "-test"
 #else
@@ -20,11 +22,11 @@ void CommandArgsParser::defineAll() {
 #endif
     define('c', "con", "Show console on Windows");
 #elif defined(IS_MACOS_BUNDLE)
-    std::string root = (std::string)getenv("HOME") + "/Library/Application Support/sdrpp-brown" TETRA_ROOT_SUFFIX;
+    std::string root = (std::string)getenv("HOME") + "/Library/Application Support/sdrpp-aia" TETRA_ROOT_SUFFIX;
 #elif defined(__ANDROID__)
     std::string root = "/storage/self/primary/sdrpp-brown";
 #else
-    std::string root = (std::string)getenv("HOME") + "/.config/sdrpp-brown" TETRA_ROOT_SUFFIX;
+    std::string root = (std::string)getenv("HOME") + "/.config/sdrpp-aia" TETRA_ROOT_SUFFIX;
 #endif
 
     std::string tempPath = "/tmp";

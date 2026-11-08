@@ -220,6 +220,6 @@ inline std::string tetraDefaultLogDir(const std::string& expandedRoot) {
         std::string d = h + "/Documents";
         docs = (stat(d.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) ? d : h;
     }
-    return docs + "/SDRPP-TETRA-SCHWARTZ";
+    return docs + "/SDRPP-AIA";
 #endif
 }

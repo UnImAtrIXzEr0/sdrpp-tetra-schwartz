@@ -523,6 +523,21 @@ int sdrpp_main(int argc, char* argv[]) {
 
     // Check root directory
     std::string root = (std::string)core::args["root"];
+    // v0.24: the default folder was renamed with the program ("sdrpp-brown" ->
+    // "sdrpp-aia"): the former folder is copied over once (left in place)
+    {
+        std::error_code ec;
+        std::filesystem::path rp(root);
+        std::string leaf = rp.filename().string();
+        if (leaf == "sdrpp-aia" || leaf == "sdrpp-aia-test") {
+            std::filesystem::path old = rp.parent_path() / (leaf == "sdrpp-aia" ? "sdrpp-brown" : "sdrpp-brown-test");
+            if (!std::filesystem::exists(rp, ec) && std::filesystem::is_directory(old, ec)) {
+                std::filesystem::copy(old, rp, std::filesystem::copy_options::recursive, ec);
+                if (ec) { flog::warn("Could not copy the settings from {0}: {1}", old.string(), ec.message()); }
+                else { flog::info("Settings copied from {0} to {1}", old.string(), root); }
+            }
+        }
+    }
     if (!std::filesystem::exists(root)) {
         flog::warn("Root directory {0} does not exist, creating it", root);
         if (!std::filesystem::create_directories(root)) {

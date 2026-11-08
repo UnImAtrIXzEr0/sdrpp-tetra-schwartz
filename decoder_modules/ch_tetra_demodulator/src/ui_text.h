@@ -52,7 +52,7 @@ namespace ui_text {
             // softkeys
             { "Mute encrypted", "Verschlüsselt stumm" },
             { "Cell details", "Zelldetails" },
-            { "Hide call control", "Rufsteuerung ausblenden" },
+            { "Hide call control", "Nur Gespräche" },
             { "Play anyway", "Trotzdem abspielen" },
             { "Trends (10 min)", "Verläufe (10 min)" },
             { "Last analysis results", "Letzte Analyse-Ergebnisse" },
@@ -68,7 +68,7 @@ namespace ui_text {
               "Pegel anheben (nahe Vollaussteuerung, mit Dämpfungsglied) und Rauschboden speichern." },
             { "Analysis", "Analyse" },
             { "Channel raster", "Kanalraster" },
-            { "Overload check", "Übersteuerungsprüfung" },
+            { "Overload check", "Übersteuerung" },
             { "Ramp spectrum", "Rampenspektrum" },
             { "Open log...", "Protokoll öffnen..." },
             { "8 points (pi/4)", "8 Punkte (pi/4)" },
