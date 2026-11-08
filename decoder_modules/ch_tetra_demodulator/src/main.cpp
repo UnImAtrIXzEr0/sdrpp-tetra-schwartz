@@ -2422,15 +2422,16 @@ private:
     // every frame: which timeslots may be played
     void listenLoop() {
         int mask = 0;
-        bool encMuted = false;
+        int encMuted = 0;   // speech muted now: 1 encrypted call, 2 encryption unknown
         auto slotTraffic = [&](int ts) { return osmotetradecoder.getTimeslotContent(ts - 1) == 4; };
         auto owner = [&](int ts) { return subscribers.slotOwner(ts); };
-        auto encOf = [&](const TetraSubscriberTable::SlotOwner& o) { return o.ssi && (o.e2ee || o.air); };
+        // fail-safe: a timeslot is only played when its call is known to be clear
         auto allowed = [&](int ts) {
             if (!listenMuteEnc) { return true; }
-            auto o = owner(ts);
-            if (encOf(o)) { encMuted = true; return false; }
-            return true;
+            int st = subscribers.listenEncState(ts);
+            if (st == TetraSubscriberTable::LISTEN_CLEAR) { return true; }
+            if (slotTraffic(ts)) { encMuted = (st == TetraSubscriberTable::LISTEN_ENCRYPTED || encMuted == 1) ? 1 : 2; }
+            return false;
         };
         if (listenMode == 1) {
             if (allowed(listenTs)) { mask = 1 << (listenTs - 1); }
@@ -2496,7 +2497,9 @@ private:
             }
         }
         if (play.valid && t - play.lastVoice > PLAY_HANG_S) { playLast = play; play.valid = false; }
-        listenMutedEnc = encMuted;
+        // the message holds over short gaps of the speech bursts (hang time)
+        if (encMuted) { listenMutedEnc = encMuted; listenMutedEncT = t; }
+        else if (t - listenMutedEncT > PLAY_HANG_S) { listenMutedEnc = 0; }
         (void)slotTraffic;
     }
 
@@ -2580,7 +2583,7 @@ private:
             }
         }
         else { what = "-"; cWhat = tc::grey(); }
-        if (!live && listenMutedEnc) { what = "encrypted call - muted"; cWhat = tc::warn(); }
+        if (!live && listenMutedEnc) { what = listenMutedEnc == 2 ? "encryption unknown - muted" : "encrypted call - muted"; cWhat = tc::warn(); }
 
         // geometry
         ImFont* font = ImGui::GetFont();
@@ -4992,7 +4995,8 @@ private:
     double playCallStart = 0.0, playLastVoiceAny = -1e9;
     int playMode = 2;
     float playModeAtW = -1.0f, playMaxH = 0.0f, playMaxHAtW = -1.0f;
-    bool listenMutedEnc = false;
+    int listenMutedEnc = 0;           // "Mute encrypted" is muting speech: 1 encrypted call, 2 encryption unknown
+    double listenMutedEncT = -1e9;
     uint32_t listenAddSsi = 0;
     bool listenAddGroup = true;
     TetraPropagationView propView;

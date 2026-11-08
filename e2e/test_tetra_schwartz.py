@@ -576,6 +576,40 @@ def test_layout_stability():
     return True
 
 
+def test_listen_mute():
+    """"Mute encrypted" (GitHub issue #1): the per-timeslot encryption state
+    must stay encrypted for a long call with several transmissions (no new
+    channel allocation after 60 s) and must be "unknown" (muted) for a call
+    whose setup was not received. The recording has no traffic channels, so
+    the state machine (subscribers.h, used by the listen loop) is compiled
+    and run on its own with the PDU sequences of these cases."""
+    stats.test_start("test_listen_mute")
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    d = os.path.join(root, "decoder_modules", "ch_tetra_demodulator", "src")
+    cxx = os.environ.get("CXX", "g++")
+    if shutil.which(cxx) is None:
+        stats.test_pass("test_listen_mute", f"skipped (no C++ compiler '{cxx}')")
+        return True
+    tmpdir = tempfile.mkdtemp(prefix="tetra_mute_")
+    exe = os.path.join(tmpdir, "test_listen_mute")
+    r = subprocess.run([cxx, "-std=c++17", "-I" + d, "-I" + os.path.join(d, "decoder", "src"),
+                        os.path.join(here, "gen", "test_listen_mute.cpp"), "-o", exe],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        stats.test_fail("test_listen_mute", "compile error: " + r.stderr[-400:])
+        return False
+    r = subprocess.run([exe], capture_output=True, text=True, timeout=30)
+    stats.info(r.stdout.strip())
+    if r.returncode != 0:
+        bad = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+        stats.test_fail("test_listen_mute", "; ".join(bad) or "failed")
+        return False
+    stats.test_pass("test_listen_mute", "long encrypted call stays muted, unknown call muted, release/late entry handled")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
@@ -585,7 +619,8 @@ if __name__ == "__main__":
     r3 = test_bursts()
     r4 = test_timing_multipath()
     r5 = test_layout_stability()
-    res = [r1, r2, r3, r4, r5]
+    r6 = test_listen_mute()
+    res = [r1, r2, r3, r4, r5, r6]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

@@ -70,9 +70,13 @@ public:
         // Only address types that carry an SSI (SSI, USSI, SMI and the combined forms)
         bool hasSsi = (addrType == 1 || addrType == 3 || addrType == 4 || addrType == 5 || addrType == 6 || addrType == 7);
         if (!hasSsi || ssi == 0 || ssi > 0xFFFFFF) { return; }
-        time_t now = time(nullptr);
+        time_t now = nowT();
         std::lock_guard<std::mutex> lck(mtx);
         TetraSubscriber& s = entry(ssi, now);
+        // channel allocation of this MAC-RESOURCE (0 = none / not readable): the
+        // layer 3 PDU of the same MAC-RESOURCE follows right after (addL3)
+        lastPduSsi = ssi;
+        lastPduAllocTs = 0;
         s.lastSeen = now;
         s.count++;
         s.lastTn = tn;
@@ -83,8 +87,14 @@ public:
         if (chanAlloc & 0x0f) {   // timeslot bitmap, TS1 = 8
             for (int t = 0; t < 4; t++) { if (chanAlloc & (8 >> t)) { s.allocTs = (uint8_t)(t + 1); break; } }
             s.allocTime = now;
+            lastPduAllocTs = s.allocTs;
         }
         if (encrMode != 0) {
+            // air interface encryption on the address of a running call: its timeslot is encrypted
+            for (int t = 0; t < 4; t++) {
+                auto c = callRec.find(slotCall[t]);
+                if (slotCall[t] >= 0 && c != callRec.end() && c->second.addr == ssi) { c->second.enc = 1; }
+            }
             encryptedPdus++;
             lastEncrTime = now;
             // one traffic line per address and 10 s: the content is not decoded
@@ -108,7 +118,7 @@ public:
     SlotOwner slotOwner(int ts, long maxAge = 60) {
         std::lock_guard<std::mutex> lck(mtx);
         SlotOwner o;
-        time_t now = time(nullptr), best = 0;
+        time_t now = nowT(), best = 0;
         for (auto& kv : table) {
             const TetraSubscriber& x = kv.second;
             if (x.allocTs == ts && now - x.allocTime <= maxAge && x.allocTime > best) {
@@ -118,10 +128,36 @@ public:
         }
         return o;
     }
+    // "Mute encrypted": encryption state of the call on timeslot ts (1..4).
+    // Kept per timeslot for the current call, linked by the call identifier:
+    // set by D-SETUP / D-CONNECT (basic service information, EN 300 392-2
+    // 14.8.2), confirmed by D-TX-GRANTED of the same call, cleared by
+    // D-RELEASE / D-DISCONNECT - independent of the age of the channel
+    // allocation, so a long call with several transmissions keeps its state.
+    // A timeslot without a known call (call setup missed: started before
+    // decoding, CRC error) is LISTEN_UNKNOWN; the caller mutes it.
+    enum ListenEnc { LISTEN_CLEAR = 0, LISTEN_ENCRYPTED = 1, LISTEN_UNKNOWN = 2 };
+    int listenEncState(int ts) {
+        SlotOwner o = slotOwner(ts);
+        std::lock_guard<std::mutex> lck(mtx);
+        int enc = -1;
+        if (ts >= 1 && ts <= 4 && slotCall[ts - 1] >= 0) {
+            auto c = callRec.find(slotCall[ts - 1]);
+            if (c != callRec.end()) { enc = c->second.enc; }
+        }
+        // everything the allocation-based owner marks as encrypted stays muted
+        if (enc == 1 || (o.ssi && (o.e2ee || o.air))) { return LISTEN_ENCRYPTED; }
+        return enc == 0 ? LISTEN_CLEAR : LISTEN_UNKNOWN;
+    }
+    // call identifier on timeslot ts (1..4), -1 = none known
+    int slotCallId(int ts) {
+        std::lock_guard<std::mutex> lck(mtx);
+        return (ts >= 1 && ts <= 4) ? slotCall[ts - 1] : -1;
+    }
     // timeslot of an address (group, or the group a station talks in / its own call); 0 = none
     int slotOf(uint32_t ssi, bool station, long maxAge = 60) {
         std::lock_guard<std::mutex> lck(mtx);
-        time_t now = time(nullptr);
+        time_t now = nowT();
         auto ok = [&](const TetraSubscriber& x) { return x.allocTs && now - x.allocTime <= maxAge; };
         auto it = table.find(ssi);
         if (!station) { return (it != table.end() && ok(it->second)) ? it->second.allocTs : 0; }
@@ -147,7 +183,7 @@ public:
     }
 
     void addL3(const tetra_l3_event& ev) {
-        time_t now = time(nullptr);
+        time_t now = nowT();
         std::lock_guard<std::mutex> lck(mtx);
         TetraTrafficEntry te;
         te.t = now;
@@ -193,6 +229,7 @@ public:
         if (ev.call_id >= 0 && addrValid && (ev.type == TETRA_L3_CALL_SETUP || ev.type == TETRA_L3_CALL_CONNECT || ev.type == TETRA_L3_TX_GRANTED)) {
             calls[ev.call_id] = ev.addr_ssi;
         }
+        trackCallSlot(ev, addrValid, now);
         auto callAddr = [&](int cid) -> uint32_t {
             auto it = calls.find(cid);
             return it == calls.end() ? 0 : it->second;
@@ -320,7 +357,14 @@ public:
         newSinceLog.clear();
         calls.clear();
         talkerOfCall.clear();
+        callRec.clear();
+        for (int t = 0; t < 4; t++) { slotCall[t] = -1; }
+        lastPduSsi = 0;
+        lastPduAllocTs = 0;
     }
+
+    // tests: fixed clock instead of time() (0 = real time)
+    void setTestClock(time_t t) { testNow = t; }
 
     size_t size() {
         std::lock_guard<std::mutex> lck(mtx);
@@ -329,6 +373,53 @@ public:
 
 private:
     static const size_t MAX_TRAFFIC = 1000;
+    static const size_t MAX_CALLS = 64;
+
+    time_t nowT() const { return testNow ? testNow : time(nullptr); }
+
+    // Per-timeslot call state for "Mute encrypted" (see listenEncState).
+    // The traffic timeslot comes from the channel allocation of the
+    // MAC-RESOURCE that carried the PDU (add() runs right before addL3() for
+    // it); without one, a known call keeps its timeslot.
+    void trackCallSlot(const tetra_l3_event& ev, bool addrValid, time_t now) {
+        int allocTs = 0;
+        if (addrValid && ev.addr_ssi == lastPduSsi) {
+            allocTs = lastPduAllocTs;
+            lastPduSsi = 0;
+            lastPduAllocTs = 0;
+        }
+        if (ev.call_id < 0) { return; }
+        if (ev.type == TETRA_L3_CALL_RELEASE) {
+            for (int t = 0; t < 4; t++) { if (slotCall[t] == ev.call_id) { slotCall[t] = -1; } }
+            callRec.erase(ev.call_id);
+            return;
+        }
+        if (ev.type != TETRA_L3_CALL_SETUP && ev.type != TETRA_L3_CALL_CONNECT && ev.type != TETRA_L3_TX_GRANTED) { return; }
+        auto it = callRec.find(ev.call_id);
+        if (it == callRec.end()) {
+            if (callRec.size() >= MAX_CALLS) {
+                auto oldest = callRec.begin();
+                for (auto c = callRec.begin(); c != callRec.end(); ++c) { if (c->second.seen < oldest->second.seen) { oldest = c; } }
+                for (int t = 0; t < 4; t++) { if (slotCall[t] == oldest->first) { slotCall[t] = -1; } }
+                callRec.erase(oldest);
+            }
+            it = callRec.emplace(ev.call_id, CallRec()).first;
+        }
+        CallRec& c = it->second;
+        c.seen = now;
+        if (addrValid) { c.addr = ev.addr_ssi; }
+        // D-TX-GRANTED carries no basic service information: it keeps the state
+        if (ev.type != TETRA_L3_TX_GRANTED && ev.encrypted_call >= 0) { c.enc = ev.encrypted_call ? 1 : 0; }
+        if (allocTs) { c.ts = allocTs; }
+        if (!c.ts) { return; }
+        int& sc = slotCall[c.ts - 1];
+        // an explicit channel allocation always takes the timeslot; without one the
+        // call only takes it back when no other call holds it
+        if (allocTs || sc < 0 || sc == ev.call_id) {
+            for (int t = 0; t < 4; t++) { if (slotCall[t] == ev.call_id) { slotCall[t] = -1; } }
+            sc = ev.call_id;
+        }
+    }
 
     TetraSubscriber& entry(uint32_t ssi, time_t now) {
         auto it = table.find(ssi);
@@ -370,4 +461,10 @@ private:
     std::vector<TetraTrafficEntry> newTraffic;
     std::unordered_map<int, uint32_t> calls;        // call id -> call address
     std::unordered_map<int, uint32_t> talkerOfCall; // call id -> current talker
+    struct CallRec { int ts = 0; int enc = -1; uint32_t addr = 0; time_t seen = 0; };   // enc: -1 unknown, 0 clear, 1 encrypted
+    std::unordered_map<int, CallRec> callRec;       // running calls (call id -> state)
+    int slotCall[4] = { -1, -1, -1, -1 };           // call id on TS1..TS4, -1 = none known
+    uint32_t lastPduSsi = 0;                        // address of the last MAC-RESOURCE
+    uint8_t lastPduAllocTs = 0;                     // its downlink channel allocation timeslot (0 = none)
+    time_t testNow = 0;                             // tests: fixed clock (setTestClock)
 };
