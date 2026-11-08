@@ -9,6 +9,7 @@
 #include <module.h>
 // #include <unistd.h>
 #include <fstream>
+#include <cstdarg>
 #include <algorithm>
 #include <cmath>
 #include <ctime>
@@ -36,6 +37,7 @@
 #include "gui_widgets.h"
 #include "tetra_colors.h"
 #include "tetra_layout.h"
+#include "ui_text.h"
 #include "analysis_tap.h"
 #include "tx_analyzer.h"
 #include "trend_view.h"
@@ -222,6 +224,7 @@ public:
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
         loadTiles();
+        loadInstConfig();
         if (config.conf[name].contains("listen") && config.conf[name]["listen"].is_object()) {
             json& l = config.conf[name]["listen"];
             if (l.contains("mode")) { listenMode = std::clamp((int)l["mode"], 0, 2); }
@@ -1074,8 +1077,12 @@ private:
             config.conf[_this->name]["hamMode"] = true;
             config.release(true);
         }
-        if (tw::SameSmallButton(CONCAT("Layout...##_tetra_layout_", _this->name))) { ImGui::OpenPopup(CONCAT("##_tetra_layout_pop_", _this->name)); }
-        if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Layout presets: sections as tiles in a column next to the waterfall"); }
+        if (_this->instUi) {
+            if (tw::SameSmallButton(CONCAT("Settings...##_tetra_inst_set_", _this->name))) { _this->settingsOpen = true; }
+            if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Instrument view: modes and softkeys on the right.\nClassic layout: Settings -> Display & operation."); }
+        }
+        else if (tw::SameSmallButton(CONCAT("Layout...##_tetra_layout_", _this->name))) { ImGui::OpenPopup(CONCAT("##_tetra_layout_pop_", _this->name)); }
+        if (!_this->instUi && ImGui::IsItemHovered()) { ImGui::SetTooltip("Layout presets: sections as tiles in a column next to the waterfall"); }
         if (ImGui::BeginPopup(CONCAT("##_tetra_layout_pop_", _this->name))) {
             if (ImGui::MenuItem("Measuring station")) { _this->applyLayout(1); }
             if (ImGui::IsItemHovered()) { ImGui::SetTooltip("Constellation, measurements and trends as tiles on the right,\nstations & traffic below the waterfall (amateur radio mode)"); }
@@ -2847,6 +2854,13 @@ private:
 
     // every frame (GUI thread): register / remove the panels in the main window
     void updatePanels() {
+        // instrument UI (test version) replaces the tile column and its presets
+        if (instUi && enabled) {
+            if (!instActive) { removePanels(); instActive = true; }
+            updateInstPanels();
+            return;
+        }
+        if (instActive) { removeInstPanels(); }
         if (tilesMigrate > 0) { int p = tilesMigrate; tilesMigrate = 0; applyLayout(p); }
         { int lr = layoutReq.exchange(-1); if (lr >= 0) { applyLayout(lr); } }
         if (touch::enabled() && enabled && tiles.empty()) { applyLayout(3); }
@@ -2869,6 +2883,7 @@ private:
     void removePanels() {
         if (sideRegistered) { gui::mainWindow.setSidePanel(nullptr, nullptr); sideRegistered = false; }
         if (bottomRegistered) { gui::mainWindow.setBottomPanel(nullptr, nullptr); bottomRegistered = false; }
+        if (instActive) { removeInstPanels(); }
     }
 
     void drawTileBody(int sec, float w, float h) {
@@ -3099,6 +3114,905 @@ private:
             if (ImGui::Button((std::string(tileTitle(tiles[vis[n]].sec)) + "##_touch_tab_" + std::to_string(n) + name).c_str(), ImVec2(tw_, tabH))) { touchTab = (int)n; }
             if (act) { ImGui::PopStyleColor(); }
         }
+    }
+
+    // ---------------- Instrument UI (test version): one surface like a measuring instrument ----------------
+    // Status bar on top, mode and softkey column on the right, message line at the
+    // bottom; each mode has a fixed arrangement. The menu (SDR menu) still holds
+    // every section, so nothing is lost; rarely needed settings are in a dialog.
+
+    enum InstMode { IM_MONITOR = 0, IM_MEASURE, IM_DRIVE, IM_ALIGN, IM_COUNT };
+    enum InstView { IV_SPECTRUM = 0, IV_CONST, IV_TXA, IV_BURST, IV_CARR, IV_TREND, IV_MP, IV_COUNT };
+    enum InstState { ST_NONE = 0, ST_OK, ST_WARN, ST_BAD };
+
+    static const char* instModeName(int m) {
+        static const char* n[IM_COUNT] = { "Monitor", "Measure", "Drive test", "Alignment" };
+        return n[std::clamp(m, 0, IM_COUNT - 1)];
+    }
+    static const char* instViewName(int v) {
+        static const char* n[IV_COUNT] = { "Spectrum", "Constellation", "TX spectrum (ACP)", "Burst (uplink)", "Carriers", "Trends", "Multipath" };
+        return n[std::clamp(v, 0, IV_COUNT - 1)];
+    }
+    static ImVec4 instColor(int st) {
+        switch (st) {
+        case ST_OK: return tc::good();
+        case ST_WARN: return tc::warn();
+        case ST_BAD: return tc::bad();
+        default: return tc::grey();
+        }
+    }
+
+    void loadInstConfig() {
+        json& c = config.conf[name];
+        if (c.contains("instUi")) { instUi = c["instUi"]; }
+        if (c.contains("instMode")) { instMode = std::clamp((int)c["instMode"], 0, IM_COUNT - 1); }
+        if (c.contains("instView")) { instView = std::clamp((int)c["instView"], 0, IV_COUNT - 1); }
+        if (c.contains("instSideW")) { instSideW = (float)c["instSideW"] * style::uiScale; }
+        if (c.contains("instBottomH")) { instBottomH = (float)c["instBottomH"] * style::uiScale; }
+        if (c.contains("alignMs")) { alignMs = c["alignMs"]; }
+        if (c.contains("uiLang")) { ui_text::lang() = (c["uiLang"] == "de") ? ui_text::DE : ui_text::EN; }
+    }
+    void saveInstConfig() {
+        config.acquire();
+        json& c = config.conf[name];
+        c["instUi"] = instUi;
+        c["instMode"] = instMode;
+        c["instView"] = instView;
+        c["instSideW"] = instSideW / style::uiScale;
+        c["instBottomH"] = instBottomH / style::uiScale;
+        c["alignMs"] = alignMs;
+        c["uiLang"] = ui_text::lang() == ui_text::DE ? "de" : "en";
+        config.release(true);
+        instDirty = false;
+    }
+
+    // main view: -1 = the normal waterfall, otherwise an own view
+    int instMainKey() {
+        switch (instMode) {
+        case IM_MEASURE: return instView == IV_SPECTRUM ? -1 : 100 + instView;
+        case IM_DRIVE: return 200;
+        case IM_ALIGN: return 300;
+        default: return -1;
+        }
+    }
+
+    // every frame (GUI thread)
+    void updateInstPanels() {
+        const float k = style::uiScale;
+        if (!sideRegistered) {
+            gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
+            sideRegistered = true;
+        }
+        if (!bottomRegistered) {
+            gui::mainWindow.setBottomPanel([this]() { drawInstBottom(); }, &instBottomH);
+            bottomRegistered = true;
+        }
+        float topH = ImGui::GetFrameHeight() + 10.0f * k;
+        if (!instTopReg || std::fabs(topH - instTopH) > 0.5f) {
+            instTopH = topH;
+            gui::mainWindow.setTopPanel([this]() { drawStatusBar(); }, instTopH);
+            instTopReg = true;
+        }
+        float msgH = ImGui::GetFrameHeight() + 4.0f * k;
+        if (!instMsgReg || std::fabs(msgH - instMsgH) > 0.5f) {
+            instMsgH = msgH;
+            gui::mainWindow.setMessageBar([this]() { drawMessageBar(); }, instMsgH);
+            instMsgReg = true;
+        }
+        int key = instMainKey();
+        if (key != instMainCur) {
+            if (key < 0) { gui::mainWindow.setMainView(nullptr); }
+            else { gui::mainWindow.setMainView([this]() { drawInstMain(); }); }
+            instMainCur = key;
+        }
+        if (gui::mainWindow.splitterActive()) { instDirty = true; }
+        if (instDirty && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) { saveInstConfig(); }
+    }
+    void removeInstPanels() {
+        if (sideRegistered) { gui::mainWindow.setSidePanel(nullptr, nullptr); sideRegistered = false; }
+        if (bottomRegistered) { gui::mainWindow.setBottomPanel(nullptr, nullptr); bottomRegistered = false; }
+        if (instTopReg) { gui::mainWindow.setTopPanel(nullptr, 0.0f); instTopReg = false; }
+        if (instMsgReg) { gui::mainWindow.setMessageBar(nullptr, 0.0f); instMsgReg = false; }
+        if (instMainCur != -1) { gui::mainWindow.setMainView(nullptr); instMainCur = -1; }
+        instActive = false;
+    }
+    void setInstMode(int m) {
+        instMode = std::clamp(m, 0, IM_COUNT - 1);
+        saveInstConfig();
+    }
+
+    // a filled header line over the full width (like the panel headers of an instrument)
+    void instHeader(const char* txt, float w, const char* right = nullptr) {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float h = ImGui::GetFrameHeight();
+        ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + w, p.y + h), ImGui::GetColorU32(ImGuiCol_TableHeaderBg), 3.0f);
+        ImVec2 pad = ImGui::GetStyle().FramePadding;
+        ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + pad.x, p.y + pad.y), ImGui::GetColorU32(ImGuiCol_Text), txt);
+        if (right) {
+            float rw = ImGui::CalcTextSize(right).x;
+            ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + w - rw - pad.x, p.y + pad.y), ImGui::GetColorU32(ImGuiCol_TextDisabled), right);
+        }
+        ImGui::Dummy(ImVec2(w, h));
+    }
+    static void instDot(int st) {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float r = ImGui::GetFontSize() * 0.28f;
+        ImVec2 c(p.x + r + 1.0f, p.y + ImGui::GetTextLineHeight() * 0.5f);
+        if (st == ST_NONE) { ImGui::GetWindowDrawList()->AddCircle(c, r, ImGui::GetColorU32(instColor(st)), 12, 1.5f); }
+        else { ImGui::GetWindowDrawList()->AddCircleFilled(c, r, ImGui::GetColorU32(instColor(st)), 12); }
+        ImGui::Dummy(ImVec2(2.0f * r + 2.0f, ImGui::GetTextLineHeight()));
+    }
+
+    // ---- status bar ----
+    void statusItem(const char* label, ImVec4 col, const char* value) {
+        ImGui::SameLine(0.0f, ImGui::GetFontSize() * 1.1f);
+        ImGui::TextDisabled("%s", ui_text::T(label));
+        ImGui::SameLine(0.0f, ImGui::GetFontSize() * 0.35f);
+        ImGui::TextColored(col, "%s", value);
+    }
+    void drawStatusBar() {
+        const float k = style::uiScale;
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f * k);
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 6.0f * k);
+        // application badge (the shell is prepared for further standards)
+        {
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImVec2 ts = ImGui::CalcTextSize("TETRA");
+            ImVec2 pad(8.0f * k, 2.0f * k);
+            ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + ts.x + 2 * pad.x, p.y + ts.y + 2 * pad.y),
+                                                      ImGui::GetColorU32(ImGuiCol_ButtonActive), 3.0f);
+            ImGui::GetWindowDrawList()->AddText(ImVec2(p.x + pad.x, p.y + pad.y), IM_COL32(255, 255, 255, 255), "TETRA");
+            ImGui::Dummy(ImVec2(ts.x + 2 * pad.x, ts.y + 2 * pad.y));
+        }
+        TetraMeasSnapshot m = meas.get();
+        char b[96];
+        // sync / decoder
+        int st = osmotetradecoder.getRxState();
+        bool sym = symbolExtractor.sync;
+        if (decoder_mode != 0) { statusItem("Sync", sym ? tc::good() : tc::bad(), sym ? "NETSYMS" : ui_text::T("No sync")); }
+        else if (st == 2) { statusItem("Sync", tc::good(), ui_text::T("Locked")); }
+        else if (sym) { statusItem("Sync", tc::warn(), ui_text::T("Searching")); }
+        else { statusItem("Sync", tc::bad(), ui_text::T("No sync")); }
+        if (decoder_mode == 0 && st == 2 && osmotetradecoder.getMcc() != 0) {
+            snprintf(b, sizeof(b), "%03d-%d CC %d", osmotetradecoder.getMcc(), osmotetradecoder.getMnc(), osmotetradecoder.getCc());
+            statusItem("Cell", tc::val(), b);
+        }
+        else { statusItem("Cell", tc::grey(), "--"); }
+        snprintf(b, sizeof(b), "%.4f MHz", mainVfoFreq() / 1e6);
+        statusItem("DL", tc::val(), b);
+        bool cal = levelCalEff != 0.0f;
+        if (m.valid) { snprintf(b, sizeof(b), cal ? "%.1f dBm" : "%.1f dBFS", m.levelDbfs + (cal ? levelCalEff : 0.0f)); }
+        else { snprintf(b, sizeof(b), "--"); }
+        statusItem("Level", m.valid && m.peakDbfs > -3.0f ? tc::bad() : tc::val(), b);
+        if (m.valid && m.symSync) { snprintf(b, sizeof(b), "%.1f dB", m.merDb); } else { snprintf(b, sizeof(b), "--"); }
+        statusItem("MER", tc::val(), b);
+        if (m.absErrValid) { snprintf(b, sizeof(b), "%+.0f Hz", m.absErrHz); }
+        else if (m.valid && m.symSync) { snprintf(b, sizeof(b), "%+.0f Hz*", m.carrierOffsetHz); }
+        else { snprintf(b, sizeof(b), "--"); }
+        statusItem("Freq. error", tc::val(), b);
+        if (decoder_mode == 0) {
+            uint32_t ok = 0, fail = 0;
+            for (int i = 0; i < 4; i++) { ok += m.crcOk[i]; fail += m.crcFail[i]; }
+            if (ok + fail > 0) { snprintf(b, sizeof(b), "%.1f %%", 100.0 * fail / (ok + fail)); } else { snprintf(b, sizeof(b), "--"); }
+            statusItem("CRC errors", tc::val(), b);
+        }
+        // right: what matters in this mode
+        std::string right;
+        ImVec4 rc = tc::val();
+        const char* rl = "Playing";
+        if (instMode == IM_DRIVE) {
+            rl = "GPS";
+            GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
+            if (!gps.isRunning()) { right = ui_text::T("off"); rc = tc::grey(); }
+            else if (!g.valid) { snprintf(b, sizeof(b), "no fix (%d sat)", g.sats); right = b; rc = tc::warn(); }
+            else { snprintf(b, sizeof(b), "fix, %d sat", g.sats); right = b; rc = tc::good(); }
+        }
+        else if (instMode == IM_ALIGN) {
+            rl = "Reference";
+            static const char* refs[3] = { "internal", "external 10 MHz", "calibrated" };
+            right = std::string(alignRef.set ? ui_text::T("set") : ui_text::T("not set")) + " | " + ui_text::T(refs[std::clamp(freqRef, 0, 2)]);
+            rc = freqRef == 0 ? tc::warn() : tc::good();
+        }
+        else {
+            double t = playNow();
+            if (play.valid && t - play.lastVoice <= PLAY_HANG_S) {
+                snprintf(b, sizeof(b), "TS%d  %s %u  %u", play.ts, ui_text::T("Group"), play.group, play.talker);
+                right = b;
+            }
+            else { right = ui_text::T("nothing"); rc = tc::grey(); }
+        }
+        float rw = ImGui::CalcTextSize(ui_text::T(rl)).x + ImGui::CalcTextSize(right.c_str()).x + ImGui::GetFontSize() * 1.2f;
+        float x = ImGui::GetWindowContentRegionMax().x - rw;
+        ImGui::SameLine();
+        if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
+        ImGui::TextDisabled("%s", ui_text::T(rl));
+        ImGui::SameLine(0.0f, ImGui::GetFontSize() * 0.35f);
+        ImGui::TextColored(rc, "%s", right.c_str());
+    }
+
+    // ---- message line ----
+    void drawMessageBar() {
+        const float k = style::uiScale;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 6.0f * k);
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f * k);
+        TetraMeasSnapshot m = meas.get();
+        std::string msg;
+        ImVec4 col = tc::grey();
+        double tol = 3.0 * m.inputRateUncPpm + 50.0;
+        if (alarmSt.enabled && alarms.any()) { msg = std::string(ui_text::T("ALARM")) + ": " + alarms.activeText(); col = tc::bad(); }
+        else if (m.valid && m.peakDbfs > -3.0f) { msg = ui_text::T("ADC overload - reduce the gain"); col = tc::bad(); }
+        else if (m.inputRate > 0.0 && m.inputRatePpm < -tol) { msg = ui_text::T("Samples lost (USB / CPU)"); col = tc::bad(); }
+        else if (decoder_mode == 0 && m.valid && m.rxState != 2) { msg = ui_text::T("No cell: the decoder is not locked"); col = tc::warn(); }
+        else if ((instMode == IM_MEASURE || instMode == IM_ALIGN) && vfo && std::fabs(vfo->getOffset()) < 15e3) {
+            msg = ui_text::T("SDR centre on the channel - move it ~100 kHz away"); col = tc::warn();
+        }
+        else if ((instMode == IM_MEASURE || instMode == IM_ALIGN) && instWorst == ST_OK) { msg = ui_text::T("All measured values within the limits"); col = tc::good(); }
+        else if (instMode == IM_MEASURE && instWorst == ST_BAD) { msg = instWorstText; col = tc::bad(); }
+        else { msg = ui_text::T("Ready"); }
+        ImGui::TextColored(col, "%s", msg.c_str());
+        // right: log state and time
+        char tb[16];
+        time_t now = time(nullptr);
+        struct tm lt;
+#ifdef _WIN32
+        localtime_s(&lt, &now);
+#else
+        localtime_r(&now, &lt);
+#endif
+        strftime(tb, sizeof(tb), "%H:%M:%S", &lt);
+        bool logging = meas.isLogging();
+        std::string r = std::string(ui_text::T("Log")) + (logging ? " \xe2\x97\x8f " : " \xe2\x97\x8b ") + ui_text::T(logging ? "running" : "off") + "   " + tb;
+        float rw = ImGui::CalcTextSize(r.c_str()).x;
+        ImGui::SameLine();
+        float x = ImGui::GetWindowContentRegionMax().x - rw - 6.0f * k;
+        if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
+        ImGui::TextColored(logging ? tc::bad() : tc::grey(), "%s", r.c_str());
+    }
+
+    // ---- side panel: content + softkey column ----
+    void drawInstSide() {
+        const float k = style::uiScale;
+        float softW = (std::max)(200.0f * k, ImGui::GetFontSize() * 14.0f);
+        ImVec2 a = ImGui::GetContentRegionAvail();
+        float gap = ImGui::GetStyle().ItemSpacing.x;
+        float contentW = a.x - softW - gap;
+        if (contentW >= 140.0f * k) {
+            ImGui::BeginChild(CONCAT("##_inst_content_", name), ImVec2(contentW, 0), false);
+            float w = ImGui::GetContentRegionAvail().x;
+            switch (instMode) {
+            case IM_MONITOR: drawInstMonitorSide(w); break;
+            case IM_MEASURE: drawMeasTable(w); break;
+            case IM_DRIVE: drawInstDriveSide(w); break;
+            case IM_ALIGN: drawAlignSide(w); break;
+            default: break;
+            }
+            touch::dragScroll();
+            ImGui::EndChild();
+            ImGui::SameLine();
+        }
+        ImGui::BeginChild(CONCAT("##_inst_soft_", name), ImVec2(0, 0), true);
+        drawSoftkeys();
+        ImGui::EndChild();
+        drawSettingsDialog();
+        drawCellDetailsDialog();
+    }
+
+    bool softkey(const char* label, const std::string& id, int on = -1, const char* right = nullptr) {
+        float w = ImGui::GetContentRegionAvail().x;
+        float h = (std::max)(ImGui::GetFrameHeight() * 1.45f, 34.0f * style::uiScale);
+        ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
+        if (on == 1) { ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive)); }
+        std::string txt = std::string(ui_text::T(label));
+        if (on >= 0) { txt += std::string(": ") + ui_text::T(on ? "ON" : "OFF"); }
+        if (right) { txt += std::string("  ") + right; }
+        bool r = ImGui::Button((txt + "###_sk_" + id + name).c_str(), ImVec2(w, h));
+        if (on == 1) { ImGui::PopStyleColor(); }
+        ImGui::PopStyleVar();
+        return r;
+    }
+    void softGroup(const char* txt) {
+        ImGui::Spacing();
+        ImGui::TextDisabled("%s", ui_text::T(txt));
+    }
+
+    void instStartLog() {
+        std::string err;
+        if (!meas.startLog(logFolder.expandString(logFolder.path), err)) {
+            logError = err;
+            meas.addEvent("CSV log: " + err);
+            return;
+        }
+        logError.clear();
+        std::string lp = meas.getLogPath();
+        if (carrierMon.count() > 0 && lp.size() > 4) { carrierMon.startLog(lp.substr(0, lp.size() - 4) + "_carriers.csv", levelCalEff); }
+    }
+    void instStopLog() {
+        meas.stopLog();
+        carrierMon.stopLog();
+    }
+    void instReport() {
+        reportPath = makeReport();
+        if (!reportPath.empty() && reportPath[0] != '!') { opener.open(reportPath); }
+        else if (!reportPath.empty()) { meas.addEvent(reportPath.substr(1)); }
+    }
+
+    void drawSoftkeys() {
+        softGroup("MODE");
+        for (int i = 0; i < IM_COUNT; i++) {
+            bool act = instMode == i;
+            if (softkey(instModeName(i), std::string("mode") + std::to_string(i), act ? 1 : -1)) { setInstMode(i); }
+        }
+        softGroup(instMode == IM_MEASURE ? "VIEW" : "SOFTKEYS");
+        bool logging = meas.isLogging();
+        switch (instMode) {
+        case IM_MONITOR:
+            if (softkey("Mute encrypted", "muteenc", listenMuteEnc ? 1 : 0)) { listenMuteEnc = !listenMuteEnc; saveListen(); }
+            if (decoder_mode == 0 && softkey("Cell details", "celldet")) { cellDetailsOpen = true; }
+            if (hamMode && decoder_mode == 0) {
+                if (softkey("Hide call control", "hidecc", trafficHideControl ? 1 : 0)) { trafficHideControl = !trafficHideControl; }
+            }
+            break;
+        case IM_MEASURE:
+            for (int v = 0; v < IV_COUNT; v++) {
+                if (softkey(instViewName(v), std::string("view") + std::to_string(v), instView == v ? 1 : -1)) { instView = v; saveInstConfig(); }
+            }
+            softGroup("SOFTKEYS");
+            if (softkey("Reset statistics", "reset")) { meas.resetTotals(); }
+            if (softkey("Remove I/Q offset", "iqoff", compOriginOffset ? 1 : 0)) {
+                compOriginOffset = !compOriginOffset;
+                config.acquire();
+                config.conf[name]["compOriginOffset"] = compOriginOffset;
+                config.release(true);
+            }
+            if (softkey(logging ? "Stop CSV log" : "Start CSV log", "log")) { if (logging) { instStopLog(); } else { instStartLog(); } }
+            if (softkey("Create report", "report")) { instReport(); }
+            break;
+        case IM_DRIVE: {
+            if (softkey(logging ? "Stop CSV log" : "Start CSV log", "log")) { if (logging) { instStopLog(); } else { instStartLog(); } }
+            TetraMeasurements::CellLock lock = meas.getCellLock();
+            bool decLocked = osmotetradecoder.getRxState() == 2 && osmotetradecoder.getMcc() != 0;
+            if (lock.active) {
+                if (softkey("Unlock cell", "lock", 1)) { lock.active = false; meas.setCellLock(lock); }
+            }
+            else {
+                if (!decLocked) { style::beginDisabled(); }
+                if (softkey("Lock cell", "lock", 0)) {
+                    lock.active = true;
+                    lock.mcc = osmotetradecoder.getMcc();
+                    lock.mnc = osmotetradecoder.getMnc();
+                    lock.cc = osmotetradecoder.getCc();
+                    lock.dlFreq = osmotetradecoder.getDlFreq();
+                    meas.setCellLock(lock);
+                }
+                if (!decLocked) { style::endDisabled(); }
+            }
+            std::string logPath = meas.getLogPath();
+            bool canExport = !logPath.empty() && !mapExport.busy();
+            if (!canExport) { style::beginDisabled(); }
+            if (softkey("Export map", "map")) {
+                mapExport.crcLimit = evalView.crcLimit;
+                mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
+            }
+            if (!canExport) { style::endDisabled(); }
+            if (softkey("Create report", "report")) { instReport(); }
+            break;
+        }
+        case IM_ALIGN:
+            if (softkey("Set reference", "ref", -1)) { alignSetReference(); }
+            if (softkey("Delta to reference", "delta", alignDelta ? 1 : 0)) { alignDelta = !alignDelta; }
+            if (softkey("Hold", "hold", alignHold ? 1 : 0)) { alignHold = !alignHold; if (alignHold) { alignHoldSnap = meas.get(); } }
+            if (softkey(alignMs ? "Limits: mobile station" : "Limits: base station", "lim")) { alignMs = !alignMs; saveInstConfig(); }
+            break;
+        default: break;
+        }
+        // settings and the SDR menu at the bottom of the column
+        float h = (std::max)(ImGui::GetFrameHeight() * 1.45f, 34.0f * style::uiScale);
+        float y = ImGui::GetWindowContentRegionMax().y - 2.0f * h - ImGui::GetStyle().ItemSpacing.y;
+        if (y > ImGui::GetCursorPosY()) { ImGui::SetCursorPosY(y); }
+        if (softkey("Settings", "settings")) { settingsOpen = true; }
+        if (softkey("SDR menu", "sdrmenu", gui::mainWindow.showMenu ? 1 : 0)) {
+            gui::mainWindow.showMenu = !gui::mainWindow.showMenu;
+            core::configManager.acquire();
+            core::configManager.conf["showMenu"] = gui::mainWindow.showMenu;
+            core::configManager.release(true);
+        }
+    }
+
+    // ---- content of the side panel per mode ----
+    void drawInstMonitorSide(float w) {
+        instHeader(ui_text::T("Audio"), w);
+        tw::Text("%s:", ui_text::T("Audio"));
+        ImGui::SameLine();
+        sigpath::sinkManager.showVolumeSlider(name, "##_inst_vol_", w - ImGui::GetCursorPosX(), 0, 2, false);
+        drawListen(w);
+        ImGui::Spacing();
+        if (decoder_mode == 0) {
+            instHeader(ui_text::T("Cell (compact)"), w, ui_text::T("Cell details"));
+            drawCellCompact(w);
+        }
+    }
+
+    void drawCellCompact(float w) {
+        (void)w;
+        int st = osmotetradecoder.getRxState();
+        if (st != 2 || osmotetradecoder.getMcc() == 0) { tw::TextDisabled("%s", ui_text::T("no cell yet")); return; }
+        const tetra_display_state* d = osmotetradecoder.getDisplay();
+        ImGuiTableFlags tf = ImGuiTableFlags_SizingFixedFit;
+        if (!ImGui::BeginTable(CONCAT("##_inst_cell_", name), 2, tf)) { return; }
+        auto lbl = [&](const char* t) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(t)); ImGui::TableSetColumnIndex(1); };
+        lbl("DL / UL");
+        ImGui::TextColored(tc::val(), "%.4f / %.4f MHz", osmotetradecoder.getDlFreq() / 1e6, osmotetradecoder.getUlFreq() / 1e6);
+        if (d && d->sysinfo_valid) {
+            lbl("Carrier / LA");
+            ImGui::TextColored(tc::val(), "%d  LA %d", d->main_carrier, d->la);
+        }
+        lbl("Timeslots");
+        for (int i = 0; i < 4; i++) {
+            if (i > 0) { ImGui::SameLine(); }
+            switch (osmotetradecoder.getTimeslotContent(i)) {
+            case 0: ImGui::TextColored(tc::lgrey(), "UL"); break;
+            case 1: ImGui::TextColored(tc::magenta(), "DATA"); break;
+            case 2: ImGui::TextColored(tc::val(), "NDB"); break;
+            case 3: ImGui::TextColored(tc::cyan(), "SYNC"); break;
+            case 4: ImGui::TextColored(tc::good(), "VOICE"); break;
+            default: ImGui::TextDisabled("--"); break;
+            }
+        }
+        lbl("Security");
+        bool air = osmotetradecoder.getAirEncryption();
+        ImGui::TextColored(air ? tc::warn() : tc::val(), "%s", ui_text::T(air ? "encryption offered" : "no encryption"));
+        if (d && d->ext_valid) {
+            bool auth = ((d->ext_services >> 12) & 0x80) != 0;
+            ImGui::SameLine();
+            ImGui::TextColored(tc::val(), "| %s", ui_text::T(auth ? "authentication required" : "no authentication"));
+        }
+        if (d && d->sysinfo_valid) {
+            lbl("Access");
+            ImGui::TextColored(tc::val(), "min %d dBm | MS max %d dBm", -125 + 5 * d->rxlev_access_min, d->ms_txpwr_max ? 10 + 5 * d->ms_txpwr_max : 0);
+        }
+        lbl("Services");
+        struct Sv { const char* t; bool on; };
+        Sv sv[] = { { "Voice", osmotetradecoder.getVoiceService() != 0 }, { "Packet data", osmotetradecoder.getSndcpData() != 0 },
+                    { "Circuit data", osmotetradecoder.getCircuitData() != 0 }, { "Registration", osmotetradecoder.getRegMandatory() != 0 },
+                    { "Priority cell", osmotetradecoder.getPriorityCell() != 0 } };
+        float x0 = ImGui::GetCursorPosX();
+        float colW = ImGui::GetContentRegionAvail().x;
+        float used = 0.0f;
+        bool first = true;
+        for (auto& s : sv) {
+            const char* t = ui_text::T(s.t);
+            float tw_ = ImGui::CalcTextSize(t).x + ImGui::GetFontSize();
+            if (!first) {
+                if (used + tw_ > colW) { used = 0.0f; ImGui::SetCursorPosX(x0); }
+                else { ImGui::SameLine(); }
+            }
+            ImGui::TextColored(s.on ? tc::good() : tc::grey(), "%s", t);
+            used += tw_;
+            first = false;
+        }
+        ImGui::EndTable();
+    }
+
+    void drawInstDriveSide(float w) {
+        drawBigValues(w);
+        ImGui::Spacing();
+        GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
+        if (g.valid) {
+            tw::TextDisabled("Position:"); ImGui::SameLine(); tw::TextColored(tc::val(), "%.5f, %.5f", g.lat, g.lon);
+            tw::TextDisabled("Speed / HDOP:"); ImGui::SameLine(); tw::TextColored(tc::val(), "%.0f km/h | %.1f", g.speedKmh, g.hdop);
+        }
+        TetraMeasurements::CellLock lock = meas.getCellLock();
+        if (lock.active) {
+            TetraMeasSnapshot m = meas.get();
+            tw::TextDisabled("Cell lock:"); ImGui::SameLine();
+            tw::TextColored(m.cellMatch == 1 ? tc::good() : tc::bad(), "%03d/%d CC %d %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
+        }
+        if (meas.isLogging()) { tw::TextDisabled("%s", meas.getLogPath().c_str()); }
+    }
+
+    // ---- measured values with limit and assessment ----
+    // Limits (newest editions, checked against the texts):
+    //  EN 300 394-1 V3.3.1 7.3.1.2 / EN 300 392-2 V3.8.1 6.6.1.2: vector error rms < 10 % per burst,
+    //    peak < 30 %, residual carrier |C0| < 5 % of |S(k)| (pi/4-DQPSK), BS and MS
+    //  EN 300 394-1 7.3.2.2: frequency error BS +-0.2 ppm up to 520 MHz, +-0.1 ppm above; MS +-100 Hz
+    //  Values without a normative limit (IRR, error split, BER, CRC) are shown as guide values only.
+    void measRow(const char* label, int st, const char* limit, const char* fmt, ...) {
+        char buf[128];
+        va_list ap;
+        va_start(ap, fmt);
+        vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(label));
+        ImGui::TableSetColumnIndex(1); ImGui::TextColored(tc::val(), "%s", buf);
+        ImGui::TableSetColumnIndex(2); ImGui::TextDisabled("%s", limit ? limit : "");
+        ImGui::TableSetColumnIndex(3); instDot(st);
+        if (st > instWorst) {
+            instWorst = st;
+            if (st == ST_BAD) { instWorstText = std::string(ui_text::T(label)) + ": " + buf + "  (" + (limit ? limit : "") + ")"; }
+        }
+    }
+    void measSection(const char* t) {
+        ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(ui_text::T(t));
+    }
+    void drawMeasTable(float w) {
+        instWorst = ST_NONE;
+        instWorstText.clear();
+        instHeader(ui_text::T("Measured values"), w);
+        TetraMeasSnapshot m = meas.get();
+        bool syn = m.valid && m.symSync;
+        ImGuiTableFlags tf = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg;
+        if (!ImGui::BeginTable(CONCAT("##_inst_meas_", name), 4, tf)) { return; }
+        ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthStretch, 1.25f);
+        ImGui::TableSetupColumn("b", ImGuiTableColumnFlags_WidthStretch, 1.3f);
+        ImGui::TableSetupColumn("c", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+        ImGui::TableSetupColumn("d", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize());
+
+        measSection("Modulation");
+        if (syn) {
+            float evm = compOriginOffset ? 100.0f * powf(10.0f, -m.merExclDb / 20.0f) : m.evmPct;
+            int s = (evm < 10.0f && m.evmPeakPct < 30.0f) ? ST_OK : ST_BAD;
+            measRow("EVM rms / peak", s, "10 / 30 %", "%.1f / %.0f %%", evm, m.evmPeakPct);
+            float ph = symbolExtractor.getPhaseErrDeg(), am = symbolExtractor.getAmpErrPct();
+            measRow("Error phase / ampl.", ST_NONE, ui_text::T("guide"), "%.1f %% / %.1f %%", ph * 3.14159265f / 180.0f * 100.0f, am);
+            // residual carrier: 20 lg(0.05) = -26 dB
+            measRow("Residual carrier", m.iqOffsetDb < -26.0f ? ST_OK : ST_BAD, "-26 dB (5 %)", "%.1f dB", m.iqOffsetDb);
+            float irr = symbolExtractor.getImageRejectionDb();
+            measRow("I/Q imbalance (IRR)", irr >= 30.0f ? ST_OK : ST_WARN, ui_text::T("guide"), "%.1f dB", irr);
+        }
+        else {
+            measRow("EVM rms / peak", ST_NONE, "10 / 30 %", "--");
+            measRow("Residual carrier", ST_NONE, "-26 dB (5 %)", "--");
+        }
+        if (vemRun) {
+            TetraVemResult r = vemAn.get();
+            if (r.n > 0 && !std::isnan(r.rmsMean)) {
+                int s = (r.rmsMax < 0.10 && r.peakMax < 0.30 && r.c0Mean < 0.05) ? ST_OK : ST_BAD;
+                measRow("Mod. accuracy 10.1.3", s, "10 / 30 %", "%.1f / %.0f %% (%d)", r.rmsMean * 100.0, r.peakMax * 100.0, r.n);
+            }
+        }
+
+        measSection("Frequency and clock");
+        if (syn) {
+            bool high = m.refFreqHz > 520e6;
+            double ppm = m.absErrValid ? m.absErrHz / (m.refFreqHz > 1e6 ? m.refFreqHz : 1e6) * 1e6 : m.carrierPpm;
+            double hz = m.absErrValid ? m.absErrHz : m.carrierOffsetHz;
+            if (freqRef == 0) { measRow("Carrier error", ST_NONE, ui_text::T("indicative"), "%+.0f Hz | %+.3f ppm", hz, ppm); }
+            else { measRow("Carrier error", std::fabs(ppm) <= (high ? 0.1 : 0.2) ? ST_OK : ST_BAD, high ? "+-0.1 ppm" : "+-0.2 ppm", "%+.0f Hz | %+.3f ppm", hz, ppm); }
+            measRow("Symbol clock", ST_NONE, "", "%+.1f ppm", m.symbolRatePpm);
+        }
+        else { measRow("Carrier error", ST_NONE, "", "--"); }
+        static const char* refs[3] = { "internal", "external 10 MHz", "calibrated" };
+        measRow("Reference", freqRef == 0 ? ST_WARN : ST_OK, "", "%s", ui_text::T(refs[std::clamp(freqRef, 0, 2)]));
+
+        measSection("Reception");
+        if (m.valid) {
+            bool cal = levelCalEff != 0.0f;
+            int s = m.peakDbfs > -3.0f ? ST_BAD : ((m.levelDbfs > -15.0f || m.levelDbfs < -45.0f) ? ST_WARN : ST_OK);
+            measRow("Level", s, "ADC", cal ? "%.1f dBm" : "%.1f dBFS", m.levelDbfs + (cal ? levelCalEff : 0.0f));
+        }
+        else { measRow("Level", ST_NONE, "", "--"); }
+        if (decoder_mode == 0) {
+            if (m.ber >= 0.0) { measRow("Raw BER", m.ber < 1e-3 ? ST_OK : (m.ber < 1e-2 ? ST_WARN : ST_BAD), ui_text::T("guide"), "%.1e", m.ber); }
+            uint32_t ok = 0, fail = 0;
+            for (int i = 0; i < 4; i++) { ok += m.crcOk[i]; fail += m.crcFail[i]; }
+            if (ok + fail > 0) {
+                double p = 100.0 * fail / (ok + fail);
+                measRow("CRC errors", p < 1.0 ? ST_OK : (p < 5.0 ? ST_WARN : ST_BAD), ui_text::T("guide"), "%.1f %%", p);
+            }
+            measRow("Re-locks with slip", m.resyncSlip ? ST_BAD : ST_OK, "0", "%u", m.resyncSlip);
+        }
+        ImGui::EndTable();
+        ImGui::Spacing();
+        tw::TextDisabled("EN 300 394-1 V3.3.1 7.3.1.2 / 7.3.2.2");
+    }
+
+    // ---- alignment: big meters with tolerance band and reference ----
+    void alignSetReference() {
+        TetraMeasSnapshot m = meas.get();
+        alignRef.set = m.valid && m.symSync;
+        alignRef.t = time(nullptr);
+        alignRef.hz = m.absErrValid ? m.absErrHz : m.carrierOffsetHz;
+        alignRef.evm = compOriginOffset ? 100.0 * pow(10.0, -m.merExclDb / 20.0) : m.evmPct;
+        alignRef.iq = m.iqOffsetDb;
+        alignRef.ph = symbolExtractor.getPhaseErrDeg() * 3.14159265 / 180.0 * 100.0;
+        alignRef.am = symbolExtractor.getAmpErrPct();
+        alignRef.acp = NAN;
+        if (txaRun) {
+            TxAnalysisResult r = txa.get();
+            if (r.valid) { alignRef.acp = (std::max)(r.acpDbc[2], r.acpDbc[3]); }
+        }
+    }
+
+    // one meter: value, unit, scale lo..hi, green band zlo..zhi, reference marker
+    void alignMeter(const char* title, const char* limTxt, double v, const char* fmt, const char* unit, double lo, double hi,
+                    double zlo, double zhi, double ref, bool valid, float w, float h) {
+        const float k = style::uiScale;
+        ImGui::BeginChild((std::string("##_am_") + title + name).c_str(), ImVec2(w, h), true, ImGuiWindowFlags_NoScrollbar);
+        float cw = ImGui::GetContentRegionAvail().x;
+        instHeader(ui_text::T(title), cw, limTxt);
+        char vb[64];
+        if (valid) { snprintf(vb, sizeof(vb), fmt, v); } else { snprintf(vb, sizeof(vb), "--"); }
+        ImGui::PushFont(style::bigFont);
+        ImGui::TextColored(tc::val(), "%s", vb);
+        ImGui::PopFont();
+        ImGui::SameLine();
+        ImGui::TextDisabled("%s", unit);
+        if (valid && alignDelta && alignRef.set && !std::isnan(ref)) {
+            char db[48];
+            snprintf(db, sizeof(db), "\xce\x94 %+.*f", std::fabs(hi - lo) < 30.0 ? 1 : 0, v - ref);
+            ImGui::SameLine();
+            float x = ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(db).x;
+            if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
+            ImGui::TextColored(tc::cyan(), "%s", db);
+        }
+        // bar
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        float bh = 18.0f * k;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        auto xOf = [&](double x) { return p.x + (float)((std::clamp(x, lo, hi) - lo) / (hi - lo)) * cw; };
+        ImVec4 bad = tc::bad(); bad.w = 0.25f;
+        ImVec4 good = tc::good(); good.w = 0.30f;
+        dl->AddRectFilled(p, ImVec2(p.x + cw, p.y + bh), ImGui::GetColorU32(bad), 3.0f);
+        dl->AddRectFilled(ImVec2(xOf(zlo), p.y), ImVec2(xOf(zhi), p.y + bh), ImGui::GetColorU32(good));
+        dl->AddRect(p, ImVec2(p.x + cw, p.y + bh), ImGui::GetColorU32(ImGuiCol_Border), 3.0f);
+        if (alignRef.set && !std::isnan(ref)) {
+            float xr = xOf(ref);
+            for (float y = p.y - 3.0f * k; y < p.y + bh + 3.0f * k; y += 5.0f * k) {
+                dl->AddLine(ImVec2(xr, y), ImVec2(xr, (std::min)(y + 3.0f * k, p.y + bh + 3.0f * k)), ImGui::GetColorU32(tc::cyan()), 2.0f);
+            }
+        }
+        if (valid) {
+            float xv = xOf(v);
+            dl->AddRectFilled(ImVec2(xv - 2.0f * k, p.y - 5.0f * k), ImVec2(xv + 2.0f * k, p.y + bh + 5.0f * k), ImGui::GetColorU32(tc::val()), 2.0f);
+        }
+        ImGui::Dummy(ImVec2(cw, bh + 6.0f * k));
+        char a[32], b[32];
+        snprintf(a, sizeof(a), "%g", lo);
+        snprintf(b, sizeof(b), "%g %s", hi, unit);
+        ImGui::TextDisabled("%s", a);
+        ImGui::SameLine();
+        float x = ImGui::GetWindowContentRegionMax().x - ImGui::CalcTextSize(b).x;
+        if (x > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(x); }
+        ImGui::TextDisabled("%s", b);
+        ImGui::EndChild();
+    }
+
+    void drawAlignMain() {
+        TetraMeasSnapshot m = alignHold ? alignHoldSnap : meas.get();
+        bool syn = m.valid && m.symSync;
+        ImVec2 a = ImGui::GetContentRegionAvail();
+        float gap = ImGui::GetStyle().ItemSpacing.x;
+        float w = (a.x - gap) * 0.5f;
+        float h = (std::max)(ImGui::GetFrameHeight() * 6.2f, 120.0f * style::uiScale);
+        double fref = m.refFreqHz > 1e6 ? m.refFreqHz : 400e6;
+        double hz = m.absErrValid ? m.absErrHz : m.carrierOffsetHz;
+        // frequency: BS +-0.2 ppm (+-0.1 above 520 MHz), MS +-100 Hz (EN 300 394-1 7.3.2.2)
+        double limHz = alignMs ? 100.0 : fref * (fref > 520e6 ? 0.1e-6 : 0.2e-6);
+        char lt[48];
+        snprintf(lt, sizeof(lt), alignMs ? "+-100 Hz (MS)" : "+-%.0f Hz (BS)", limHz);
+        alignMeter("Freq. error", lt, hz, "%+.0f", "Hz", -2.0 * limHz, 2.0 * limHz, -limHz, limHz, alignRef.hz, syn, w, h);
+        ImGui::SameLine();
+        double evm = compOriginOffset ? 100.0 * pow(10.0, -m.merExclDb / 20.0) : m.evmPct;
+        alignMeter("EVM rms", "10 %", evm, "%.1f", "%", 0.0, 15.0, 0.0, 10.0, alignRef.evm, syn, w, h);
+        alignMeter("Residual carrier", "-26 dB (5 %)", m.iqOffsetDb, "%.1f", "dB", -60.0, -16.0, -60.0, -26.0, alignRef.iq, syn, w, h);
+        ImGui::SameLine();
+        double acp = NAN;
+        if (txaRun) {
+            TxAnalysisResult r = txa.get();
+            if (r.valid) { acp = (std::max)(r.acpDbc[2], r.acpDbc[3]); }
+        }
+        // ACP +-25 kHz, worse side; BS / MS classes 1-3: -60 dBc (table 7.2)
+        alignMeter("Adjacent channel", txaRun ? "-60 dBc (+-25 kHz)" : "TX spectrum off", acp, "%.1f", "dBc", -80.0, -50.0, -80.0, -60.0, alignRef.acp, txaRun && !std::isnan(acp), w, h);
+        if (!txaRun) {
+            if (ImGui::SmallButton(CONCAT("Start TX spectrum analysis##_inst_txa_", name))) { txaRun = true; saveTxaConfig(); }
+        }
+        ImGui::Spacing();
+        drawTrends(a.x);
+    }
+
+    void drawAlignSide(float w) {
+        instWorst = ST_NONE;
+        TetraMeasSnapshot m = alignHold ? alignHoldSnap : meas.get();
+        bool syn = m.valid && m.symSync;
+        instHeader(ui_text::T("Error components"), w);
+        if (ImGui::BeginTable(CONCAT("##_inst_align_", name), 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+            auto row = [&](const char* l, const char* fmt, double v, double ref) {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T(l));
+                ImGui::TableSetColumnIndex(1);
+                if (!syn) { ImGui::TextDisabled("--"); return; }
+                ImGui::TextColored(tc::val(), fmt, v);
+                if (alignDelta && alignRef.set && !std::isnan(ref)) { ImGui::SameLine(); ImGui::TextColored(tc::cyan(), "\xce\x94 %+.1f", v - ref); }
+            };
+            row("Phase error", "%.1f %%", symbolExtractor.getPhaseErrDeg() * 3.14159265 / 180.0 * 100.0, alignRef.ph);
+            row("Amplitude error", "%.1f %%", symbolExtractor.getAmpErrPct(), alignRef.am);
+            row("EVM peak", "%.0f %%", m.evmPeakPct, NAN);
+            row("I/Q imbalance (IRR)", "%.1f dB", symbolExtractor.getImageRejectionDb(), NAN);
+            row("Symbol clock", "%+.1f ppm", m.symbolRatePpm, NAN);
+            {
+                bool cal = levelCalEff != 0.0f;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T("Level"));
+                ImGui::TableSetColumnIndex(1);
+                if (m.valid) { ImGui::TextColored(tc::val(), cal ? "%.1f dBm" : "%.1f dBFS", m.levelDbfs + (cal ? levelCalEff : 0.0f)); }
+                else { ImGui::TextDisabled("--"); }
+            }
+            if (burstRun && burstAn.isRunning()) {
+                TetraBurstResult br = burstAn.get();
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0); ImGui::TextDisabled("%s", ui_text::T("Uplink noise"));
+                ImGui::TableSetColumnIndex(1);
+                if (!std::isnan(br.gapDbfs)) { ImGui::TextColored(tc::val(), "%.1f dB", br.gapDbfs + m.levelCalDb); } else { ImGui::TextDisabled("--"); }
+            }
+            ImGui::EndTable();
+        }
+        if (syn) {
+            double fref = m.refFreqHz > 1e6 ? m.refFreqHz : 400e6;
+            double hz = m.absErrValid ? m.absErrHz : m.carrierOffsetHz;
+            double limHz = alignMs ? 100.0 : fref * (fref > 520e6 ? 0.1e-6 : 0.2e-6);
+            double evm = compOriginOffset ? 100.0 * pow(10.0, -m.merExclDb / 20.0) : m.evmPct;
+            bool ok = std::fabs(hz) <= limHz && evm < 10.0 && m.evmPeakPct < 30.0 && m.iqOffsetDb < -26.0f;
+            instWorst = ok ? ST_OK : ST_BAD;
+        }
+        ImGui::Spacing();
+        instHeader(ui_text::T("Procedure"), w);
+        tw::TextDisabled("%s", ui_text::T("1 Set reference"));
+        tw::TextDisabled("%s", ui_text::T("2 Adjust (crystal, level, I/Q, supply ...)"));
+        tw::TextDisabled("%s", ui_text::T("3 Read the delta (blue = change to reference)"));
+        if (freqRef == 0) {
+            ImGui::Spacing();
+            tw::TextColored(tc::warn(), "Frequency: without an external 10 MHz reference the\nSDR's own error is included (indicative).");
+        }
+    }
+
+    // ---- main view (instead of the waterfall) ----
+    void drawInstMain() {
+        ImGui::BeginChild(CONCAT("##_inst_main_", name), ImVec2(0, 0), false);
+        ImVec2 a = ImGui::GetContentRegionAvail();
+        if (instMode == IM_MEASURE) {
+            instHeader(ui_text::T(instViewName(instView)), a.x);
+            a = ImGui::GetContentRegionAvail();
+            switch (instView) {
+            case IV_CONST: {
+                drawConstellationOptions("i");
+                a = ImGui::GetContentRegionAvail();
+                float side = (std::max)(80.0f * style::uiScale, (std::min)(a.x, a.y));
+                if (a.x > side) { ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (a.x - side) * 0.5f); }
+                drawConstellation(side);
+                break;
+            }
+            case IV_TXA: drawTxAnalysis(a.x); break;
+            case IV_BURST: drawBursts(a.x); break;
+            case IV_CARR: drawCarriers(a.x); break;
+            case IV_TREND: drawTrends(a.x); break;
+            case IV_MP: { bool was = mpRun; drawMultipath(a.x); if (was != mpRun) { saveMpConfig(); } break; }
+            default: break;
+            }
+        }
+        else if (instMode == IM_DRIVE) {
+            instHeader(ui_text::T("Drive test"), a.x);
+            drawGpsCoverage(ImGui::GetContentRegionAvail().x);
+        }
+        else if (instMode == IM_ALIGN) {
+            drawAlignMain();
+        }
+        touch::dragScroll();
+        ImGui::EndChild();
+    }
+
+    // ---- strip below the main view ----
+    void drawInstBottom() {
+        float w = ImGui::GetContentRegionAvail().x;
+        ImGui::BeginChild(CONCAT("##_inst_bottom_", name), ImVec2(0, 0), false);
+        if (instMode == IM_MONITOR) {
+            if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 0); }
+            else if (decoder_mode == 0) { drawNetworkBody(w); }
+        }
+        else if (instMode == IM_ALIGN) { drawTimeslotTable(w); }
+        else { drawTrends(w); }
+        touch::dragScroll();
+        ImGui::EndChild();
+    }
+
+    // ---- dialogs ----
+    void drawCellDetailsDialog() {
+        if (cellDetailsOpen) { ImGui::OpenPopup(CONCAT("Cell details###_inst_cell_dlg_", name)); cellDetailsOpen = false; }
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2(vs.x * 0.55f, vs.y * 0.75f), ImGuiCond_Appearing);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        bool open = true;
+        if (ImGui::BeginPopupModal(CONCAT("Cell details###_inst_cell_dlg_", name), &open)) {
+            drawNetworkBody(ImGui::GetContentRegionAvail().x);
+            ImGui::EndPopup();
+        }
+    }
+
+    void drawSettingsDialog() {
+        if (settingsOpen) { ImGui::OpenPopup(CONCAT("###_inst_settings_", name)); settingsOpen = false; }
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2((std::min)(vs.x * 0.9f, 1000.0f * style::uiScale), vs.y * 0.8f), ImGuiCond_Appearing);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        bool open = true;
+        std::string title = std::string(ui_text::T("Settings")) + "###_inst_settings_" + name;
+        if (!ImGui::BeginPopupModal(title.c_str(), &open)) { return; }
+        static const char* pages[] = { "Display & operation", "SDR & calibration", "Logging & report", "Limits & alarms",
+                                       "Network: ETSI / amateur radio", "Duplex tables", "Name lists", "Decoder / NETSYMS" };
+        const int nPages = (int)(sizeof(pages) / sizeof(pages[0]));
+        float navW = (std::max)(190.0f * style::uiScale, ImGui::GetFontSize() * 14.0f);
+        ImGui::BeginChild(CONCAT("##_inst_set_nav_", name), ImVec2(navW, 0), true);
+        for (int i = 0; i < nPages; i++) {
+            if (i == 0) { ImGui::TextDisabled("%s", ui_text::T("Device")); }
+            if (i == 4) { ImGui::Spacing(); ImGui::TextDisabled("%s", ui_text::T("Application TETRA")); }
+            if (ImGui::Selectable(ui_text::L(pages[i], std::string("_inst_setp_") + std::to_string(i) + name).c_str(), settingsPage == i)) { settingsPage = i; }
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+        ImGui::BeginChild(CONCAT("##_inst_set_body_", name), ImVec2(0, 0), true);
+        float w = ImGui::GetContentRegionAvail().x;
+        TetraMeasSnapshot m = meas.get();
+        switch (settingsPage) {
+        case 0: {
+            tw::TextDisabled("%s", ui_text::T("Rarely needed settings - not needed in operation"));
+            ImGui::Spacing();
+            int lang = ui_text::lang();
+            ImGui::SetNextItemWidth(200.0f * style::uiScale);
+            if (ImGui::Combo(ui_text::L("Language", "_inst_lang_" + name).c_str(), &lang, "English\0Deutsch\0")) {
+                ui_text::lang() = lang;
+                saveInstConfig();
+            }
+            bool classic = !instUi;
+            if (ImGui::Checkbox(ui_text::L("Classic layout (everything in the menu)", "_inst_classic_" + name).c_str(), &classic)) {
+                instUi = !classic;
+                saveInstConfig();
+                if (classic) { gui::mainWindow.showMenu = true; }
+            }
+            tw::TextDisabled("Touch mode, theme and fonts: SDR menu -> Display.");
+            break;
+        }
+        case 1:
+            drawAfcGain(w, m);
+            ImGui::Separator();
+            drawSdrAdvice(w);
+            break;
+        case 2:
+            tw::Text("Log folder:");
+            if (logFolder.render("##_inst_logdir_" + name) && logFolder.pathIsValid()) {
+                config.acquire();
+                config.conf[name]["logPath"] = logFolder.path;
+                config.release(true);
+            }
+            ImGui::Separator();
+            drawReport(w);
+            break;
+        case 3:
+            drawAlarms(w);
+            ImGui::Separator();
+            tw::TextDisabled("ACP limits and the burst time mask are set in their views (Measure).");
+            break;
+        case 4:
+            if (ImGui::RadioButton(CONCAT("ETSI##_inst_mode_etsi_", name), !hamMode) && hamMode) {
+                hamMode = false; applyDuplexMode();
+                config.acquire(); config.conf[name]["hamMode"] = false; config.release(true);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton(CONCAT("Amateur radio##_inst_mode_ham_", name), hamMode) && !hamMode) {
+                hamMode = true; applyDuplexMode();
+                config.acquire(); config.conf[name]["hamMode"] = true; config.release(true);
+            }
+            break;
+        case 5: drawDuplexEditor(w); break;
+        case 6:
+            if (hamMode && decoder_mode == 0) { drawSubscribersBody(w, 3); }
+            else { tw::TextDisabled("Only in amateur radio mode."); }
+            break;
+        case 7: tw::TextDisabled("NETSYMS: SDR menu -> TETRA demodulator -> NETSYMS symbol streaming."); break;
+        default: break;
+        }
+        ImGui::EndChild();
+        ImGui::EndPopup();
     }
 
     void drawConstellation(float width) {
@@ -4958,6 +5872,22 @@ private:
     std::vector<std::string> gpsPorts;
     CoverageMapExporter mapExport;
     int mapMetric = 0;
+    // instrument UI (test version)
+    bool instUi = true;           // false = classic layout (tiles / everything in the menu)
+    bool instActive = false;      // panels of the instrument UI are registered
+    int instMode = 0, instView = 1;
+    float instSideW = 700.0f, instBottomH = 260.0f;   // px (saved without the UI scale)
+    float instTopH = 0.0f, instMsgH = 0.0f;
+    bool instTopReg = false, instMsgReg = false, instDirty = false;
+    int instMainCur = -1;
+    int instWorst = 0;            // worst assessment of the last drawn table (message line)
+    std::string instWorstText;
+    bool settingsOpen = false, cellDetailsOpen = false;
+    int settingsPage = 0;
+    struct AlignRef { bool set = false; time_t t = 0; double hz = NAN, evm = NAN, iq = NAN, ph = NAN, am = NAN, acp = NAN; };
+    AlignRef alignRef;
+    bool alignDelta = true, alignHold = false, alignMs = false;
+    TetraMeasSnapshot alignHoldSnap;
     std::vector<TileCfg> tiles;   // tile column right of the waterfall, top to bottom
     float tileColW = 440.0f;      // px (saved without the UI scale)
     bool tileBottom = false;      // Stations & Traffic as a strip below the waterfall

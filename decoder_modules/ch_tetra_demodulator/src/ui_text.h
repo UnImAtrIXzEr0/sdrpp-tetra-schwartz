@@ -1,0 +1,158 @@
+#pragma once
+// Language of the instrument UI (test version): English is the default and the
+// key, German is an alternative. Only the texts of the new shell (status bar,
+// modes, softkeys, settings, messages) are translated so far; texts without a
+// translation stay English.
+#include <string>
+#include <unordered_map>
+
+namespace ui_text {
+    enum Lang { EN = 0, DE = 1 };
+
+    inline int& lang() {
+        static int l = EN;
+        return l;
+    }
+
+    inline const char* T(const char* en) {
+        if (lang() != DE) { return en; }
+        static const std::unordered_map<std::string, const char*> de = {
+            // modes
+            { "Monitor", "Monitor" },
+            { "Measure", "Messen" },
+            { "Drive test", "Messfahrt" },
+            { "Alignment", "Abgleich" },
+            { "MODE", "MODUS" },
+            { "SOFTKEYS", "SOFTKEYS" },
+            { "VIEW", "ANSICHT" },
+            // status bar
+            { "Sync", "Sync" },
+            { "Locked", "Eingerastet" },
+            { "Searching", "Suche" },
+            { "No sync", "Kein Sync" },
+            { "Cell", "Zelle" },
+            { "Level", "Pegel" },
+            { "MER", "MER" },
+            { "Freq. error", "Frequenzfehler" },
+            { "CRC errors", "CRC-Fehler" },
+            { "Playing", "Wiedergabe" },
+            { "Reference", "Referenz" },
+            { "GPS", "GPS" },
+            { "nothing", "nichts" },
+            { "Group", "Gruppe" },
+            { "Station", "Station" },
+            // views
+            { "Spectrum", "Spektrum" },
+            { "Constellation", "Konstellation" },
+            { "TX spectrum (ACP)", "TX-Spektrum (ACP)" },
+            { "Burst (uplink)", "Burst (Uplink)" },
+            { "Carriers", "Träger" },
+            { "Trends", "Verläufe" },
+            { "Multipath", "Mehrwege" },
+            // softkeys
+            { "Mute encrypted", "Verschlüsselt stumm" },
+            { "Cell details", "Zelldetails" },
+            { "Reset statistics", "Statistik zurücksetzen" },
+            { "Remove I/Q offset", "I/Q-Offset entfernen" },
+            { "Start CSV log", "CSV-Log starten" },
+            { "Stop CSV log", "CSV-Log beenden" },
+            { "Create report", "Bericht erstellen" },
+            { "Lock cell", "Zelle sperren" },
+            { "Unlock cell", "Zelle entsperren" },
+            { "Export map", "Karte exportieren" },
+            { "Set reference", "Referenz setzen" },
+            { "Delta to reference", "Δ zur Referenz" },
+            { "Hold", "Halten" },
+            { "Limits: base station", "Grenzen: Basisstation" },
+            { "Limits: mobile station", "Grenzen: Mobilstation" },
+            { "Settings", "Einstellungen" },
+            { "SDR menu", "SDR-Menü" },
+            { "ON", "EIN" },
+            { "OFF", "AUS" },
+            // panels
+            { "Audio", "Audio" },
+            { "Cell (compact)", "Zelle (kompakt)" },
+            { "Measured values", "Messwerte" },
+            { "Value", "Wert" },
+            { "Limit", "Grenze" },
+            { "Modulation", "Modulation" },
+            { "Frequency and clock", "Frequenz und Takt" },
+            { "Reception", "Empfang" },
+            { "EVM rms / peak", "EVM rms / Spitze" },
+            { "Error phase / ampl.", "Fehler Phase / Ampl." },
+            { "Residual carrier", "Trägerrest" },
+            { "I/Q imbalance (IRR)", "I/Q-Unsymmetrie (IRR)" },
+            { "Carrier error", "Trägerablage" },
+            { "Symbol clock", "Symboltakt" },
+            { "Raw BER", "Raw BER" },
+            { "Re-locks with slip", "Re-locks mit Versatz" },
+            { "guide", "Richtwert" },
+            { "indicative", "Richtwert" },
+            { "internal", "intern" },
+            { "external 10 MHz", "extern 10 MHz" },
+            { "calibrated", "kalibriert" },
+            { "Error components", "Fehleranteile" },
+            { "Phase error", "Phasenfehler" },
+            { "Amplitude error", "Amplitudenfehler" },
+            { "EVM peak", "EVM Spitze" },
+            { "Uplink noise", "Uplink-Rauschen" },
+            { "Adjacent channel", "Nachbarkanal" },
+            { "not set", "nicht gesetzt" },
+            { "set", "gesetzt" },
+            { "Procedure", "Ablauf" },
+            { "1 Set reference", "1 Referenz setzen" },
+            { "2 Adjust (crystal, level, I/Q, supply ...)", "2 Einstellen (Quarz, Pegel, I/Q, Versorgung …)" },
+            { "3 Read the delta (blue = change to reference)", "3 Δ ablesen (blau = Änderung zur Referenz)" },
+            { "DL / UL", "DL / UL" },
+            { "Carrier / LA", "Träger / LA" },
+            { "Timeslots", "Zeitschlitze" },
+            { "Security", "Sicherheit" },
+            { "Access", "Zugang" },
+            { "Services", "Dienste" },
+            { "no encryption", "keine Verschlüsselung" },
+            { "encryption offered", "Verschlüsselung angeboten" },
+            { "authentication required", "Authentisierung erforderlich" },
+            { "no authentication", "keine Authentisierung" },
+            { "Voice", "Sprache" },
+            { "Packet data", "Paketdaten" },
+            { "Circuit data", "Leitungsdaten" },
+            { "Registration", "Registrierung" },
+            { "Encryption", "Verschlüsselung" },
+            { "Priority cell", "Vorzugszelle" },
+            { "no cell yet", "noch keine Zelle" },
+            { "Close", "Schließen" },
+            // messages
+            { "All measured values within the limits", "Alle Messwerte innerhalb der Grenzen" },
+            { "Ready", "Bereit" },
+            { "No cell: the decoder is not locked", "Keine Zelle: Decoder nicht eingerastet" },
+            { "ADC overload - reduce the gain", "ADC-Übersteuerung – Verstärkung verringern" },
+            { "Samples lost (USB / CPU)", "Abtastwerte verloren (USB / CPU)" },
+            { "SDR centre on the channel - move it ~100 kHz away", "SDR-Mitte auf dem Kanal – ~100 kHz daneben abstimmen" },
+            { "ALARM", "ALARM" },
+            { "Log", "Log" },
+            { "running", "läuft" },
+            { "off", "aus" },
+            // settings dialog
+            { "Device", "Gerät" },
+            { "Application TETRA", "Applikation TETRA" },
+            { "Display & operation", "Anzeige & Bedienung" },
+            { "SDR & calibration", "SDR & Kalibrierung" },
+            { "Logging & report", "Protokoll & Bericht" },
+            { "Limits & alarms", "Grenzwerte & Alarme" },
+            { "Network: ETSI / amateur radio", "Netz: ETSI / Amateurfunk" },
+            { "Duplex tables", "Duplex-Tabellen" },
+            { "Name lists", "Namenslisten" },
+            { "Decoder / NETSYMS", "Decoder / NETSYMS" },
+            { "Language", "Sprache" },
+            { "Classic layout (everything in the menu)", "Klassische Ansicht (alles im Menü)" },
+            { "Touch mode (larger controls)", "Touch-Modus (größere Bedienelemente)" },
+            { "Rarely needed settings - not needed in operation", "Seltene Einstellungen – im Betrieb nicht nötig" },
+            { "Instrument view", "Messgeräte-Ansicht" },
+        };
+        auto it = de.find(en);
+        return it == de.end() ? en : it->second;
+    }
+
+    // visible text translated, ImGui ID independent of the language ("###")
+    inline std::string L(const char* en, const std::string& id) { return std::string(T(en)) + "###" + id; }
+}
