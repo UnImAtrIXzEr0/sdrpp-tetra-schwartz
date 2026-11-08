@@ -956,6 +956,16 @@ int sdrpp_main(int argc, char* argv[]) {
         core::configManager.conf["theme"] = "RoSc light";
     }
 
+    // v0.24: themes with poor contrast or without a visible "on" state were removed;
+    // light ones become "RoSc light", dark ones "RoSc dark"
+    if (core::configManager.conf.contains("theme") && core::configManager.conf["theme"].is_string()) {
+        std::string t = core::configManager.conf["theme"];
+        if (t == "Light" || t == "Marine Grey" || t == "ImGUI Light") { core::configManager.conf["theme"] = "RoSc light"; }
+        else if (t == "Dark" || t == "Army Green" || t == "Deep Blue" || t == "Professional 1" || t == "ImGUI Dark" || t == "ImGUI Classic") {
+            core::configManager.conf["theme"] = "RoSc dark";
+        }
+    }
+
     // Android can't load just any .so file. This means we have to hardcode the name of the modules
 #ifdef __ANDROID__
     int modCount = 0;

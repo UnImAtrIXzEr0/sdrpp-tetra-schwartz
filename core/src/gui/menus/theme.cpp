@@ -34,13 +34,11 @@ namespace thememenu {
         // TODO: Not hardcode theme directory
         gui::themeManager.loadThemesFromDir(resDir + "/themes/");
 
-        // Select Dark theme by default
+        // TETRA-SCHWARTZ: only the edition's themes (RoSc light, RoSc dark, KeSi);
+        // the plain ImGui styles have no plugin colours and are not offered
         themeNames = gui::themeManager.getThemeNames();
-        themeNames.push_back("ImGUI Dark");
-        themeNames.push_back("ImGUI Light");
-        themeNames.push_back("ImGUI Classic");
-        auto it = std::find(themeNames.begin(), themeNames.end(), "Dark");
-        themeId = std::distance(themeNames.begin(), it);
+        auto it = std::find(themeNames.begin(), themeNames.end(), "RoSc light");
+        themeId = (it != themeNames.end()) ? (int)std::distance(themeNames.begin(), it) : 0;
 
         // Load saved theme from config if exists
         core::configManager.acquire();
