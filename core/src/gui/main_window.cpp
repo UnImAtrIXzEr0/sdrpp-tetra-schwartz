@@ -774,6 +774,23 @@ void MainWindow::draw() {
     // Reset waterfall lock
     lockWaterfallControls = showCredits;
 
+    // TETRA-SCHWARTZ: optional full-width strips (top panel below the top bar, message
+    // bar at the very bottom). The callables are copied and the layout is decided once
+    // per frame, so a module may set or clear them from inside its own draw callbacks:
+    // the space is already reserved for this frame.
+    std::function<void()> topFn = topPanelFn;
+    std::function<void()> msgFn = messageBarFn;
+    std::function<void()> viewFn = mainViewFn;
+    const float topH = (topFn && topPanelH > 0.0f) ? topPanelH : 0.0f;
+    const float msgH = (msgFn && messageBarH > 0.0f) ? messageBarH : 0.0f;
+    // height the columns leave free for the message bar (bar + one item spacing)
+    const float msgReserve = (msgH > 0.0f) ? msgH + ImGui::GetStyle().ItemSpacing.y : 0.0f;
+    if (topH > 0.0f) {
+        ImGui::BeginChild("TopPanel", ImVec2(0, topH), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        topFn();
+        ImGui::EndChild();
+    }
+
     // Handle menu resize
     ImVec2 winSize = ImGui::GetWindowSize();
     ImVec2 mousePos = ImGui::GetMousePos();
@@ -791,7 +808,7 @@ void MainWindow::draw() {
             newWidth = std::clamp<float>(newWidth, minMenuW, (std::max)(minMenuW, (float)winSize.x - 250));
             ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth, curY), ImVec2(newWidth, winSize.y - 10), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
         }
-        if (mousePos.x >= newWidth - (2.0f * style::uiScale) && mousePos.x <= newWidth + (2.0f * style::uiScale) && mousePos.y > curY) {
+        if (mousePos.x >= newWidth - (2.0f * style::uiScale) && mousePos.x <= newWidth + (2.0f * style::uiScale) && mousePos.y > curY && mousePos.y < winSize.y - msgReserve) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
             if (click) {
                 grabbingMenu = true;
@@ -833,7 +850,7 @@ void MainWindow::draw() {
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
         if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
 
-        ImGui::BeginChild("Left Column");
+        ImGui::BeginChild("Left Column", ImVec2(0, -msgReserve));
 
 
         bool menuChanged = gui::menu.draw(firstMenuRender);
@@ -888,7 +905,7 @@ void MainWindow::draw() {
     bool haveBottom = bottomPanelFn && bottomPanelH;
     float bottomH = 0.0f;
     if (haveBottom) {
-        float hAvail = ImGui::GetContentRegionAvail().y;
+        float hAvail = ImGui::GetContentRegionAvail().y - msgReserve;
         *bottomPanelH = std::clamp<float>(*bottomPanelH, 60.0f * style::uiScale, (std::max)(60.0f * style::uiScale, hAvail - 200.0f * style::uiScale));
         bottomH = *bottomPanelH;
     }
@@ -910,14 +927,21 @@ void MainWindow::draw() {
         wfSize.y -= bottomWindows[0].size.y;
     }
     if (haveBottom) { wfSize.y -= bottomH + splitW; }
+    wfSize.y -= msgReserve;
     ImGui::BeginChild("Waterfall", wfSize);
 
-    gui::waterfall.draw();
-    onWaterfallDrawn.emit(GImGui);
+    // TETRA-SCHWARTZ: a module may replace the waterfall with its own view
+    if (viewFn) {
+        viewFn();
+    }
+    else {
+        gui::waterfall.draw();
+        onWaterfallDrawn.emit(GImGui);
+    }
 
     ImGui::EndChild();
 
-    this->handleWaterfallInput(vfo);
+    if (!viewFn) { this->handleWaterfallInput(vfo); }
 
     if (haveBottom) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
@@ -926,14 +950,14 @@ void MainWindow::draw() {
         float dummyH = bottomH;
         splitter("##_bottom_panel_split", ImVec2(ImGui::GetContentRegionAvail().x, splitW), true, bottomDrag, bottomPanelH ? bottomPanelH : &dummyH, -1.0f);
         ImGui::PopStyleVar();
-        ImGui::BeginChild("BottomPanel", ImVec2(0, 0), false);
+        ImGui::BeginChild("BottomPanel", ImVec2(0, -msgReserve), false);
         if (bottomPanelFn) { bottomPanelFn(); }
         ImGui::EndChild();
     }
     else { bottomDrag = false; }
 
     ImGui::NextColumn();
-    ImGui::BeginChild("WaterfallControls");
+    ImGui::BeginChild("WaterfallControls", ImVec2(0, -msgReserve));
 #ifdef __ANDROID__
     if (displaymenu::showBattery) {
         displaymenu::currentBatteryLevel = backend::getBatteryLevel();
@@ -1023,7 +1047,7 @@ void MainWindow::draw() {
 
     if (haveSide) {
         ImGui::NextColumn();
-        float h = ImGui::GetContentRegionAvail().y;
+        float h = ImGui::GetContentRegionAvail().y - msgReserve;
         // see the bottom panel: the module may have removed the panel during this frame
         float dummyW = sideW - splitW;
         splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW ? sidePanelW : &dummyW, -1.0f);
@@ -1033,6 +1057,15 @@ void MainWindow::draw() {
         ImGui::EndChild();
     }
     else { sideDrag = false; }
+
+    // TETRA-SCHWARTZ: message bar below all columns
+    if (msgH > 0.0f) {
+        ImGui::Columns(1);
+        ImGui::SetCursorPosY(ImGui::GetWindowContentRegionMax().y - msgH);
+        ImGui::BeginChild("MessageBar", ImVec2(0, msgH), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        msgFn();
+        ImGui::EndChild();
+    }
 
     this->drawBottomWindows(0);
 
@@ -1342,6 +1375,22 @@ void MainWindow::setSidePanel(std::function<void()> drawFunc, float* width) {
 void MainWindow::setBottomPanel(std::function<void()> drawFunc, float* height) {
     bottomPanelFn = drawFunc;
     bottomPanelH = drawFunc ? height : nullptr;
+}
+
+void MainWindow::setTopPanel(std::function<void()> drawFunc, float height) {
+    bool on = drawFunc && height > 0.0f;
+    topPanelFn = on ? drawFunc : nullptr;
+    topPanelH = on ? height : 0.0f;
+}
+
+void MainWindow::setMessageBar(std::function<void()> drawFunc, float height) {
+    bool on = drawFunc && height > 0.0f;
+    messageBarFn = on ? drawFunc : nullptr;
+    messageBarH = on ? height : 0.0f;
+}
+
+void MainWindow::setMainView(std::function<void()> drawFunc) {
+    mainViewFn = drawFunc;
 }
 
 void MainWindow::drawBottomWindows(int dy) {

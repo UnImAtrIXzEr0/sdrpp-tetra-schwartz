@@ -1,17 +1,30 @@
 #include "command_args.h"
 #include <filesystem>
 
+// TETRA-SCHWARTZ: a test build (OPT_TETRA_TEST_BUILD) uses its own default config
+// folder so it can be used next to the stable version; -r still overrides it.
+// Android keeps its folder (modules and resources live below the root there).
+#ifdef TETRA_TEST_BUILD
+#define TETRA_ROOT_SUFFIX "-test"
+#else
+#define TETRA_ROOT_SUFFIX ""
+#endif
+
 void CommandArgsParser::defineAll() {
 #if defined(_WIN32)
     flog::info("Inside defineAll");
+#ifdef TETRA_TEST_BUILD
+    std::string root = "./config-test";
+#else
     std::string root = ".";
+#endif
     define('c', "con", "Show console on Windows");
 #elif defined(IS_MACOS_BUNDLE)
-    std::string root = (std::string)getenv("HOME") + "/Library/Application Support/sdrpp-brown";
+    std::string root = (std::string)getenv("HOME") + "/Library/Application Support/sdrpp-brown" TETRA_ROOT_SUFFIX;
 #elif defined(__ANDROID__)
     std::string root = "/storage/self/primary/sdrpp-brown";
 #else
-    std::string root = (std::string)getenv("HOME") + "/.config/sdrpp-brown";
+    std::string root = (std::string)getenv("HOME") + "/.config/sdrpp-brown" TETRA_ROOT_SUFFIX;
 #endif
 
     std::string tempPath = "/tmp";

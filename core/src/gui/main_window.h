@@ -55,6 +55,19 @@ public:
     void setBottomPanel(std::function<void()> drawFunc, float* height);
     bool splitterActive() const { return sideDrag || bottomDrag; }
 
+    // TETRA-SCHWARTZ: full-width strip directly below the top bar (above menu, waterfall
+    // and side panel); drawFunc == nullptr or height <= 0 removes it. height in pixels
+    // (already scaled).
+    void setTopPanel(std::function<void()> drawFunc, float height);
+    // TETRA-SCHWARTZ: full-width strip at the very bottom of the main window (below all
+    // columns); drawFunc == nullptr or height <= 0 removes it. height in pixels (already scaled).
+    void setMessageBar(std::function<void()> drawFunc, float height);
+    // TETRA-SCHWARTZ: replaces what is drawn inside the "Waterfall" child: when set,
+    // drawFunc is called instead of gui::waterfall.draw(); waterfall mouse input
+    // (handleWaterfallInput) and onWaterfallDrawn are skipped while it is set.
+    // nullptr = normal waterfall.
+    void setMainView(std::function<void()> drawFunc);
+
     void addBottomWindow(std::string name, std::function<void()> drawFunc);
     void removeBottomWindow(std::string name);
     void updateBottomWindowLayout();
@@ -133,6 +146,9 @@ protected:
     float* sidePanelW = nullptr;
     float* bottomPanelH = nullptr;
     bool sideDrag = false, bottomDrag = false;
+    std::function<void()> topPanelFn, messageBarFn, mainViewFn;
+    float topPanelH = 0.0f;
+    float messageBarH = 0.0f;
 
     void drawDebugMenu();
 
