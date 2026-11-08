@@ -136,14 +136,25 @@ public:
     // allocation, so a long call with several transmissions keeps its state.
     // A timeslot without a known call (call setup missed: started before
     // decoding, CRC error) is LISTEN_UNKNOWN; the caller mutes it.
+    // Idle timeout: a call state not confirmed by any PDU of that call for
+    // CALL_IDLE_S falls back to unknown, so a stale "clear" (its D-RELEASE and
+    // the next D-SETUP on the timeslot both missed) cannot keep a slot audible.
     enum ListenEnc { LISTEN_CLEAR = 0, LISTEN_ENCRYPTED = 1, LISTEN_UNKNOWN = 2 };
+    // EN 300 392-2 V3.8.1 14.6, table 14.3 (protocol timers): one transmission may last up to
+    // T311 = 300 s (call transmission timer, maximum) without any further PDU of
+    // the call; every new transmission starts with D-TX-GRANTED and the hang
+    // time ends with D-TX-GRANTED or D-RELEASE. 300 s + 20 s margin.
+    static constexpr long CALL_IDLE_S = 320;
     int listenEncState(int ts) {
         SlotOwner o = slotOwner(ts);
         std::lock_guard<std::mutex> lck(mtx);
         int enc = -1;
         if (ts >= 1 && ts <= 4 && slotCall[ts - 1] >= 0) {
             auto c = callRec.find(slotCall[ts - 1]);
-            if (c != callRec.end()) { enc = c->second.enc; }
+            if (c != callRec.end() && nowT() - c->second.seen > CALL_IDLE_S) {
+                slotCall[ts - 1] = -1;   // stale: the call is no longer bound to the timeslot
+            }
+            else if (c != callRec.end()) { enc = c->second.enc; }
         }
         // everything the allocation-based owner marks as encrypted stays muted
         if (enc == 1 || (o.ssi && (o.e2ee || o.air))) { return LISTEN_ENCRYPTED; }
@@ -394,8 +405,13 @@ private:
             callRec.erase(ev.call_id);
             return;
         }
-        if (ev.type != TETRA_L3_CALL_SETUP && ev.type != TETRA_L3_CALL_CONNECT && ev.type != TETRA_L3_TX_GRANTED) { return; }
         auto it = callRec.find(ev.call_id);
+        if (ev.type == TETRA_L3_TX_CEASED || ev.type == TETRA_L3_CALL_OTHER) {
+            // any other PDU of a known call (D-TX-CEASED, D-INFO, D-TX-CONTINUE ...) confirms it
+            if (it != callRec.end()) { it->second.seen = now; }
+            return;
+        }
+        if (ev.type != TETRA_L3_CALL_SETUP && ev.type != TETRA_L3_CALL_CONNECT && ev.type != TETRA_L3_TX_GRANTED) { return; }
         if (it == callRec.end()) {
             if (callRec.size() >= MAX_CALLS) {
                 auto oldest = callRec.begin();
