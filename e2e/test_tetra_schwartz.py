@@ -616,6 +616,36 @@ def test_instrument_ui():
             for view in range(7):
                 ctx.module_cmd("TETRA Analyzer", "inst", "view %d" % view)
                 ctx.sleep(1.0)
+        # with a module view in place of the waterfall the per-frame work must keep
+        # running (the core does not emit onWaterfallDrawn then), and leaving the
+        # view must bring the waterfall back
+        def st():
+            return ctx.module_cmd("TETRA Analyzer", "inst", "state") or {}
+        ctx.module_cmd("TETRA Analyzer", "inst", "mode 1")
+        ctx.module_cmd("TETRA Analyzer", "inst", "view 1")
+        ctx.sleep(1.0)
+        f0 = st().get("frames", 0)
+        ctx.sleep(1.5)
+        s1 = st()
+        if s1.get("main", -1) < 0 or s1.get("frames", 0) <= f0:
+            stats.test_fail("test_instrument_ui", f"per-frame work stops with a module view: {f0} -> {s1}")
+            return False
+        ctx.module_cmd("TETRA Analyzer", "inst", "view 5")
+        ctx.sleep(1.0)
+        if st().get("bottom", True):
+            stats.test_fail("test_instrument_ui", "Measure -> Trends still shows the trends strip below")
+            return False
+        ctx.module_cmd("TETRA Analyzer", "inst", "view 0")
+        ctx.sleep(1.0)
+        s2 = st()
+        ctx.module_cmd("TETRA Analyzer", "inst", "mode 2")
+        ctx.sleep(1.0)
+        ctx.module_cmd("TETRA Analyzer", "inst", "mode 0")
+        ctx.sleep(1.0)
+        s3 = st()
+        if s2.get("main") != -1 or s3.get("main") != -1 or not s2.get("bottom"):
+            stats.test_fail("test_instrument_ui", f"waterfall not back after a module view: spectrum {s2}, monitor {s3}")
+            return False
         # switch to the classic layout and back (panels are removed and registered again)
         ctx.module_cmd("TETRA Analyzer", "inst", "ui 0")
         ctx.sleep(1.0)
@@ -628,7 +658,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, classic and back")
     return True
 
 

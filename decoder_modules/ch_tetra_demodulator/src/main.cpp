@@ -341,11 +341,7 @@ public:
         gui::menu.registerEntry(name, menuHandler, this, this);
         windowDrawHandler.ctx = this;
         windowDrawHandler.handler = [](ImGuiContext* gctx, void* ctx) {
-            auto* m = (TetraDemodulatorModule*)ctx;
-            m->txaLoop();
-            m->extraLoops();
-            m->controlLoops();
-            m->drawFloatingWindows();
+            ((TetraDemodulatorModule*)ctx)->frameWork();
         };
         gui::mainWindow.onWaterfallDrawn.bindHandler(&windowDrawHandler);
 
@@ -535,7 +531,14 @@ public:
             else if (k == "mode") { instMode = std::clamp(atoi(v.c_str()), 0, (int)IM_COUNT - 1); }
             else if (k == "view") { instView = std::clamp(atoi(v.c_str()), 0, (int)IV_COUNT - 1); }
             else if (k == "lang") { ui_text::lang() = (v == "de") ? ui_text::DE : ui_text::EN; }
-            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang <value>\"}"; }
+            else if (k == "state") {
+                // frames: count of per-frame work runs (must keep rising with a module view);
+                // main: key of the shown main view (-1 = waterfall); bottom: strip registered
+                return "{\"mode\": " + std::to_string(instMode) + ", \"view\": " + std::to_string(instView) +
+                       ", \"main\": " + std::to_string(instMainCur) + ", \"bottom\": " + (bottomRegistered ? "true" : "false") +
+                       ", \"frames\": " + std::to_string(frameCount.load()) + "}";
+            }
+            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|state <value>\"}"; }
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -1575,6 +1578,17 @@ private:
         if (r == 2) { snapStatus = "no carrier near the click"; return; }
         snapStatus.clear();
         tuner::tune(tuner::TUNER_MODE_NORMAL, name, gui::waterfall.getCenterFrequency() + off);
+    }
+
+    // per-frame work, normally run from onWaterfallDrawn; drawInstMain runs it
+    // itself because the core does not emit that event while a module view
+    // replaces the waterfall
+    void frameWork() {
+        frameCount++;
+        txaLoop();
+        extraLoops();
+        controlLoops();
+        drawFloatingWindows();
     }
 
     void controlLoops() {
@@ -3206,9 +3220,19 @@ private:
             gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
             sideRegistered = true;
         }
-        if (!bottomRegistered) {
+        // the content column next to the softkeys must not vanish: keep room for it
+        // (the core still caps the width to what the window can give)
+        const float minSideW = instSoftW() + ImGui::GetStyle().ItemSpacing.x + (std::max)(320.0f * k, ImGui::GetFontSize() * 22.0f);
+        if (instSideW < minSideW) { instSideW = minSideW; }
+        // Measure -> Trends shows the trends as main view: no second copy below it
+        bool wantBottom = !(instMode == IM_MEASURE && instView == IV_TREND);
+        if (wantBottom && !bottomRegistered) {
             gui::mainWindow.setBottomPanel([this]() { drawInstBottom(); }, &instBottomH);
             bottomRegistered = true;
+        }
+        else if (!wantBottom && bottomRegistered) {
+            gui::mainWindow.setBottomPanel(nullptr, nullptr);
+            bottomRegistered = false;
         }
         float topH = ImGui::GetFrameHeight() + 10.0f * k;
         if (!instTopReg || std::fabs(topH - instTopH) > 0.5f) {
@@ -3393,9 +3417,10 @@ private:
     }
 
     // ---- side panel: content + softkey column ----
+    float instSoftW() { return (std::max)(200.0f * style::uiScale, ImGui::GetFontSize() * 14.0f); }
     void drawInstSide() {
         const float k = style::uiScale;
-        float softW = (std::max)(200.0f * k, ImGui::GetFontSize() * 14.0f);
+        float softW = instSoftW();
         ImVec2 a = ImGui::GetContentRegionAvail();
         float gap = ImGui::GetStyle().ItemSpacing.x;
         float contentW = a.x - softW - gap;
@@ -3893,6 +3918,7 @@ private:
 
     // ---- main view (instead of the waterfall) ----
     void drawInstMain() {
+        frameWork();
         ImGui::BeginChild(CONCAT("##_inst_main_", name), ImVec2(0, 0), false);
         ImVec2 a = ImGui::GetContentRegionAvail();
         if (instMode == IM_MEASURE) {
@@ -5902,6 +5928,7 @@ private:
     bool instUi = true;           // false = classic layout (tiles / everything in the menu)
     bool instActive = false;      // panels of the instrument UI are registered
     int instMode = 0, instView = 1;
+    std::atomic<uint64_t> frameCount{ 0 };   // per-frame work runs (debug "inst state")
     float instSideW = 700.0f, instBottomH = 260.0f;   // px (saved without the UI scale)
     float instTopH = 0.0f, instMsgH = 0.0f;
     bool instTopReg = false, instMsgReg = false, instDirty = false;
