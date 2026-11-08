@@ -140,8 +140,9 @@ namespace module_manager_menu {
         }
 
         // Built-in menus that can be hidden from the menu bar
-        ImGui::TextUnformatted("Built-in menus in the menu bar:");
-        {
+        // TETRA-SCHWARTZ: no menu bar while a module shows all settings itself
+        if (!gui::mainWindow.menuDisabled) { ImGui::TextUnformatted("Built-in menus in the menu bar:"); }
+        if (!gui::mainWindow.menuDisabled) {
             static const char* builtins[] = { "VFO Color", "Debug", "Band Plan", "Display", "Theme" };
             for (int i = 0; i < (int)(sizeof(builtins) / sizeof(builtins[0])); i++) {
                 bool shown = !gui::menu.isHidden(builtins[i]);
@@ -158,7 +159,8 @@ namespace module_manager_menu {
                 }
             }
         }
-        ImGui::TextDisabled("Menu: shown in the menu bar on the left. On: module running.");
+        ImGui::TextDisabled("%s", gui::mainWindow.menuDisabled ? "Menu: only used by the classic layout. On: module running."
+                                                                : "Menu: shown in the menu bar on the left. On: module running.");
 
         // Sources offered in the 'Source' list
         if (ImGui::TreeNode("Sources in the source list##module_mgr_src")) {

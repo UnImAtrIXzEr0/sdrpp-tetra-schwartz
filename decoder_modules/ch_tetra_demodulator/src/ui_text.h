@@ -52,6 +52,7 @@ namespace ui_text {
             // softkeys
             { "Mute encrypted", "Verschlüsselt stumm" },
             { "Cell details", "Zelldetails" },
+            { "Hide call control", "Rufsteuerung ausblenden" },
             { "Reset statistics", "Statistik zurücksetzen" },
             { "Remove I/Q offset", "I/Q-Offset entfernen" },
             { "Start CSV log", "CSV-Log starten" },

@@ -781,6 +781,9 @@ void MainWindow::draw() {
     std::function<void()> topFn = topPanelFn;
     std::function<void()> msgFn = messageBarFn;
     std::function<void()> viewFn = mainViewFn;
+    const bool menuShown = showMenu && !menuDisabled;
+    std::function<void()> leftFn = menuShown ? nullptr : leftPanelFn;
+    const float leftColW = leftFn ? leftPanelW : 8.0f * style::uiScale;
     const float topH = (topFn && topPanelH > 0.0f) ? topPanelH : 0.0f;
     const float msgH = (msgFn && messageBarH > 0.0f) ? messageBarH : 0.0f;
     // height the columns leave free for the message bar (bar + one item spacing)
@@ -838,7 +841,7 @@ void MainWindow::draw() {
     const float ctrlW = viewFn ? 0.0f : 60.0f * style::uiScale;
     float sideW = 0.0f;
     if (haveSide) {
-        float leftW = ((showMenu && !menuDisabled) ? menuWidth : 8.0f * style::uiScale) + ctrlW;
+        float leftW = (menuShown ? menuWidth : leftColW) + ctrlW;
         float maxW = (std::max)(160.0f * style::uiScale, (float)winSize.x - leftW - 250.0f * style::uiScale);
         // tile column: at least 18 characters wide (label + value), like the menu
         const float minSideW = (std::max)(160.0f * style::uiScale, ImGui::GetFontSize() * 18.0f);
@@ -890,10 +893,15 @@ void MainWindow::draw() {
     else {
         // When hiding the menu bar
         ImGui::Columns(nCols, "WindowColumns", false);
-        ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - 8 * style::uiScale - ctrlW - sideW);
+        ImGui::SetColumnWidth(0, leftColW);
+        ImGui::SetColumnWidth(1, (std::max)(winSize.x - leftColW - ctrlW - sideW, 100.0f * style::uiScale));
         ImGui::SetColumnWidth(2, ctrlW);
         if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
+        if (leftFn) {
+            ImGui::BeginChild("LeftPanel", ImVec2(0, -msgReserve), false);
+            leftFn();
+            ImGui::EndChild();
+        }
     }
 
     // Right Column
@@ -1053,7 +1061,15 @@ void MainWindow::draw() {
         float h = ImGui::GetContentRegionAvail().y - msgReserve;
         // see the bottom panel: the module may have removed the panel during this frame
         float dummyW = sideW - splitW;
-        splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW ? sidePanelW : &dummyW, -1.0f);
+        if (sidePanelFixed) {
+            // fixed width: a plain divider instead of the splitter
+            ImGui::Dummy(ImVec2(splitW, h));
+            ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_Separator));
+            sideDrag = false;
+        }
+        else {
+            splitter("##_side_panel_split", ImVec2(splitW, h), false, sideDrag, sidePanelW ? sidePanelW : &dummyW, -1.0f);
+        }
         ImGui::SameLine(0, 0);
         ImGui::BeginChild("SidePanel", ImVec2(0, h), false);
         if (sidePanelFn) { sidePanelFn(); }
@@ -1368,6 +1384,11 @@ void MainWindow::handleWaterfallInput(ImGui::WaterfallVFO* vfo) {
             core::configManager.release(true);
         }
     }
+}
+
+void MainWindow::setLeftPanel(std::function<void()> drawFunc, float width) {
+    leftPanelFn = drawFunc;
+    leftPanelW = width;
 }
 
 void MainWindow::setSidePanel(std::function<void()> drawFunc, float* width) {

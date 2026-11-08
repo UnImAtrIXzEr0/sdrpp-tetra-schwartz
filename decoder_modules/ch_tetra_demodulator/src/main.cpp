@@ -3239,10 +3239,16 @@ private:
             gui::mainWindow.setSidePanel([this]() { drawInstSide(); }, &instSideW);
             sideRegistered = true;
         }
-        // the content column next to the softkeys must not vanish: keep room for it
-        // (the core still caps the width to what the window can give)
-        const float minSideW = instSoftW() + ImGui::GetStyle().ItemSpacing.x + (std::max)(320.0f * k, ImGui::GetFontSize() * 22.0f);
-        if (instSideW < minSideW) { instSideW = minSideW; }
+        // softkey column on the right and content column on the far left, both with a
+        // fixed width (the width the content needs, no splitter)
+        instSideW = instSoftW() + 2.0f * ImGui::GetStyle().WindowPadding.x;
+        gui::mainWindow.sidePanelFixed = true;
+        float leftW = instContentW();
+        if (!instLeftReg || std::fabs(leftW - instLeftW) > 0.5f) {
+            instLeftW = leftW;
+            gui::mainWindow.setLeftPanel([this]() { drawInstContent(); }, instLeftW);
+            instLeftReg = true;
+        }
         // Measure -> Trends shows the trends as main view: no second copy below it
         bool wantBottom = !(instMode == IM_MEASURE && instView == IV_TREND);
         if (wantBottom && !bottomRegistered) {
@@ -3281,6 +3287,8 @@ private:
         if (instMsgReg) { gui::mainWindow.setMessageBar(nullptr, 0.0f); instMsgReg = false; }
         if (instMainCur != -1) { gui::mainWindow.setMainView(nullptr); instMainCur = -1; }
         gui::mainWindow.menuDisabled = false;
+        gui::mainWindow.sidePanelFixed = false;
+        if (instLeftReg) { gui::mainWindow.setLeftPanel(nullptr, 0.0f); instLeftReg = false; }
         rfOpen = false;
         instActive = false;
     }
@@ -3439,26 +3447,47 @@ private:
 
     // ---- side panel: content + softkey column ----
     float instSoftW() { return (std::max)(200.0f * style::uiScale, ImGui::GetFontSize() * 14.0f); }
-    void drawInstSide() {
-        const float k = style::uiScale;
-        float softW = instSoftW();
-        ImVec2 a = ImGui::GetContentRegionAvail();
-        float gap = ImGui::GetStyle().ItemSpacing.x;
-        float contentW = a.x - softW - gap;
-        if (contentW >= 140.0f * k) {
-            ImGui::BeginChild(CONCAT("##_inst_content_", name), ImVec2(contentW, 0), false);
-            float w = ImGui::GetContentRegionAvail().x;
-            switch (instMode) {
-            case IM_MONITOR: drawInstMonitorSide(w); break;
-            case IM_MEASURE: drawMeasTable(w); break;
-            case IM_DRIVE: drawInstDriveSide(w); break;
-            case IM_ALIGN: drawAlignSide(w); break;
-            default: break;
-            }
-            touch::dragScroll();
-            ImGui::EndChild();
-            ImGui::SameLine();
+
+    // fixed column widths of the measured values: longest label / value / limit
+    // in the current language
+    void measColWidths(float& a, float& b, float& c) {
+        static const char* labels[] = { "EVM rms / peak", "Error phase / ampl.", "Residual carrier", "I/Q imbalance (IRR)",
+                                        "Mod. accuracy 10.1.3", "Carrier error", "Symbol clock", "Reference", "Level",
+                                        "Raw BER", "CRC errors", "Re-locks with slip", "Modulation", "Frequency and clock", "Reception" };
+        a = 0.0f;
+        for (const char* l : labels) { a = (std::max)(a, ImGui::CalcTextSize(ui_text::T(l)).x); }
+        b = ImGui::CalcTextSize("+1234 Hz | +2.345 ppm").x;   // longest value
+        const char* lims[] = { "-26 dB (5 %)", "10 / 30 %", "+-0.2 ppm", ui_text::T("guide"), ui_text::T("indicative") };
+        c = 0.0f;
+        for (const char* l : lims) { c = (std::max)(c, ImGui::CalcTextSize(l).x); }
+    }
+    // width of the content column: the measured values table or two large value tiles
+    float instContentW() {
+        const ImGuiStyle& st = ImGui::GetStyle();
+        float a, b, c;
+        measColWidths(a, b, c);
+        float table = a + b + c + ImGui::GetFontSize() + 8.0f * st.CellPadding.x;
+        ImGui::PushFont(style::bigFont);
+        float big = ImGui::CalcTextSize("-100.0 dBFS").x;
+        ImGui::PopFont();
+        float tiles = 2.0f * (big + 2.0f * st.WindowPadding.x) + st.ItemSpacing.x;
+        return (std::max)(table, tiles) + st.ScrollbarSize + st.ItemSpacing.x;
+    }
+    // content column (far left): what belongs to the mode
+    void drawInstContent() {
+        ImGui::BeginChild(CONCAT("##_inst_content_", name), ImVec2(0, 0), false);
+        float w = ImGui::GetContentRegionAvail().x;
+        switch (instMode) {
+        case IM_MONITOR: drawInstMonitorSide(w); break;
+        case IM_MEASURE: drawMeasTable(w); break;
+        case IM_DRIVE: drawInstDriveSide(w); break;
+        case IM_ALIGN: drawAlignSide(w); break;
+        default: break;
         }
+        touch::dragScroll();
+        ImGui::EndChild();
+    }
+    void drawInstSide() {
         ImGui::BeginChild(CONCAT("##_inst_soft_", name), ImVec2(0, 0), true);
         drawSoftkeys();
         ImGui::EndChild();
@@ -3709,11 +3738,13 @@ private:
         instHeader(ui_text::T("Measured values"), w);
         TetraMeasSnapshot m = meas.get();
         bool syn = m.valid && m.symSync;
-        ImGuiTableFlags tf = ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg;
+        ImGuiTableFlags tf = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg;
         if (!ImGui::BeginTable(CONCAT("##_inst_meas_", name), 4, tf)) { return; }
-        ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthStretch, 1.25f);
-        ImGui::TableSetupColumn("b", ImGuiTableColumnFlags_WidthStretch, 1.3f);
-        ImGui::TableSetupColumn("c", ImGuiTableColumnFlags_WidthStretch, 0.8f);
+        float ca, cb, cc;
+        measColWidths(ca, cb, cc);
+        ImGui::TableSetupColumn("a", ImGuiTableColumnFlags_WidthFixed, ca);
+        ImGui::TableSetupColumn("b", ImGuiTableColumnFlags_WidthFixed, cb);
+        ImGui::TableSetupColumn("c", ImGuiTableColumnFlags_WidthFixed, cc);
         ImGui::TableSetupColumn("d", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize());
 
         measSection("Modulation");
@@ -6022,6 +6053,8 @@ private:
     bool settingsOpen = false, cellDetailsOpen = false;
     int settingsPage = 0;
     bool rfOpen = false;     // RF / Gain window (instrument UI)
+    bool instLeftReg = false;   // content column registered as left panel
+    float instLeftW = 0.0f;
     std::atomic<bool> settingsCloseReq{ false };   // debug "inst settings -1"
     struct AlignRef { bool set = false; time_t t = 0; double hz = NAN, evm = NAN, iq = NAN, ph = NAN, am = NAN, acp = NAN; };
     AlignRef alignRef;

@@ -52,6 +52,10 @@ public:
     // and a strip below it. The size variables belong to the module (it saves them);
     // the splitters change them. An empty function removes the panel.
     void setSidePanel(std::function<void()> drawFunc, float* width);
+    // TETRA-SCHWARTZ: fixed-width column on the far left (only while the menu is not shown)
+    void setLeftPanel(std::function<void()> drawFunc, float width);
+    // TETRA-SCHWARTZ: the side panel keeps the width its module sets (no splitter)
+    bool sidePanelFixed = false;
     void setBottomPanel(std::function<void()> drawFunc, float* height);
     bool splitterActive() const { return sideDrag || bottomDrag; }
 
@@ -146,6 +150,8 @@ protected:
 
     std::function<void()> sidePanelFn, bottomPanelFn;
     float* sidePanelW = nullptr;
+    std::function<void()> leftPanelFn;
+    float leftPanelW = 0.0f;
     float* bottomPanelH = nullptr;
     bool sideDrag = false, bottomDrag = false;
     std::function<void()> topPanelFn, messageBarFn, mainViewFn;
