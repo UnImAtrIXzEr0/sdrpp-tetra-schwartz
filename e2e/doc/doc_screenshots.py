@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Screenshots for the manual (run headless under Xvfb, 1600x1000).
-Session A: the bundled TETRA recording (decoder, measurements, network,
-stations, TX analysis, trends, carriers, report). Session B: a synthetic
+Instrument view (the standard user interface), English and German:
+Session A: the bundled TETRA recording (Monitor, Measure with its views,
+Drive test, Alignment, Settings, RF / Gain, trends of a synthetic log,
+report, one picture of the classic layout). Session B: a synthetic
 two-frequency recording (burst analysis with timing and ramp spectrum,
-multipath). Output: PNG files in the given folder."""
+multipath). Output: PNG files in the given folder; a name ending in _en /
+_de shows the program in that language."""
 
-import json
 import os
 import shutil
 import subprocess
@@ -21,18 +23,35 @@ import test_tetra_schwartz as T  # noqa: E402
 OUT = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else "docshots")
 os.makedirs(OUT, exist_ok=True)
 W, H = 1600, 1000
+LANGS = ("en", "de")
+# main view of the instrument view (between the content column and the softkeys)
+MAIN = (482, 96, 792, 870)
+# strip below the main view (Monitor)
+STRIP = (482, 700, 730, 262)
 
 
 def grab(name, rect=None):
+    # pointer into the corner: no tooltip of the waterfall or a control in the picture
+    subprocess.run(["xdotool", "mousemove", str(W - 1), str(H - 1)], check=False,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(0.3)
     path = os.path.join(OUT, name + ".png")
     subprocess.run(["import", "-window", "root", path], check=False)
     if rect and os.path.exists(path):
         x, y, w, h = rect
         subprocess.run(["convert", path, "-crop", f"{w}x{h}+{x}+{y}", "+repage", path], check=False)
+        if rect == MAIN:
+            # a view shorter than the main view: cut off the empty background below it
+            # (colour of the bottom right corner, so it works with every theme)
+            bg = subprocess.run(["convert", path, "-format", f"%[pixel:p{{{w - 3},{h - 3}}}]", "info:"],
+                                capture_output=True, text=True).stdout.strip()
+            if bg:
+                subprocess.run(["convert", path, "-bordercolor", bg, "-border", "1", "-fuzz", "2%", "-trim", "+repage", path],
+                               check=False)
     print("shot", name, os.path.exists(path))
 
 
-def base_cfg(rec):
+def base_cfg(rec, ham=True):
     cfg = get_base_config()
     cfg["moduleInstances"].pop("Radio", None)   # hidden by default in this edition
     cfg["streams"].pop("Radio", None)
@@ -44,6 +63,11 @@ def base_cfg(rec):
     cfg["menuWidth"] = 360
     cfg["source"] = "File"
     cfg["streams"]["TETRA Analyzer"] = {"muted": False, "sink": "None", "volume": 1.0}
+    # instrument view (standard), amateur radio mode
+    # startViewV21: no "Recommended view" retune on the first start (a recording
+    # centred on 439 MHz would be moved to 440 MHz - 0.45 x sample rate)
+    cfg["TETRA Analyzer"] = {"instUi": True, "hamMode": ham, "uiLang": "en", "instMode": 0, "instView": 0,
+                             "startViewV21": True}
     return cfg
 
 
@@ -85,11 +109,10 @@ def make_demo_log(path, hours=6.0):
             f.write(";".join(v) + "\n")
 
 
-def solo(ctx, win, rect):
-    x, y, w, h = rect
-    ctx.module_cmd("TETRA Analyzer", "only_window", f"{win} {x} {y} {w} {h}")
-    time.sleep(2.5)
-    grab("win_" + win, rect)
+def inst(ctx, *cmds, wait=2.0):
+    for c in cmds:
+        ctx.module_cmd("TETRA Analyzer", "inst", c)
+    time.sleep(wait)
 
 
 def session_a():
@@ -108,38 +131,61 @@ def session_a():
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
-        ctx.module_cmd("TETRA Analyzer", "set_txa", "1")
         m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
         if m.get("center_hz"):
             ctx.module_cmd("TETRA Analyzer", "add_carrier", str(int(m["center_hz"]) + 60000))
-        time.sleep(40.0)
-        grab("overview")
-        rect = (380, 30, 860, 950)
-        for win in ["const", "network", "stations", "txa", "trends", "carriers"]:
-            solo(ctx, win, rect)
-        # trends, stability and quality from a synthetic 6-hour log
+        # TX spectrum first: its average and the ACP are then in "Last analysis results"
+        inst(ctx, "mode 1", "view 2", wait=25.0)
+        for lang in LANGS:
+            # "Playing" shows a transmission (the recording has no speech)
+            ctx.module_cmd("TETRA Analyzer", "sim_play", "live 1 91 10000003 238 2 12")
+            inst(ctx, "lang " + lang, "mode 0", wait=3.0)
+            grab("inst_monitor_" + lang)
+            if lang == "en":
+                grab("inst_stations", STRIP)
+            ctx.module_cmd("TETRA Analyzer", "sim_play", "off")
+            inst(ctx, "mode 1", "view 0", wait=3.0)
+            grab("inst_measure_" + lang)
+            inst(ctx, "view 1", wait=3.0)
+            grab("inst_const_" + lang)
+            if lang == "en":
+                grab("inst_const_main", MAIN)
+            inst(ctx, "view 2", wait=6.0)
+            grab("inst_txa_" + lang)
+            if lang == "en":
+                grab("inst_txa_main", MAIN)
+            inst(ctx, "view 4", wait=3.0)
+            grab("inst_carriers_" + lang)
+            if lang == "en":
+                grab("inst_carriers_main", MAIN)
+            inst(ctx, "view 5", wait=3.0)
+            grab("inst_trends_" + lang)
+            inst(ctx, "mode 2", wait=3.0)
+            grab("inst_drive_" + lang)
+            if lang == "en":
+                grab("inst_drive_main", MAIN)
+            inst(ctx, "mode 3", wait=8.0)
+            grab("inst_align_" + lang)
+            inst(ctx, "settings 0", wait=2.0)
+            grab("inst_settings_" + lang, (300, 100, 1000, 800))
+            inst(ctx, "settings -1", "rf 1", wait=2.0)
+            grab("inst_rf_" + lang)
+            inst(ctx, "rf 0", wait=0.5)
+        # trends, stability and quality from a synthetic 6-hour log (main view only)
+        inst(ctx, "lang en", "mode 1", "view 5", wait=2.0)
         demo = os.path.join(tmp, "tetra_demo_log.csv")
         make_demo_log(demo)
-        ctx.module_cmd("TETRA Analyzer", "only_window", "trends 380 30 860 950")
-        time.sleep(1.0)
         ctx.module_cmd("TETRA Analyzer", "load_trend_csv", demo)
-        time.sleep(2.5)
-        grab("win_trends_log", rect)
+        time.sleep(3.0)
+        grab("inst_trends_log", MAIN)
         ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "1")
         time.sleep(2.5)
-        grab("win_stability", rect)
+        grab("inst_stability", MAIN)
         ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "2")
         time.sleep(2.5)
-        grab("win_quality", rect)
+        grab("inst_quality", MAIN)
         ctx.module_cmd("TETRA Analyzer", "set_trend_tab", "0")
-        ctx.module_cmd("TETRA Analyzer", "set_windows", "0")
-        time.sleep(1.5)
-        grab("menu", (0, 0, 380, H))
-        ctx.module_cmd("TETRA Analyzer", "set_layout", "1")
-        time.sleep(3.0)
-        grab("overview_tiles")
-        ctx.module_cmd("TETRA Analyzer", "set_layout", "0")
-        time.sleep(1.0)
+        inst(ctx, "view 0", wait=1.0)
         ctx.module_cmd("TETRA Analyzer", "make_report", "1")
         rp = ""
         for _ in range(20):   # the report is written in the GUI thread
@@ -150,6 +196,9 @@ def session_a():
         print("report:", rp)
         if rp and os.path.exists(rp):
             shutil.copyfile(rp, os.path.join(OUT, "report.html"))
+        # the classic layout (Settings -> Display & operation -> Classic layout)
+        inst(ctx, "mode 0", "ui 0", wait=3.0)
+        grab("classic")
 
 
 def session_b():
@@ -167,14 +216,37 @@ def session_b():
         ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
         ctx.module_cmd("TETRA Analyzer", "set_burst_freq", "438900000")
-        ctx.module_cmd("TETRA Analyzer", "set_multipath", "1")
-        time.sleep(30.0)
-        grab("overview_b")
-        rect = (380, 30, 860, 950)
-        for win in ["bursts", "multipath"]:
-            solo(ctx, win, rect)
+        # the analyses run only while their view is shown
+        inst(ctx, "mode 1", "view 3", wait=25.0)
+        grab("inst_burst", MAIN)
+        inst(ctx, "view 6", wait=20.0)
+        grab("inst_multipath", MAIN)
+
+
+def session_c():
+    """ETSI mode: the strip below the main view shows network and cell."""
+    src = T.recording()
+    tmp = tempfile.mkdtemp(prefix="doc_c_")
+    rec = os.path.join(tmp, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
+    if not T.upsample_recording(src, rec):
+        shutil.copyfile(src, rec)
+    cfg = base_cfg(rec, ham=False)
+    cfg["TETRA Analyzer"]["instBottomH"] = 560
+    with SDRPPTestContext() as ctx:
+        ctx.write_configs(cfg)
+        if not ctx.start():
+            print("start failed")
+            return
+        time.sleep(2.0)
+        ctx.module_cmd("File Source", "set_filename", rec)
+        http_get(ctx.base_url, "/sdr/start")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
+        ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
+        time.sleep(20.0)
+        grab("inst_network", (482, 404, 730, 410))
 
 
 if __name__ == "__main__":
     session_a()
     session_b()
+    session_c()

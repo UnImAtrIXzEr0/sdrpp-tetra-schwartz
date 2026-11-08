@@ -17,13 +17,13 @@ VERSION = f"v{_ver}" if "-test" in _ver else f"v{_ver}-beta"
 
 LANGS = {
     "de": dict(cover="manual_cover.html", body="manual_body.html",
-               out=f"SDRPP-TETRA-SCHWARTZ_Bedienungsanleitung_{VERSION}.pdf",
-               title="SDR++ TETRA-SCHWARTZ – Bedienungsanleitung", subject=f"Bedienungsanleitung {VERSION}",
-               foot="SDR++ TETRA-SCHWARTZ · Bedienungsanleitung · nur für experimentelle Amateurfunkzwecke"),
+               out=f"SDRPP-AIA_Bedienungsanleitung_{VERSION}.pdf",
+               title="SDR++ Air Interface Analyzer – Bedienungsanleitung", subject=f"Bedienungsanleitung {VERSION}",
+               foot="SDR++ Air Interface Analyzer · Bedienungsanleitung · nur für experimentelle Amateurfunkzwecke"),
     "en": dict(cover="manual_cover_en.html", body="manual_body_en.html",
-               out=f"SDRPP-TETRA-SCHWARTZ_User_Manual_{VERSION}.pdf",
-               title="SDR++ TETRA-SCHWARTZ – User manual", subject=f"User manual {VERSION}",
-               foot="SDR++ TETRA-SCHWARTZ · User manual · for experimental amateur radio purposes only"),
+               out=f"SDRPP-AIA_User_Manual_{VERSION}.pdf",
+               title="SDR++ Air Interface Analyzer – User manual", subject=f"User manual {VERSION}",
+               foot="SDR++ Air Interface Analyzer · User manual · for experimental amateur radio purposes only"),
 }
 
 with sync_playwright() as p:
