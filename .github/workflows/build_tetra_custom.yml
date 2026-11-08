@@ -278,8 +278,6 @@ jobs:
           shell: pwsh
           env:
             VCPKG_BINARY_SOURCES: "files,C:/vcpkg-cache,readwrite"
-            # use the CMake preinstalled on the runner instead of downloading one from GitHub releases
-            VCPKG_FORCE_SYSTEM_BINARIES: "1"
           run: |
             try {
               git -C C:/vcpkg fetch origin 39344dff01c5a5a0134caf2624cdd492f05d30ea 2>$null
@@ -290,6 +288,11 @@ jobs:
               if ($LASTEXITCODE -ne 0) { exit 1 }
               New-Item -ItemType File C:/vcpkg/vcpkg.disable-metrics -Force | Out-Null
               Write-Host "vcpkg tool $tag installed"
+              # vcpkg's own CMake (pinned by this revision): placed in its downloads folder, so vcpkg does not fetch it from GitHub releases
+              $cm = (Get-Content C:/vcpkg/scripts/vcpkg-tools.json -Raw | ConvertFrom-Json).tools | Where-Object { $_.name -eq 'cmake' -and $_.os -eq 'windows' -and $_.arch -eq 'amd64' } | Select-Object -First 1
+              New-Item -ItemType Directory C:/vcpkg/downloads -Force | Out-Null
+              ./.github/scripts/fetch_cached.ps1 $cm.archive $cm.url "C:/vcpkg/downloads/$($cm.archive)"
+              if ($LASTEXITCODE -ne 0) { exit 1 }
               Write-Host "vcpkg pinned to cache-producing revision 39344dff01"
             } catch {
               Write-Host "vcpkg pin failed (best effort); using runner default"
