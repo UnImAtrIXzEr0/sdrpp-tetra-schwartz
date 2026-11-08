@@ -12,7 +12,7 @@
   <div class="l2"><a href="#s2-3">Treiber und Zusatzsoftware</a> · <a href="#s2-5">Selbst bauen</a></div>
   <div class="l2"><a href="#s2-4">Was beim ersten Start eingestellt ist</a></div>
   <div class="l1"><a href="#s3">3 Die Oberfläche</a></div>
-  <div class="l2"><a href="#s3-2">Module Manager</a> · <a href="#s3-3">Eigene Fenster</a></div>
+  <div class="l2"><a href="#s3-1">Instrument-Ansicht (Testversion)</a> · <a href="#s3-2">Module Manager</a> · <a href="#s3-3">Eigene Fenster</a></div>
   <div class="l1"><a href="#s4">4 SDR einrichten</a></div>
   <div class="l2"><a href="#s4-2">Empfehlungen je SDR-Typ</a></div>
   <div class="l2"><a href="#s4-3">Kalibrieren</a> · <a href="#s4-4">Pegel</a></div>
@@ -195,6 +195,32 @@ sdrpp</pre></li>
 </ul>
 </div>
 </div>
+
+<h2 id="s3-1">Instrument-Ansicht (Testversion)</h2>
+<div class="box info"><b class="t">Nur Testversion</b>Die Testversionen (0.24.0-test.x) starten mit einer Instrument-Ansicht: eine einzige Oberfläche wie bei einem Messgerät, ohne Menüspalte. Die oben beschriebene klassische Ansicht bleibt erreichbar: <span class="ui">Einstellungen</span> → <span class="ui">Anzeige &amp; Bedienung</span> → <span class="ui">Klassische Ansicht</span>.</div>
+<h3>Bereiche</h3>
+<ul>
+  <li><b>Statuszeile</b> unter der oberen Leiste: Sync, Zelle, Downlink-Frequenz, Pegel, MER, Frequenzfehler, CRC-Fehler und was gerade abgespielt wird.</li>
+  <li><b>Hauptansicht</b> links: Spektrum und Wasserfall oder die Ansicht des Modus (Konstellation, TX-Spektrum, Burst, Träger, Verläufe, Mehrwege, Messfahrt, Abgleich). Die Regler <span class="ui">Zoom</span>, <span class="ui">Max</span> und <span class="ui">Min</span> erscheinen nur, solange der Wasserfall zu sehen ist.</li>
+  <li><b>Streifen unter der Hauptansicht:</b> Stationen und Verkehr (Monitor) oder Verläufe (Messen). Bei der Ansicht <span class="ui">Verläufe</span> entfällt der Streifen, damit die Verläufe nicht doppelt erscheinen.</li>
+  <li><b>Inhaltsspalte</b> rechts der Mitte: Audio und kompakte Zellendaten (Monitor), die Messwerte mit ETSI-Grenzwerten (Messen), Werte der Messfahrt, Abgleichwerte. Die Spalte lässt sich nicht so schmal ziehen, dass sie verschwindet.</li>
+  <li><b>Softkey-Spalte</b> ganz rechts: die vier Modi, die Ansichten bzw. Softkeys des Modus und unten <span class="ui">HF / Verstärkung</span> und <span class="ui">Einstellungen</span>.</li>
+  <li><b>Meldezeile</b> unten: Hinweise und Warnungen (z.&nbsp;B. verlorene Samples), Protokollstatus und Uhrzeit.</li>
+</ul>
+<h3>Modi</h3>
+<table>
+<tr><th style="width:18%">Modus</th><th>Verwendung</th></tr>
+<tr><td><span class="ui">Monitor</span></td><td>Zelle mithören und beobachten: Wasserfall, Stationen und Verkehr, Audio, kompakte Zellendaten. Softkeys: <span class="ui">Verschlüsselt stumm</span>, <span class="ui">Zelldetails</span>, <span class="ui">Hide call control</span> (noch nicht übersetzt).</td></tr>
+<tr><td><span class="ui">Messen</span></td><td>Messwerte mit Grenzwerten; Ansichten <span class="ui">Spektrum</span>, <span class="ui">Konstellation</span>, <span class="ui">TX-Spektrum (ACP)</span>, <span class="ui">Burst (Uplink)</span>, <span class="ui">Träger</span>, <span class="ui">Verläufe</span>, <span class="ui">Mehrwege</span>. Softkeys: Statistik zurücksetzen, I/Q-Offset entfernen, CSV-Protokoll, Bericht.</td></tr>
+<tr><td><span class="ui">Messfahrt</span></td><td>GPS und Versorgung; Zelle festhalten, CSV-Protokoll, Kartenexport, Bericht.</td></tr>
+<tr><td><span class="ui">Abgleich</span></td><td>Große Werte zum Abgleich eines Senders: Referenz, Abweichung zur Referenz, Halten, Grenzwerte für Basisstation oder Mobilstation.</td></tr>
+</table>
+<h3>HF / Verstärkung und Einstellungen</h3>
+<ul>
+  <li><span class="ui">HF / Verstärkung</span> öffnet ein Fenster mit dem Bereich der SDR-Quelle (Gerät, Abtastrate, Verstärkung, Frequenzkorrektur). Es bleibt neben der Messung offen und lässt sich verschieben; ein zweiter Druck schließt es.</li>
+  <li><span class="ui">Einstellungen</span> enthält alles, was vorher in der Menüspalte stand, mit den Original-Bedienelementen: <span class="ui">Anzeige &amp; Bedienung</span> (Sprache, klassische Ansicht, Anzeige, Farbschema), <span class="ui">SDR &amp; Kalibrierung</span> (SDR-Quelle, AFC und Pegel), <span class="ui">Audio &amp; Aufnahme</span> (Audioausgabe, Aufnahme), <span class="ui">Protokoll &amp; Bericht</span>, <span class="ui">Grenzwerte &amp; Alarme</span>, <span class="ui">Module</span> (Modulverwaltung und alle weiteren Module, jeweils mit Schalter <span class="ui">Aktiv</span>) sowie die TETRA-Seiten <span class="ui">Netz</span>, <span class="ui">Duplex-Tabellen</span>, <span class="ui">Namenslisten</span>, <span class="ui">Decoder / NETSYMS</span>.</li>
+  <li>Die Bereiche, die aus SDR++ selbst stammen (Quelle, Audio, Anzeige, Module), sind in beiden Sprachen englisch.</li>
+</ul>
 
 <h2 id="s3-2">Module Manager</h2>
 <p>Unter <span class="ui">Module Manager</span> steht jedes Modul mit zwei Schaltern: <span class="ui">Menu</span> zeigt es in der Menüspalte, <span class="ui">On</span> schaltet es ein. Darunter lassen sich die eingebauten Menüs (VFO Color, Debug, Band Plan, Display, Theme) einblenden und unter <span class="ui">Sources in the source list</span> weitere SDR-Typen in die Quellenliste aufnehmen. Das gerade benutzte SDR bleibt immer sichtbar.</p>

@@ -12,7 +12,7 @@
   <div class="l2"><a href="#s2-3">Drivers and additional software</a> · <a href="#s2-5">Building it yourself</a></div>
   <div class="l2"><a href="#s2-4">Settings at the first start</a></div>
   <div class="l1"><a href="#s3">3 The user interface</a></div>
-  <div class="l2"><a href="#s3-2">Module Manager</a> · <a href="#s3-3">Own windows</a></div>
+  <div class="l2"><a href="#s3-1">Instrument view (test version)</a> · <a href="#s3-2">Module Manager</a> · <a href="#s3-3">Own windows</a></div>
   <div class="l1"><a href="#s4">4 Setting up the SDR</a></div>
   <div class="l2"><a href="#s4-2">Recommendations per SDR type</a></div>
   <div class="l2"><a href="#s4-3">Calibration</a> · <a href="#s4-4">Level</a></div>
@@ -195,6 +195,32 @@ sdrpp</pre></li>
 </ul>
 </div>
 </div>
+
+<h2 id="s3-1">Instrument view (test version)</h2>
+<div class="box info"><b class="t">Test version only</b>The test versions (0.24.0-test.x) start with an instrument view: one surface like a measuring instrument, without the menu column. The classic layout described above stays available: <span class="ui">Settings</span> → <span class="ui">Display &amp; operation</span> → <span class="ui">Classic layout</span>.</div>
+<h3>Areas</h3>
+<ul>
+  <li><b>Status bar</b> below the top bar: sync, cell, downlink frequency, level, MER, frequency error, CRC errors and what is playing.</li>
+  <li><b>Main view</b> on the left: spectrum and waterfall, or the view of the mode (constellation, TX spectrum, burst, carriers, trends, multipath, drive test, alignment). The <span class="ui">Zoom</span>, <span class="ui">Max</span> and <span class="ui">Min</span> sliders are only shown while the waterfall is visible.</li>
+  <li><b>Strip below the main view:</b> stations and traffic (Monitor) or trends (Measure). With the view <span class="ui">Trends</span> the strip is left out, so the trends are not shown twice.</li>
+  <li><b>Content column</b> in the middle right: audio and compact cell data (Monitor), the measured values with ETSI limits (Measure), drive test values, alignment values. The column cannot be narrowed until it disappears.</li>
+  <li><b>Softkey column</b> on the right: the four modes, the views or softkeys of the mode, and at the bottom <span class="ui">RF / Gain</span> and <span class="ui">Settings</span>.</li>
+  <li><b>Message line</b> at the bottom: hints and warnings (e.g. lost samples), log state and time.</li>
+</ul>
+<h3>Modes</h3>
+<table>
+<tr><th style="width:18%">Mode</th><th>Use</th></tr>
+<tr><td><span class="ui">Monitor</span></td><td>Listen and watch the cell: waterfall, stations and traffic, audio, compact cell data. Softkeys: <span class="ui">Mute encrypted</span>, <span class="ui">Cell details</span>, <span class="ui">Hide call control</span>.</td></tr>
+<tr><td><span class="ui">Measure</span></td><td>Measured values with limits; views <span class="ui">Spectrum</span>, <span class="ui">Constellation</span>, <span class="ui">TX spectrum (ACP)</span>, <span class="ui">Burst (uplink)</span>, <span class="ui">Carriers</span>, <span class="ui">Trends</span>, <span class="ui">Multipath</span>. Softkeys: reset statistics, remove I/Q offset, CSV log, report.</td></tr>
+<tr><td><span class="ui">Drive test</span></td><td>GPS and coverage; lock the cell, CSV log, map export, report.</td></tr>
+<tr><td><span class="ui">Alignment</span></td><td>Large values for adjusting a transmitter: reference, delta to reference, hold, limits for base station or mobile station.</td></tr>
+</table>
+<h3>RF / Gain and Settings</h3>
+<ul>
+  <li><span class="ui">RF / Gain</span> opens a window with the SDR source section (device, sample rate, gain, frequency correction). It stays open next to the measurement and can be moved; a second press closes it.</li>
+  <li><span class="ui">Settings</span> holds everything that was in the menu column before, with the original controls: <span class="ui">Display &amp; operation</span> (language, classic layout, display, theme), <span class="ui">SDR &amp; calibration</span> (SDR source, AFC and level), <span class="ui">Audio &amp; recording</span> (audio output, recorder), <span class="ui">Logging &amp; report</span>, <span class="ui">Limits &amp; alarms</span>, <span class="ui">Modules</span> (module manager and all other modules, each with an <span class="ui">Enabled</span> switch) and the TETRA pages <span class="ui">Network</span>, <span class="ui">Duplex tables</span>, <span class="ui">Name lists</span>, <span class="ui">Decoder / NETSYMS</span>.</li>
+  <li>The sections that come from SDR++ itself (source, audio, display, modules) are English in both languages.</li>
+</ul>
 
 <h2 id="s3-2">Module Manager</h2>
 <p>In the <span class="ui">Module Manager</span> every module has two switches: <span class="ui">Menu</span> shows it in the menu column, <span class="ui">On</span> enables it. Below, the built-in menus (VFO Color, Debug, Band Plan, Display, Theme) can be shown, and further SDR types can be added to the source list under <span class="ui">Sources in the source list</span>. The SDR currently in use always stays visible.</p>
