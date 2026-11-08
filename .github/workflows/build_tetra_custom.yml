@@ -38,7 +38,7 @@ jobs:
 
         - name: Install SDRplay API (build only, not bundled in the AppImage)
           run: |
-            wget -q https://www.sdrplay.com/software/SDRplay_RSP_API-Linux-3.15.2.run
+            bash .github/scripts/fetch_cached.sh SDRplay_RSP_API-Linux-3.15.2.run https://www.sdrplay.com/software/SDRplay_RSP_API-Linux-3.15.2.run
             7z x -y ./SDRplay_RSP_API-Linux-3.15.2.run > /dev/null
             7z x -y ./SDRplay_RSP_API-Linux-3.15.2 > /dev/null
             sudo cp amd64/libsdrplay_api.so.3.15 /usr/lib/libsdrplay_api.so.3.15
@@ -73,7 +73,7 @@ jobs:
 
         - name: Package AppImage
           run: |
-            wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+            bash .github/scripts/fetch_cached.sh linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
             chmod +x linuxdeploy-x86_64.AppImage make_appimage.sh
             ./make_appimage.sh build ./linuxdeploy-x86_64.AppImage
             test -f AppDir/usr/lib/sdrpp/plugins/ch_tetra_demodulator.so
@@ -175,7 +175,8 @@ jobs:
             if ($LASTEXITCODE -eq 0) {
               $null = gh release download build-cache `
                 --repo $env:GITHUB_REPOSITORY `
-                --pattern "*.zip" `
+                --pattern "vcpkg-cache.zip" --pattern "mingw64-codec2.zip" `
+                --pattern "uhd-3.15.0.0-x64.zip" --pattern "uhd-python311-codegen.zip" `
                 --dir ${{runner.workspace}}/cache 2>&1
               if ($LASTEXITCODE -ne 0) { Write-Host "cache download failed, building from source" }
             } else {
@@ -229,27 +230,27 @@ jobs:
             }
 
         - name: Download PothosSDR
-          run: Invoke-WebRequest -Uri "https://downloads.myriadrf.org/builds/PothosSDR/PothosSDR-2020.01.26-vc14-x64.exe" -OutFile ${{runner.workspace}}/pothos.exe
+          run: ./.github/scripts/fetch_cached.ps1 PothosSDR-2020.01.26-vc14-x64.exe "https://downloads.myriadrf.org/builds/PothosSDR/PothosSDR-2020.01.26-vc14-x64.exe" ${{runner.workspace}}/pothos.exe
 
         - name: Install PothosSDR
           run: mkdir "C:/Program Files/PothosSDR" ; 7z x ${{runner.workspace}}/pothos.exe -o"C:/Program Files/PothosSDR/"
 
         - name: Download libusb
-          run: Invoke-WebRequest -Uri "https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z" -OutFile ${{runner.workspace}}/libusb.7z
+          run: ./.github/scripts/fetch_cached.ps1 libusb-1.0.23.7z "https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z" ${{runner.workspace}}/libusb.7z
 
         - name: Patch Pothos with earlier libusb version
           working-directory: ${{runner.workspace}}
           run: 7z x libusb.7z -olibusb_old ; rm "C:/Program Files/PothosSDR/bin/libusb-1.0.dll" ; cp "libusb_old/MS64/dll/libusb-1.0.dll" "C:/Program Files/PothosSDR/bin/" ; rm "C:/Program Files/PothosSDR/lib/libusb-1.0.lib" ; cp "libusb_old/MS64/dll/libusb-1.0.lib" "C:/Program Files/PothosSDR/lib/"
 
         - name: Download librtlsdr
-          run: Invoke-WebRequest -Uri "https://ftp.osmocom.org/binaries/windows/rtl-sdr/rtl-sdr-64bit-20240623.zip" -OutFile ${{runner.workspace}}/rtl-sdr.zip
+          run: ./.github/scripts/fetch_cached.ps1 rtl-sdr-64bit-20240623.zip "https://ftp.osmocom.org/binaries/windows/rtl-sdr/rtl-sdr-64bit-20240623.zip" ${{runner.workspace}}/rtl-sdr.zip
 
         - name: Patch Pothos with newer librtlsdr version
           working-directory: ${{runner.workspace}}
           run: 7z x rtl-sdr.zip ; rm "C:/Program Files/PothosSDR/bin/rtlsdr.dll" ; cp "rtl-sdr-64bit-20240623/librtlsdr.dll" "C:/Program Files/PothosSDR/bin/rtlsdr.dll"
 
         - name: Download SDRPlay API
-          run: Invoke-WebRequest -Uri "https://www.sdrpp.org/SDRplay.zip" -OutFile ${{runner.workspace}}/SDRplay.zip
+          run: ./.github/scripts/fetch_cached.ps1 SDRplay.zip "https://www.sdrpp.org/SDRplay.zip" ${{runner.workspace}}/SDRplay.zip
 
         - name: Install SDRPlay API
           run: 7z x ${{runner.workspace}}/SDRplay.zip -o"C:/Program Files/"
