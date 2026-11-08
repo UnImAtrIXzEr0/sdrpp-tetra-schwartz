@@ -833,9 +833,12 @@ void MainWindow::draw() {
     // TETRA-SCHWARTZ: optional tile column on the right (4th column after the sliders)
     const float splitW = 6.0f * style::uiScale;
     bool haveSide = sidePanelFn && sidePanelW;
+    // TETRA-SCHWARTZ: the zoom / max / min column only belongs to the waterfall;
+    // with a module view in its place the column shrinks to nothing (its content is clipped)
+    const float ctrlW = viewFn ? 0.0f : 60.0f * style::uiScale;
     float sideW = 0.0f;
     if (haveSide) {
-        float leftW = (showMenu ? menuWidth : 8.0f * style::uiScale) + 60.0f * style::uiScale;
+        float leftW = (showMenu ? menuWidth : 8.0f * style::uiScale) + ctrlW;
         float maxW = (std::max)(160.0f * style::uiScale, (float)winSize.x - leftW - 250.0f * style::uiScale);
         // tile column: at least 18 characters wide (label + value), like the menu
         const float minSideW = (std::max)(160.0f * style::uiScale, ImGui::GetFontSize() * 18.0f);
@@ -846,8 +849,8 @@ void MainWindow::draw() {
     if (showMenu) {
         ImGui::Columns(nCols, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (60.0f * style::uiScale) - sideW, 100.0f * style::uiScale));
-        ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - ctrlW - sideW, 100.0f * style::uiScale));
+        ImGui::SetColumnWidth(2, ctrlW);
         if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
 
         ImGui::BeginChild("Left Column", ImVec2(0, -msgReserve));
@@ -888,8 +891,8 @@ void MainWindow::draw() {
         // When hiding the menu bar
         ImGui::Columns(nCols, "WindowColumns", false);
         ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - ((8 + 60) * style::uiScale) - sideW);
-        ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(1, winSize.x - 8 * style::uiScale - ctrlW - sideW);
+        ImGui::SetColumnWidth(2, ctrlW);
         if (haveSide) { ImGui::SetColumnWidth(3, sideW); }
     }
 
