@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: Version
-      description: Shown in the window title, e.g. v0.23.1-beta
+      description: Shown in the window title (e.g. v0.25.0) and in the name of the download (e.g. v0.25.0-beta)
     validations:
       required: true
   - type: dropdown
@@ -33,7 +33,7 @@ body:
     id: area
     attributes:
       label: Area
-      options: [Start / SDR source, Decoder / audio, Measurements (MER, EVM, frequency), Modulation accuracy, TX analysis / ACP, Burst analysis, Multipath, GPS / maps / propagation, Tiles / layout / touch, Manual, other]
+      options: [Start / SDR source, Decoder / audio, Measurements (MER, EVM, frequency), Modulation accuracy, TX analysis / ACP, Burst analysis, Multipath, Drive test / GPS / map / map export, Propagation, Instrument view / classic layout / touch, Manual, other]
   - type: textarea
     id: what
     attributes:

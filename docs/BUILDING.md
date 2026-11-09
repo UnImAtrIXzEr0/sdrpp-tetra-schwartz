@@ -24,6 +24,12 @@ and similar), or to get the newest state of `main` before a release.
 You need an internet connection while configuring: the build downloads the
 TETRA speech codec (reference code of ETSI EN 300 395-2, © ETSI) from etsi.org.
 
+At run time the program calls the system's `curl` for downloads requested by
+the user (map tiles of the drive test, saved maps, RadioID and talkgroup
+names). It is not needed for building. Windows 10 and 11 include
+`curl.exe`; on Linux install the package `curl` if it is missing (the
+AppImage does not bundle it).
+
 ---
 
 ## 1. SDR drivers

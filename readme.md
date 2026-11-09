@@ -33,7 +33,8 @@ One surface, like a measuring instrument (the **instrument view**, standard):
 - **Four modes** as softkeys on the right: **Monitor** (listen, cell, stations
   and traffic), **Measure** (measured values with ETSI limits, mini trends and
   the views spectrum, constellation, TX spectrum (ACP), burst (uplink),
-  carriers, trends, multipath), **Drive test** (large values, GPS, maps) and
+  carriers, trends, multipath), **Drive test** (large values, map of the
+  drive, GPS, cell site, map export) and
   **Alignment** (large meters with reference and delta for aligning a
   transmitter).
 - **Content column** on the left for the mode, **main view** in the middle,
@@ -60,8 +61,9 @@ One surface, like a measuring instrument (the **instrument view**, standard):
 - **Burst analysis of handhelds** (uplink alone, linearity check by an
   attenuator step), **multipath** (echo delay and level from the training
   sequences), **frequency stability**, **trends**, **alarms**, **HTML report**.
-- **Drive tests**: GPS, CSV log, coverage maps for Google Earth (KML) and
-  OpenStreetMap, propagation diagram around the base station.
+- **Drive tests**: NMEA GPS receiver, CSV log (time stamps with UTC offset),
+  map of the drive, map export for Google Earth, propagation diagram around
+  the base station – see [Drive test and maps](#drive-test-and-maps).
 - **Instrument view** with modes and softkeys (see above); themes RoSc light,
   RoSc dark, KeSi and KeSiPro. In the classic layout: your own tile column,
   touch view for tablets.
@@ -73,9 +75,39 @@ One surface, like a measuring instrument (the **instrument view**, standard):
 |---|---|---|
 | ![Constellation](docs/readme/win_const.png) | ![TX analysis](docs/readme/win_txa.png) | ![Burst analysis](docs/readme/win_bursts.png) |
 
-| Network & cell | Trends | Coverage map |
+| Network & cell | Trends | Coverage map (HTML export) |
 |---|---|---|
 | ![Network](docs/readme/win_network.png) | ![Trends](docs/readme/win_trends.png) | ![Map](docs/readme/map_level.png) |
+
+## Drive test and maps
+
+- **Map of the drive** in the mode Drive test: one point per second with GPS
+  fix, coloured by level, MER, BER or quality (CRC errors) with the same
+  fixed scales as the export, the current position, the cell site with
+  distance rings, scale bar, north arrow and legend. Zoom with the mouse
+  wheel, pan by dragging, *Fit* and *Follow*. The track is recorded in the
+  background, independent of the CSV log (up to 24 h). Dialogs for the GPS
+  receiver and the cell site (coordinates or a click on the map). An earlier
+  drive can be loaded from a CSV log (also logs of older versions).
+- **Map tiles underneath** (off by default, chosen in the map menu):
+  OpenStreetMap, TopPlusOpen (worldwide, more detailed for Europe and
+  Germany), basemap.de (Germany) and Sentinel-2 cloudless satellite imagery.
+  Only the tiles in view are loaded; they are kept in a disk cache for 30 days
+  (at most 500 MB). The attribution of the map is always shown.
+- **Saved maps for use without network:** an area around the GPS position,
+  the map centre or coordinates (radius or width × height), several zoom
+  levels, from TopPlusOpen, basemap.de or Sentinel-2. OpenStreetMap tiles are
+  not saved (tile usage policy).
+- **Save image:** the map as PNG with title, legend, scale bar and the
+  attribution of the map, next to the CSV logs.
+- **Export map** from the CSV log: KMZ and KML for Google Earth (one folder
+  per value, points without service, the route as a line, time stamps for
+  the time slider, values in the balloon; the KMZ also contains the point
+  symbol and the legends) and an HTML map (OpenStreetMap via Leaflet, loaded
+  by the browser).
+- Downloads (map tiles, RadioID, talkgroup names) use the system's `curl`
+  and identify with the user agent `SDRPP-AIA/<version>` and the address of
+  this repository. Terms of the map services: [NOTICE.md](NOTICE.md).
 
 ## Tested SDRs
 
@@ -108,6 +140,8 @@ On the [**Releases page**](https://github.com/UnImAtrIXzEr0/sdrpp-air-interface-
    SDR drivers (e.g. for the USRP, PlutoSDR, RTL-SDR) as described in the manual.
    **Linux:** `chmod +x SDRPP-AIA_*.AppImage`, then start it
    (Ubuntu 24.04 needs `sudo apt install libfuse2t64` once for AppImages).
+   Downloads (map tiles, RadioID) need `curl`: part of Windows 10 / 11; on
+   Linux install the package `curl` if it is missing.
    Settings of a former version (folder `sdrpp_brown_appimage` or
    `sdrpp-brown`) are copied over automatically on the first start.
 2. Softkey **RF / Gain**: choose your SDR and a sample rate (2–4 MS/s is enough
@@ -163,7 +197,13 @@ Messprogramm für die Luftschnittstelle von Funknetzen im Amateurfunk, derzeit
 für TETRA (experimentelle Beta). Bedient wird es wie ein Messgerät: Statuszeile
 oben, Softkeys rechts mit den Modi Monitor, Messen, Messfahrt und Abgleich,
 Meldezeile unten; alle übrigen Einstellungen liegen unter „Einstellungen“, die
-Oberfläche gibt es auf Englisch und Deutsch. Die bisherige Ansicht mit der
+Oberfläche gibt es auf Englisch und Deutsch. Im Modus Messfahrt zeigt eine
+Karte die Fahrt (Punkte nach Pegel, MER, BER oder Qualität eingefärbt,
+Standort mit Entfernungsringen), auf Wunsch mit Kartenkacheln darunter
+(OpenStreetMap, TopPlusOpen, basemap.de, Sentinel-2-Satellitenbild);
+TopPlusOpen, basemap.de und Sentinel-2 lassen sich für Fahrten ohne Netz
+speichern. Die Karte lässt sich als PNG-Bild speichern und für Google Earth
+(KMZ/KML) sowie als HTML-Karte exportieren. Die bisherige Ansicht mit der
 Menüspalte bleibt unter Einstellungen → Anzeige & Bedienung → Klassische
 Ansicht erreichbar. Einstellungen einer früheren Version werden beim ersten
 Start automatisch übernommen. Download für Windows und Linux sowie die
