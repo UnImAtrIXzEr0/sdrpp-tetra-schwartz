@@ -121,7 +121,7 @@ public:
             r.ber = atof(r.berS.c_str());
             double ok = 0, fail = 0;
             for (int i = 0; i < 4; i++) { ok += atof(get(cCrcOk[i]).c_str()); fail += atof(get(cCrcFail[i]).c_str()); }
-            r.crcPct = ok + fail > 0 ? 100.0 * fail / (ok + fail) : 100.0;
+            r.crcPct = ok + fail > 0 ? 100.0 * fail / (ok + fail) : NAN;   // no CRC check in this second: no data
             r.time = get(cTime);
             r.t = parseIsoTime(r.time);
             r.mcc = get(cMcc);
@@ -162,9 +162,10 @@ public:
             p.v = value(r, metric);
             p.service = r.service;
             if (p.service && std::isnan(p.v)) { continue; }
-            char lb[256];
-            snprintf(lb, sizeof(lb), "%s | Level %.1f %s | MER %.1f dB | BER %s | CRC errors %.1f %% | MCC %s MNC %s CC %s%s",
-                     r.time.c_str(), r.level, useDbm ? "dBm" : "dBFS", r.mer, r.berS.c_str(), r.crcPct,
+            char lb[256], crc[16];
+            if (std::isnan(r.crcPct)) { snprintf(crc, sizeof(crc), "-"); } else { snprintf(crc, sizeof(crc), "%.1f %%", r.crcPct); }
+            snprintf(lb, sizeof(lb), "%s | Level %.1f %s | MER %.1f dB | BER %s | CRC errors %s | MCC %s MNC %s CC %s%s",
+                     r.time.c_str(), r.level, useDbm ? "dBm" : "dBFS", r.mer, r.berS.c_str(), crc,
                      r.mcc.c_str(), r.mnc.c_str(), r.cc.c_str(), r.service ? "" : " | NO SERVICE");
             p.label = lb;
             pts.push_back(p);
@@ -434,7 +435,7 @@ private:
         case METRIC_LEVEL: return r.level;
         case METRIC_MER: return r.mer;
         case METRIC_BER: return (r.berS.empty() || r.ber < 0) ? NAN : r.ber;   // -1: not measured
-        default: return cov::quality(r.crcPct, crcLimit);
+        default: return std::isnan(r.crcPct) ? NAN : cov::quality(r.crcPct, crcLimit);
         }
     }
 
@@ -505,7 +506,7 @@ private:
             snprintf(b, sizeof(b), "%.1f dB", r.mer);
             data("MER", b);
             data("BER", r.berS);
-            snprintf(b, sizeof(b), "%.1f %%", r.crcPct);
+            if (std::isnan(r.crcPct)) { snprintf(b, sizeof(b), "-"); } else { snprintf(b, sizeof(b), "%.1f %%", r.crcPct); }
             data("CRC errors", b);
             if (!r.mcc.empty()) { data("Cell", "MCC " + r.mcc + " MNC " + r.mnc + " CC " + r.cc); }
             if (r.dlHz > 0) {

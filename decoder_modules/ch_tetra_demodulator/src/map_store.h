@@ -77,10 +77,18 @@ namespace mapstore {
     inline double metersPerPixel(double lat, int z) { return 156543.03392 * std::cos(lat * tiles::PI / 180) / std::ldexp(1.0, z); }
 
     // folder name from a map name: letters, digits, '-', '_', '.', space -> '_'
+    // (German umlauts and sharp s written out: "Göttingen" -> "Goettingen")
     inline std::string folderName(const std::string& name) {
         std::string o;
-        for (unsigned char c : name) {
-            if (std::isalnum(c) || c == '-' || c == '_' || c == '.') { o += (char)c; }
+        for (size_t i = 0; i < name.size(); i++) {
+            unsigned char c = (unsigned char)name[i];
+            if (c == 0xC3 && i + 1 < name.size()) {
+                static const char* rep[][2] = { { "\xA4", "ae" }, { "\xB6", "oe" }, { "\xBC", "ue" }, { "\x84", "Ae" }, { "\x96", "Oe" }, { "\x9C", "Ue" }, { "\x9F", "ss" } };
+                for (auto& r : rep) { if (name[i + 1] == r[0][0]) { o += r[1]; break; } }
+                i++;
+                continue;
+            }
+            if (c < 0x80 && (std::isalnum(c) || c == '-' || c == '_' || c == '.')) { o += (char)c; }
             else if (c == ' ') { o += '_'; }
         }
         while (!o.empty() && o[0] == '.') { o.erase(0, 1); }

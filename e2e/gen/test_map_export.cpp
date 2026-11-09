@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
         check(mapstore::countTiles(a, 15) < 400, "tile count");
         a.radius = false; a.wKm = 200; a.hKm = 200;
         check(mapstore::countTiles(a, 17) > mapstore::MAX_TILES, "large area refused at high detail");
-        check(mapstore::folderName("Kassel Nord 2026/11") == "Kassel_Nord_202611" && mapstore::folderName("../x") == "x", "folder name");
+        check(mapstore::folderName("Kassel Nord 2026/11") == "Kassel_Nord_202611" && mapstore::folderName("../x") == "x" && mapstore::folderName("G\xC3\xB6ttingen Stra\xC3\x9F" "e") == "Goettingen_Strasse", "folder name");
     }
 
     // drive track: ring capacity and change detection

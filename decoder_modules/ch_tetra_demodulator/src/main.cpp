@@ -3535,6 +3535,7 @@ private:
             exportNoticeT = ImGui::GetTime();
             // short form: what was written, file name only
             auto fileOf = [](const std::string& p) { size_t i = p.find_last_of("/\\"); return i == std::string::npos ? p : p.substr(i + 1); };
+            exportOk = st.rfind("Saved ", 0) == 0 || st.rfind("Exported ", 0) == 0;
             if (st.rfind("Saved ", 0) == 0) { exportLast = std::string(ui_text::T("Image saved:")) + " " + fileOf(st.substr(6)); }
             else if (st.rfind("Exported ", 0) == 0 && st.find(".kmz") != std::string::npos) {
                 size_t e = st.find(".kmz"), b = st.rfind(": ", e);
@@ -3552,6 +3553,7 @@ private:
         ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 6.0f * k);
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0f * k);
         TetraMeasSnapshot m = meas.get();
+        std::string notice = exportNotice();   // every frame: the 15 s start when the export ends
         std::string msg;
         ImVec4 col = tc::grey();
         double tol = 3.0 * m.inputRateUncPpm + 50.0;
@@ -3564,7 +3566,7 @@ private:
         }
         else if ((instMode == IM_MEASURE || instMode == IM_ALIGN) && instWorst == ST_OK) { msg = ui_text::T("All measured values within the limits"); col = tc::good(); }
         else if (instMode == IM_MEASURE && instWorst == ST_BAD) { msg = instWorstText; col = tc::bad(); }
-        else if (!exportNotice().empty()) { msg = exportNotice(); col = tc::good(); }
+        else if (!notice.empty()) { msg = notice; col = exportOk ? tc::good() : tc::warn(); }
         else { msg = ui_text::T("Ready"); }
         ImGui::TextColored(col, "%s", msg.c_str());
         // right: log state and time
@@ -4665,6 +4667,7 @@ private:
         else { tw::TextDisabled("%zu %s, %s %.0f MB, %s %d-%d", nt, ui_text::T("tiles"), ui_text::T("about"), nt * mapstore::AVG_TILE_BYTES / 1e6, ui_text::T("zoom"), mapstore::minZoomFor(mkZ), mkZ); }
         if (busy) { style::endDisabled(); }
         tw::TextDisabled("%s", ui_text::T("OpenStreetMap may not be saved (tile usage policy)."));
+        if (sp && sp->key.rfind("s2cloudless", 0) == 0) { tw::TextColored(tc::warn(), "%s", ui_text::T("Sentinel-2 cloudless: non-commercial use only (CC BY-NC-SA 4.0).")); }
         bool canCreate = !busy && sp && !tooMany && mkName[0] && !(mkCentre == 0 && !g.valid);
         if (!canCreate) { style::beginDisabled(); }
         if (ImGui::Button(ui_text::L("Create", "_mk_go_" + name).c_str())) {
@@ -6778,6 +6781,7 @@ private:
     std::string tileReq;
     std::atomic<int> mapTexShown { 0 };
     std::string exportLast, exportRaw;
+    bool exportOk = true;
     std::atomic<bool> mapImgReq { false };
     double exportNoticeT = -100.0;
     std::string trendFileError;

@@ -467,7 +467,7 @@ private:
             row("Level", "%.1f %s", p.level, p.dbm ? "dBm" : "dBFS");
             row("MER", "%.1f dB", p.mer);
             if (!std::isnan(p.ber) && p.ber >= 0) { row("BER", "%.2e", p.ber); }
-            row("CRC errors", "%.1f %%", p.crcPct);
+            if (!std::isnan(p.crcPct)) { row("CRC errors", "%.1f %%", p.crcPct); }
             if (p.mcc != 0) { row("Cell", "MCC %d MNC %d CC %d", p.mcc, p.mnc, p.cc); }
             if (p.dlHz > 0) { row("Downlink", "%.4f MHz", p.dlHz / 1e6); }
             row("Service", "%s", ui_text::T(p.service ? "yes" : "no"));

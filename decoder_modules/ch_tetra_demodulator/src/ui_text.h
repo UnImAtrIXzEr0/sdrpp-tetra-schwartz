@@ -244,6 +244,7 @@ namespace ui_text {
             { "zoom", "Zoom" },
             { "too many: smaller area or less detail", "zu viele: kleineres Gebiet oder weniger Detail" },
             { "OpenStreetMap may not be saved (tile usage policy).", "OpenStreetMap darf nicht gespeichert werden (Nutzungsrichtlinie)." },
+            { "Sentinel-2 cloudless: non-commercial use only (CC BY-NC-SA 4.0).", "Sentinel-2 cloudless: nur nicht-kommerzielle Nutzung (CC BY-NC-SA 4.0)." },
             { "Create", "Erstellen" },
             { "Cancel", "Abbrechen" },
             { "No saved maps yet.", "Noch keine gespeicherten Karten." },

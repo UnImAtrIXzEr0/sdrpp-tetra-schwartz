@@ -550,7 +550,7 @@ private:
         p.ber = (float)s.ber;
         double ok = 0, fail = 0;
         for (int i = 0; i < 4; i++) { ok += s.crcOk[i]; fail += s.crcFail[i]; }
-        p.crcPct = (float)(ok + fail > 0 ? 100.0 * fail / (ok + fail) : 100.0);
+        p.crcPct = ok + fail > 0 ? (float)(100.0 * fail / (ok + fail)) : NAN;   // no CRC check: no data
         if (s.gps.speedKmh >= 3.0) { p.courseDeg = (float)s.gps.courseDeg; }
         p.service = (s.rxState == 2) && s.cellMatch != 0;
         p.mcc = s.mcc;
