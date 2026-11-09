@@ -244,16 +244,16 @@ private:
         ImU32 col = ImGui::ColorConvertFloat4ToU32(tc::val());
         // distance rings up to the farthest corner of the view
         if (rings) {
-            double far = 0;
+            double farM = 0;
             ImVec2 corners[4] = { p0, ImVec2(p1.x, p0.y), ImVec2(p0.x, p1.y), p1 };
-            for (auto& c : corners) { far = (std::max)(far, std::hypot(c.x - s.x, c.y - s.y) * mpp); }
+            for (auto& c : corners) { farM = (std::max)(farM, std::hypot(c.x - s.x, c.y - s.y) * mpp); }
             double viewR = (std::min)(p1.x - p0.x, p1.y - p0.y) * 0.5 * mpp;
             double step = drivemap::niceStep(viewR / 2.5);
             ImVec4 rc = tc::val();
             rc.w = 0.55f;
             ImU32 ringCol = ImGui::ColorConvertFloat4ToU32(rc);
             int n = 0;
-            for (double r = step; r <= far && n < 40; r += step, n++) {
+            for (double r = step; r <= farM && n < 40; r += step, n++) {
                 float rp = (float)(r / mpp);
                 dl->AddCircle(s, rp, ringCol, 128, 1.0f * us);
                 std::string t = drivemap::distText(r);

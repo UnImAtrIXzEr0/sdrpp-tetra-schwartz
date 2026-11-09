@@ -308,11 +308,11 @@ public:
         double sx = 0, sy = 0;
         if (sp.siteValid) {
             toPx(sp.siteLat, sp.siteLon, sx, sy);
-            double far = 0;
-            for (int c = 0; c < 4; c++) { far = (std::max)(far, std::hypot((c & 1 ? W : 0) - sx, (c & 2 ? H : 0) - sy) * sp.mpp); }
+            double farM = 0;
+            for (int c = 0; c < 4; c++) { farM = (std::max)(farM, std::hypot((c & 1 ? W : 0) - sx, (c & 2 ? H : 0) - sy) * sp.mpp); }
             double step = drivemapNice((std::min)(W, H) * 0.5 * sp.mpp / 2.5);
             int n = 0;
-            for (double r = step; r <= far && n < 40; r += step, n++) {
+            for (double r = step; r <= farM && n < 40; r += step, n++) {
                 double rp = r / sp.mpp;
                 cv.ring(sx, sy, rp, 1.2 * k, 0, 64, 140, 0.7);
                 char t[32];
