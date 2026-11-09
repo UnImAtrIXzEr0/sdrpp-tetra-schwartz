@@ -46,6 +46,9 @@ namespace tiles {
         std::string url;          // {z} {x} {y}
         int maxZoom = 18;
         std::string attribution;  // shown on the map, always visible
+        int minZoom = 0;
+        bool local = false;       // saved map: url is a file path template, no network, no cache
+        bool storable = false;    // terms allow saving tiles for offline use (map_store.h)
     };
 
     // year: for the attribution of the BKG services ("year of the last data retrieval")
@@ -54,11 +57,11 @@ namespace tiles {
         return {
             { "osm", "OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png", 19, "\xC2\xA9 OpenStreetMap contributors" },
             { "topplusopen", "TopPlusOpen", "https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/1.0.0/web/default/WEBMERCATOR/{z}/{y}/{x}.png", 18,
-              "\xC2\xA9 BKG (" + y + ") dl-de/by-2-0, data sources: sg.geodatenzentrum.de/web_public/Datenquellen_TopPlus_Open.pdf" },
+              "\xC2\xA9 BKG (" + y + ") dl-de/by-2-0, data sources: sg.geodatenzentrum.de/web_public/Datenquellen_TopPlus_Open.pdf", 0, false, true },
             { "basemapde", "basemap.de", "https://sgx.geodatenzentrum.de/wmts_basemapde/tile/1.0.0/de_basemapde_web_raster_farben/default/GLOBAL_WEBMERCATOR/{z}/{y}/{x}.png", 18,
-              "\xC2\xA9 GeoBasis-DE / BKG (" + y + ") CC BY 4.0" },
+              "\xC2\xA9 GeoBasis-DE / BKG (" + y + ") CC BY 4.0", 0, false, true },
             { "s2cloudless2024", "Satellite (Sentinel-2)", "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg", 14,
-              "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)" },
+              "Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2024)", 0, false, true },
         };
     }
 
@@ -78,9 +81,9 @@ namespace tiles {
     }
 
     // zoom whose tile pixels are closest to 'mpp' metres per screen pixel
-    inline int zoomFor(double lat, double mpp, int maxZoom) {
+    inline int zoomFor(double lat, double mpp, int maxZoom, int minZoom = 0) {
         double z = std::log2(156543.03392 * std::cos(lat * PI / 180) / (std::max)(mpp, 1e-3));
-        return std::clamp((int)std::lround(z), 0, maxZoom);
+        return std::clamp((int)std::lround(z), minZoom, (std::max)(minZoom, maxZoom));
     }
 
     inline std::string expand(const std::string& tpl, int z, int x, int y) {
@@ -92,6 +95,43 @@ namespace tiles {
             else { o += tpl[i]; }
         }
         return o;
+    }
+
+    // one curl run for up to 2 tiles, one after the other over one connection
+    // (short: the destructors wait for it); jobs: (url, output file)
+    inline bool curlFetch(const std::vector<std::pair<std::string, std::string>>& jobs, const std::string& ua) {
+#ifdef _WIN32
+        std::string cmd = "curl.exe -fsSL --max-time 15 -A \"" + ua + "\"";
+        for (auto& j : jobs) { cmd += " -o \"" + j.second + "\" \"" + j.first + "\""; }
+        STARTUPINFOA si;
+        PROCESS_INFORMATION pi;
+        ZeroMemory(&si, sizeof(si));
+        si.cb = sizeof(si);
+        ZeroMemory(&pi, sizeof(pi));
+        std::vector<char> buf(cmd.begin(), cmd.end());
+        buf.push_back('\0');
+        int rc = -1;
+        if (CreateProcessA(NULL, buf.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
+            WaitForSingleObject(pi.hProcess, 60000);
+            DWORD code = 1;
+            GetExitCodeProcess(pi.hProcess, &code);
+            rc = (int)code;
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
+        return rc == 0;
+#else
+        auto q = [](const std::string& in) {
+            std::string o = "'";
+            for (char c : in) { if (c == '\'') { o += "'\\''"; } else { o += c; } }
+            return o + "'";
+        };
+        // env -u: don't let curl pick up the AppImage's bundled libraries
+        std::string cmd = "env -u LD_LIBRARY_PATH curl -fsSL --max-time 15 -A " + q(ua);
+        for (auto& j : jobs) { cmd += " -o " + q(j.second) + " " + q(j.first); }
+        cmd += " >/dev/null 2>&1";
+        return std::system(cmd.c_str()) == 0;
+#endif
     }
 
     inline uint64_t key(int z, int x, int y) { return ((uint64_t)z << 56) | ((uint64_t)(uint32_t)x << 28) | (uint64_t)(uint32_t)y; }
@@ -155,12 +195,13 @@ public:
         if (provKey.empty()) { return; }
         frame++;
         uploadReady();
-        int maxZ;
+        int maxZ, minZ;
         {
             std::lock_guard<std::mutex> lck(mtx);
             maxZ = prov.maxZoom;
+            minZ = prov.minZoom;
         }
-        int z = tiles::zoomFor(cLat, mpp, maxZ);
+        int z = tiles::zoomFor(cLat, mpp, maxZ, minZ);
         // tile range of the view (from the four corners)
         double x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18;
         ImVec2 corners[4] = { p0, ImVec2(p1.x, p0.y), ImVec2(p0.x, p1.y), p1 };
@@ -324,42 +365,7 @@ private:
         return true;
     }
 
-    // one curl run for up to 2 tiles, one after the other over one connection
-    // (short: the destructor waits for it)
-    bool curlBatch(const std::vector<std::pair<std::string, std::string>>& jobs, const std::string& ua) {
-#ifdef _WIN32
-        std::string cmd = "curl.exe -fsSL --max-time 15 -A \"" + ua + "\"";
-        for (auto& j : jobs) { cmd += " -o \"" + j.second + "\" \"" + j.first + "\""; }
-        STARTUPINFOA si;
-        PROCESS_INFORMATION pi;
-        ZeroMemory(&si, sizeof(si));
-        si.cb = sizeof(si);
-        ZeroMemory(&pi, sizeof(pi));
-        std::vector<char> buf(cmd.begin(), cmd.end());
-        buf.push_back('\0');
-        int rc = -1;
-        if (CreateProcessA(NULL, buf.data(), NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi)) {
-            WaitForSingleObject(pi.hProcess, 60000);
-            DWORD code = 1;
-            GetExitCodeProcess(pi.hProcess, &code);
-            rc = (int)code;
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
-        }
-        return rc == 0;
-#else
-        auto q = [](const std::string& in) {
-            std::string o = "'";
-            for (char c : in) { if (c == '\'') { o += "'\\''"; } else { o += c; } }
-            return o + "'";
-        };
-        // env -u: don't let curl pick up the AppImage's bundled libraries
-        std::string cmd = "env -u LD_LIBRARY_PATH curl -fsSL --max-time 15 -A " + q(ua);
-        for (auto& j : jobs) { cmd += " -o " + q(j.second) + " " + q(j.first); }
-        cmd += " >/dev/null 2>&1";
-        return std::system(cmd.c_str()) == 0;
-#endif
-    }
+    bool curlBatch(const std::vector<std::pair<std::string, std::string>>& jobs, const std::string& ua) { return tiles::curlFetch(jobs, ua); }
 
     // keep the cache below its size limit: remove the oldest tiles
     void pruneCache(const std::string& dir) {
@@ -422,6 +428,15 @@ private:
                 Ready r;
                 r.key = k;
                 r.gen = g;
+                if (p.local) {
+                    // saved map: read directly; outside its area there is no tile
+                    if (decode(tiles::expand(p.url, tiles::keyZ(k), tiles::keyX(k), tiles::keyY(k)), r)) { got.push_back(std::move(r)); }
+                    else {
+                        std::lock_guard<std::mutex> lck(mtx);
+                        failed[k] = { nowS(), 7 };   // 1 h
+                    }
+                    continue;
+                }
                 if (fresh(path) && decode(path, r)) { got.push_back(std::move(r)); continue; }
                 std::error_code ec;
                 std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);

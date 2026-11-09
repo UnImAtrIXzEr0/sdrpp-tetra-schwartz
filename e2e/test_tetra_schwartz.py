@@ -715,9 +715,29 @@ def test_instrument_ui():
             tex = st().get("mapTextures", 0)
             if tex > 0:
                 break
-        ctx.module_cmd("TETRA Analyzer", "inst", "tiles off")
         if tex <= 0:
             stats.test_fail("test_instrument_ui", "drive map: no map tiles loaded from the test provider")
+            return False
+        # saved map from the test provider: created, listed and shown offline
+        ctx.module_cmd("TETRA Analyzer", "inst", "savemap testmap 51.31 9.455 1.0 16")
+        res = {}
+        for _ in range(60):
+            ctx.sleep(0.5)
+            res = ctx.module_cmd("TETRA Analyzer", "inst", "savemap") or {}
+            if not res.get("busy"):
+                break
+        ctx.module_cmd("TETRA Analyzer", "inst", "tiles refresh")
+        ctx.sleep(0.5)
+        ctx.module_cmd("TETRA Analyzer", "inst", "tiles saved:testmap")
+        tex = 0
+        for _ in range(20):
+            ctx.sleep(0.5)
+            tex = st().get("mapTextures", 0)
+            if tex > 0:
+                break
+        ctx.module_cmd("TETRA Analyzer", "inst", "tiles off")
+        if res.get("status") != "saved" or tex <= 0:
+            stats.test_fail("test_instrument_ui", f"saved map: {res}, {tex} tiles shown")
             return False
         ctx.module_cmd("TETRA Analyzer", "inst", "mode 1")
         # switch to the classic layout and back (panels are removed and registered again)
@@ -742,7 +762,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map with tiles, no SDR menu, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map with tiles and a saved map, no SDR menu, classic and back")
     return True
 
 

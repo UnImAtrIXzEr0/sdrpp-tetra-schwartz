@@ -66,6 +66,16 @@ public:
 
     void requestFit() { fitPending = true; }
 
+    // show an area (e.g. a saved map): centre and the scale that fits it into the last drawn size
+    void showArea(double la0, double lo0, double la1, double lo1) {
+        cLat = (la0 + la1) * 0.5;
+        cLon = (lo0 + lo1) * 0.5;
+        double ex = (lo1 - lo0) * drivemap::M_PER_DEG * std::cos(cLat * drivemap::PI / 180), ey = (la1 - la0) * drivemap::M_PER_DEG;
+        mpp = std::clamp((std::max)(ex / (std::max)(50.0, lastW), ey / (std::max)(50.0, lastH)), 0.5, 20000.0);
+        viewSet = true;
+        follow = false;
+    }
+
     // view centre and scale (for tests and the tile layer)
     double centerLat() const { return cLat; }
     double centerLon() const { return cLon; }
@@ -87,6 +97,8 @@ public:
         size.y = (std::max)(size.y, 50.0f);
         ImVec2 p0 = ImGui::GetCursorScreenPos();
         ImVec2 p1(p0.x + size.x, p0.y + size.y);
+        lastW = size.x;
+        lastH = size.y;
         ImGui::InvisibleButton(id, size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
         bool hovered = ImGui::IsItemHovered();
         ImGuiIO& io = ImGui::GetIO();
@@ -180,6 +192,7 @@ public:
 private:
     double cLat = 0, cLon = 0, mpp = 10;
     bool viewSet = false, fitPending = false, dragged = false;
+    double lastW = 800, lastH = 600;
     int hoverIdx = -1;
     std::vector<int> drawn;              // indices drawn this frame (oldest first)
     std::vector<unsigned char> occ;      // occupancy of 3x3 px cells

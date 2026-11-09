@@ -5,6 +5,7 @@
 // conversion. The KMZ/KML contents are checked by test_tetra_schwartz.py.
 #include "map_export.h"
 #include "drive_map.h"
+#include "map_store.h"
 #include <cmath>
 #include <cstdio>
 
@@ -73,6 +74,23 @@ int main(int argc, char** argv) {
         bool attr = !pv.empty();
         for (auto& p : pv) { attr = attr && !p.attribution.empty() && p.url.find("{z}") != std::string::npos; }
         check(attr && pv[1].attribution.find("BKG (2026)") != std::string::npos, "providers with attribution");
+    }
+
+    // saved maps: area, tile ranges, names
+    {
+        mapstore::Area a;
+        a.lat = 51.3; a.lon = 9.45; a.rKm = 5;
+        double la0, lo0, la1, lo1;
+        mapstore::bbox(a, la0, lo0, la1, lo1);
+        check(std::fabs(drivemap::distanceM(la0, 9.45, la1, 9.45) - 10000) < 5 && std::fabs(drivemap::distanceM(51.3, lo0, 51.3, lo1) - 10000) < 20, "area 2 x 5 km");
+        auto rs = mapstore::ranges(a, 15);
+        check(rs.size() == 7 && rs.front().z == 9 && rs.back().z == 15, "zoom levels 9..15");
+        // z15 at 51.3 N: tile 763 m wide and high -> 14-15 tiles per 10 km
+        check(rs.back().count() >= 14 * 14 && rs.back().count() <= 16 * 16, "tiles at the detail level");
+        check(mapstore::countTiles(a, 15) < 400, "tile count");
+        a.radius = false; a.wKm = 200; a.hKm = 200;
+        check(mapstore::countTiles(a, 17) > mapstore::MAX_TILES, "large area refused at high detail");
+        check(mapstore::folderName("Kassel Nord 2026/11") == "Kassel_Nord_202611" && mapstore::folderName("../x") == "x", "folder name");
     }
 
     // drive track: ring capacity and change detection

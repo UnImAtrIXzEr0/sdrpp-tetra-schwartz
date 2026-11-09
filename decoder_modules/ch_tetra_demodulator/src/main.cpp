@@ -61,6 +61,7 @@
 #include "propagation.h"
 #include "map_export.h"
 #include "drive_map.h"
+#include "map_store.h"
 #include "clock_cal.h"
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
@@ -235,10 +236,8 @@ public:
             struct tm lt;
             isoLocalTm(now, lt);
             mapProviders = tiles::providers(lt.tm_year + 1900);
-            if (config.conf[name].contains("mapTiles")) {
-                std::string k = config.conf[name]["mapTiles"];
-                for (int i = 0; i < (int)mapProviders.size(); i++) { if (mapProviders[i].key == k) { mapTileSel = i; } }
-            }
+            if (config.conf[name].contains("mapTiles")) { mapTileKey = config.conf[name]["mapTiles"]; }
+            refreshSavedMaps();
             mapTiles.setCacheDir(logFolder.expandString("%ROOT%") + "/map_cache");
             mapTiles.setUserAgent(aiaUserAgent());
         }
@@ -541,7 +540,8 @@ public:
         }
         if (cmd == "inst") {
             // instrument UI: "ui 0|1", "mode 0..3", "view 0..6", "lang en|de", "settings <page>|-1",
-            // "rf 0|1", "drive <csv path>", "site <lat> <lon>", "state" (tests, screenshots)
+            // "rf 0|1", "drive <csv path>", "site <lat> <lon>", "tiles <key>|off|refresh|file://...",
+            // "savemap <name> <lat> <lon> <km> <z>", "mapsdlg", "state" (tests, screenshots)
             std::string k = args.substr(0, args.find(' '));
             std::string v = args.find(' ') == std::string::npos ? "" : args.substr(args.find(' ') + 1);
             if (k == "ui") { instUi = (v == "1"); }
@@ -554,6 +554,21 @@ public:
                 else { settingsPage = std::clamp(pg, 0, 9); settingsOpen = true; }
             }
             else if (k == "rf") { rfOpen = (v == "1"); }
+            else if (k == "mapsdlg") { mapsDlgOpen = true; }
+            else if (k == "savemap") {
+                // "<name> <lat> <lon> <radius km> <zoom>" from the test provider (tests)
+                char nm[64] = "";
+                double la = 0, lo = 0, r = 1;
+                int z = 14;
+                if (sscanf(v.c_str(), "%63s %lf %lf %lf %d", nm, &la, &lo, &r, &z) == 5 && testProvider.storable) {
+                    mapstore::Area a;
+                    a.lat = la;
+                    a.lon = lo;
+                    a.rKm = r;
+                    mapBuilder.start(mapsRoot(), nm, testProvider, a, z, aiaUserAgent());
+                }
+                return "{\"busy\": " + std::string(mapBuilder.busy() ? "true" : "false") + ", \"status\": \"" + mapBuilder.status() + "\"}";
+            }
             else if (k == "tiles") {
                 // "off", a provider key, or a test template file://.../{z}/{x}/{y}.png
                 std::lock_guard<std::mutex> lck(driveReqMtx);
@@ -3719,6 +3734,7 @@ private:
         drawCellDetailsDialog();
         drawGpsDialog();
         drawSiteDialog();
+        drawMapsDialog();
         drawRfWindow();
     }
 
@@ -4310,14 +4326,13 @@ private:
                 std::lock_guard<std::mutex> lck(driveReqMtx);
                 tr.swap(tileReq);
             }
-            if (tr == "off") { mapTileSel = -1; }
+            if (tr == "off") { mapTileKey.clear(); }
             else if (tr.rfind("file://", 0) == 0) {
-                testProvider = { "test", "Test", tr, 18, "test tiles" };
-                mapTileSel = -2;
+                testProvider = { "test", "Test", tr, 18, "test tiles", 0, false, true };
+                mapTileKey = "test";
             }
-            else if (!tr.empty()) {
-                for (int i = 0; i < (int)mapProviders.size(); i++) { if (mapProviders[i].key == tr) { mapTileSel = i; } }
-            }
+            else if (tr == "refresh") { refreshSavedMaps(); }
+            else if (!tr.empty()) { mapTileKey = tr; }
             double la, lo;
             if (!sr.empty() && sscanf(sr.c_str(), "%lf %lf", &la, &lo) == 2) { setSite(true, la, lo); }
         }
@@ -4349,25 +4364,37 @@ private:
         std::string ts = mapTiles.status();
         if (ts == "offline") { ImGui::SameLine(); tw::TextColored(tc::warn(), "%s", ui_text::T("Map: offline")); }
         const char* last = driveLoaded ? ui_text::T("Live") : ui_text::T("Clear");
-        std::string mapBtn = std::string(ui_text::T("Map")) + ": " +
-                             (mapTileSel >= 0 && mapTileSel < (int)mapProviders.size() ? ui_text::T(mapProviders[mapTileSel].name.c_str()) : mapTileSel == -2 ? "Test" : ui_text::T("Off"));
+        const tiles::Provider* prov = currentMapProvider();
+        std::string mapBtn = std::string(ui_text::T("Map")) + ": " + (prov ? std::string(ui_text::T(prov->name.c_str())) : std::string(ui_text::T("Off")));
         float wr = tw::buttonWidth(mapBtn.c_str()) + tw::buttonWidth(ui_text::T("Fit")) + tw::chipWidth(ui_text::T("Follow")) + tw::buttonWidth(last) + 3 * ImGui::GetStyle().ItemSpacing.x;
         ImGui::SameLine();
         float xr = ImGui::GetWindowContentRegionMax().x - wr;
         if (xr > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(xr); }
         if (ImGui::Button((mapBtn + "##_drv_mapsel_" + name).c_str())) { ImGui::OpenPopup(CONCAT("##_drv_mappop_", name)); }
         if (ImGui::BeginPopup(CONCAT("##_drv_mappop_", name))) {
-            int sel = mapTileSel;
-            if (ImGui::Selectable(ui_text::T("Off"), sel == -1)) { sel = -1; }
-            for (int i = 0; i < (int)mapProviders.size(); i++) {
-                if (ImGui::Selectable(ui_text::T(mapProviders[i].name.c_str()), sel == i)) { sel = i; }
+            std::string sel = mapTileKey;
+            if (ImGui::Selectable(ui_text::T("Off"), sel.empty())) { sel.clear(); }
+            tw::TextDisabled("%s", ui_text::T("Online (only the tiles in view, cached 30 days)"));
+            for (auto& p : mapProviders) {
+                if (ImGui::Selectable(ui_text::T(p.name.c_str()), sel == p.key)) { sel = p.key; }
+            }
+            if (!savedProviders.empty()) {
+                ImGui::Separator();
+                tw::TextDisabled("%s", ui_text::T("Saved maps (offline)"));
+                for (size_t i = 0; i < savedProviders.size(); i++) {
+                    if (ImGui::Selectable((savedProviders[i].name + "##_drv_saved_" + std::to_string(i)).c_str(), sel == savedProviders[i].key)) {
+                        sel = savedProviders[i].key;
+                        auto& m = savedMaps[i];
+                        driveMap.showArea(m.la0, m.lo0, m.la1, m.lo1);
+                    }
+                }
             }
             ImGui::Separator();
-            tw::TextDisabled("%s", ui_text::T("Only the tiles in view are loaded; cached 30 days."));
-            if (sel != mapTileSel) {
-                mapTileSel = sel;
+            if (ImGui::Selectable(ui_text::T("Saved maps..."))) { mapsDlgOpen = true; }
+            if (sel != mapTileKey) {
+                mapTileKey = sel;
                 config.acquire();
-                config.conf[name]["mapTiles"] = sel >= 0 ? mapProviders[sel].key : std::string();
+                config.conf[name]["mapTiles"] = mapTileKey;
                 config.release(true);
             }
             ImGui::EndPopup();
@@ -4389,7 +4416,7 @@ private:
             }
         }
 
-        const tiles::Provider* prov = mapTileSel >= 0 && mapTileSel < (int)mapProviders.size() ? &mapProviders[mapTileSel] : (mapTileSel == -2 ? &testProvider : nullptr);
+        prov = currentMapProvider();
         mapTiles.setProvider(prov);
         driveMap.tiles = &mapTiles;
         driveMap.attribution = prov ? prov->attribution : std::string();
@@ -4447,6 +4474,191 @@ private:
         pp["bsLon"] = propView.bsLon;
         pp["metric"] = propView.metric;
         config.release(true);
+    }
+
+    // ---- map providers and saved maps ----
+    const tiles::Provider* currentMapProvider() {
+        if (mapTileKey.empty()) { return nullptr; }
+        if (mapTileKey == "test") { return &testProvider; }
+        for (auto& p : mapProviders) { if (p.key == mapTileKey) { return &p; } }
+        for (auto& p : savedProviders) { if (p.key == mapTileKey) { return &p; } }
+        return nullptr;
+    }
+
+    std::string mapsRoot() { return logFolder.expandString("%ROOT%") + "/maps"; }
+
+    void refreshSavedMaps() {
+        savedMaps = mapstore::list(mapsRoot());
+        savedProviders.clear();
+        for (auto& m : savedMaps) { savedProviders.push_back(mapstore::asProvider(m)); }
+    }
+
+    // Saved maps: create one for an area (providers whose terms allow it), list, show, delete
+    void drawMapsDialog() {
+        if (mapsDlgOpen) {
+            ImGui::OpenPopup(CONCAT("Saved maps###_inst_maps_dlg_", name));
+            mapsDlgOpen = false;
+            refreshSavedMaps();
+            mkDelete = -1;
+            if (!mkName[0]) {
+                std::string d = isoLocalTime(time(nullptr)).substr(0, 10);
+                snprintf(mkName, sizeof(mkName), "%s %s", ui_text::T("Map"), d.c_str());
+            }
+            mkLat = driveMap.centerLat();
+            mkLon = driveMap.centerLon();
+        }
+        if (mapBuilderWasBusy && !mapBuilder.busy()) { refreshSavedMaps(); }
+        mapBuilderWasBusy = mapBuilder.busy();
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2((std::min)(vs.x * 0.92f, 720.0f * style::uiScale), 0), ImGuiCond_Appearing);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.5f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        bool open = true;
+        if (!ImGui::BeginPopupModal((std::string(ui_text::T("Saved maps")) + "###_inst_maps_dlg_" + name).c_str(), &open)) { return; }
+        float lw = 150.0f * style::uiScale, fw = 150.0f * style::uiScale;
+        bool busy = mapBuilder.busy();
+        instHeader(ui_text::T("Create a map"), ImGui::GetContentRegionAvail().x);
+        if (busy) { style::beginDisabled(); }
+        // storable providers only (OpenStreetMap does not allow saving)
+        std::vector<const tiles::Provider*> src;
+        std::string srcItems;
+        for (auto& p : mapProviders) {
+            if (!p.storable) { continue; }
+            src.push_back(&p);
+            srcItems += std::string(ui_text::T(p.name.c_str())) + '\0';
+        }
+        srcItems += '\0';
+        mkSrc = std::clamp(mkSrc, 0, (int)src.size() - 1);
+        tw::Text("%s", ui_text::T("Name")); ImGui::SameLine(lw);
+        ImGui::SetNextItemWidth(fw * 2);
+        ImGui::InputText(("##_mk_name_" + name).c_str(), mkName, sizeof(mkName));
+        tw::Text("%s", ui_text::T("Map")); ImGui::SameLine(lw);
+        tw::Segmented(CONCAT("_mk_src_", name), &mkSrc, srcItems.c_str());
+        GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
+        tw::Text("%s", ui_text::T("Centre")); ImGui::SameLine(lw);
+        std::string ci = std::string(ui_text::T("GPS position")) + '\0' + ui_text::T("Map centre") + '\0' + ui_text::T("Coordinates") + '\0' + '\0';
+        int prevCentre = mkCentre;
+        tw::Segmented(CONCAT("_mk_centre_", name), &mkCentre, ci.c_str());
+        if (mkCentre == 0) {
+            if (g.valid) { mkLat = g.lat; mkLon = g.lon; }
+            else { ImGui::SameLine(); tw::TextColored(tc::warn(), "%s", ui_text::T("no GPS fix")); }
+        }
+        else if (mkCentre == 1) { mkLat = driveMap.centerLat(); mkLon = driveMap.centerLon(); }
+        (void)prevCentre;
+        if (mkCentre == 2) {
+            ImGui::Dummy(ImVec2(lw - ImGui::GetStyle().ItemSpacing.x, 0)); ImGui::SameLine();
+            ImGui::SetNextItemWidth(fw);
+            ImGui::InputDouble(("##_mk_lat_" + name).c_str(), &mkLat, 0.0, 0.0, "%.6f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(fw);
+            ImGui::InputDouble(("##_mk_lon_" + name).c_str(), &mkLon, 0.0, 0.0, "%.6f");
+            mkLat = std::clamp(mkLat, -85.0, 85.0);
+            mkLon = std::clamp(mkLon, -180.0, 180.0);
+        }
+        else {
+            ImGui::Dummy(ImVec2(lw - ImGui::GetStyle().ItemSpacing.x, 0)); ImGui::SameLine();
+            tw::TextDisabled("%.6f, %.6f", mkLat, mkLon);
+        }
+        tw::Text("%s", ui_text::T("Area")); ImGui::SameLine(lw);
+        std::string ai = std::string(ui_text::T("Radius")) + '\0' + ui_text::T("Width x height") + '\0' + '\0';
+        tw::Segmented(CONCAT("_mk_area_", name), &mkAreaMode, ai.c_str());
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(fw * 0.7f);
+        if (mkAreaMode == 0) { ImGui::InputDouble(("km##_mk_r_" + name).c_str(), &mkR, 0.0, 0.0, "%.1f"); }
+        else {
+            ImGui::InputDouble(("x##_mk_w_" + name).c_str(), &mkW, 0.0, 0.0, "%.1f");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(fw * 0.7f);
+            ImGui::InputDouble(("km##_mk_h_" + name).c_str(), &mkH, 0.0, 0.0, "%.1f");
+        }
+        mkR = std::clamp(mkR, 0.1, 500.0);
+        mkW = std::clamp(mkW, 0.2, 1000.0);
+        mkH = std::clamp(mkH, 0.2, 1000.0);
+        const tiles::Provider* sp = src.empty() ? nullptr : src[mkSrc];
+        int zHi = sp ? sp->maxZoom : 16;
+        mkZ = std::clamp(mkZ, 8, zHi);
+        tw::Text("%s", ui_text::T("Detail")); ImGui::SameLine(lw);
+        ImGui::SetNextItemWidth(fw * 2);
+        char zl[64];
+        snprintf(zl, sizeof(zl), "%d (%.1f m/pixel)", mkZ, mapstore::metersPerPixel(mkLat, mkZ));
+        ImGui::SliderInt(("##_mk_z_" + name).c_str(), &mkZ, 8, zHi, zl);
+        mapstore::Area area;
+        area.lat = mkLat;
+        area.lon = mkLon;
+        area.radius = mkAreaMode == 0;
+        area.rKm = mkR;
+        area.wKm = mkW;
+        area.hKm = mkH;
+        size_t nt = mapstore::countTiles(area, mkZ);
+        bool tooMany = nt > mapstore::MAX_TILES;
+        ImGui::Dummy(ImVec2(lw - ImGui::GetStyle().ItemSpacing.x, 0)); ImGui::SameLine();
+        if (tooMany) { tw::TextColored(tc::bad(), "%zu %s - %s", nt, ui_text::T("tiles"), ui_text::T("too many: smaller area or less detail")); }
+        else { tw::TextDisabled("%zu %s, %s %.0f MB, %s %d-%d", nt, ui_text::T("tiles"), ui_text::T("about"), nt * mapstore::AVG_TILE_BYTES / 1e6, ui_text::T("zoom"), mapstore::minZoomFor(mkZ), mkZ); }
+        if (busy) { style::endDisabled(); }
+        tw::TextDisabled("%s", ui_text::T("OpenStreetMap may not be saved (tile usage policy)."));
+        bool canCreate = !busy && sp && !tooMany && mkName[0] && !(mkCentre == 0 && !g.valid);
+        if (!canCreate) { style::beginDisabled(); }
+        if (ImGui::Button(ui_text::L("Create", "_mk_go_" + name).c_str())) {
+            mapBuilder.start(mapsRoot(), mkName, *sp, area, mkZ, aiaUserAgent());
+        }
+        if (!canCreate) { style::endDisabled(); }
+        if (busy) {
+            ImGui::SameLine();
+            if (ImGui::Button(ui_text::L("Cancel", "_mk_cancel_" + name).c_str())) { mapBuilder.cancel(); }
+            ImGui::SameLine();
+            ImGui::ProgressBar(mapBuilder.progress(), ImVec2(-FLT_MIN, 0));
+        }
+        std::string bs = mapBuilder.status();
+        if (bs == "saved") {
+            if (mapBuilder.failedTiles) { tw::TextColored(tc::warn(), ui_text::T("Saved: %zu tiles, %zu could not be loaded."), mapBuilder.savedTiles, mapBuilder.failedTiles); }
+            else { tw::TextColored(tc::good(), ui_text::T("Saved: %zu tiles."), mapBuilder.savedTiles); }
+        }
+        else if (!bs.empty()) { tw::TextDisabled("%s", ui_text::T(bs.c_str())); }
+
+        ImGui::Spacing();
+        instHeader(ui_text::T("Saved maps"), ImGui::GetContentRegionAvail().x);
+        if (savedMaps.empty()) { tw::TextDisabled("%s", ui_text::T("No saved maps yet.")); }
+        else if (ImGui::BeginTable(CONCAT("##_mk_list_", name), 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+            for (size_t i = 0; i < savedMaps.size(); i++) {
+                auto& m = savedMaps[i];
+                ImGui::PushID((int)i);
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(m.name.c_str());
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextDisabled("%s", ui_text::T(m.provider.c_str()));
+                ImGui::TableSetColumnIndex(2);
+                if (m.failed) { ImGui::TextDisabled("%zu %s, %.1f MB, %zu %s", m.tiles, ui_text::T("tiles"), m.bytes / 1e6, m.failed, ui_text::T("missing")); }
+                else { ImGui::TextDisabled("%zu %s, %.1f MB", m.tiles, ui_text::T("tiles"), m.bytes / 1e6); }
+                ImGui::TableSetColumnIndex(3);
+                ImGui::TextDisabled("%s", m.created.substr(0, 10).c_str());
+                ImGui::TableSetColumnIndex(4);
+                if (ImGui::SmallButton(ui_text::L("Show", "_mk_show").c_str())) {
+                    mapTileKey = savedProviders[i].key;
+                    config.acquire();
+                    config.conf[name]["mapTiles"] = mapTileKey;
+                    config.release(true);
+                    driveMap.showArea(m.la0, m.lo0, m.la1, m.lo1);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (mkDelete == (int)i) {
+                    if (ImGui::SmallButton(ui_text::L("Really delete?", "_mk_del2").c_str())) {
+                        if (mapTileKey == savedProviders[i].key) { mapTileKey.clear(); }
+                        mapstore::removeMap(m);
+                        mkDelete = -1;
+                        ImGui::PopID();
+                        refreshSavedMaps();
+                        break;
+                    }
+                }
+                else if (ImGui::SmallButton(ui_text::L("Delete", "_mk_del").c_str())) { mkDelete = (int)i; }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+        ImGui::Spacing();
+        if (ImGui::Button(ui_text::L("Close", "_mk_close_" + name).c_str())) { ImGui::CloseCurrentPopup(); }
+        ImGui::EndPopup();
     }
 
     // ---- dialogs ----
@@ -6484,7 +6696,14 @@ private:
     // map tiles under the drive map
     std::vector<tiles::Provider> mapProviders;
     tiles::Provider testProvider;
-    int mapTileSel = -1;   // -1 off, -2 test provider (debug command)
+    std::string mapTileKey;   // "" off, provider key, "saved:<folder>", "test" (debug command)
+    std::vector<mapstore::SavedMap> savedMaps;
+    std::vector<tiles::Provider> savedProviders;
+    MapBuilder mapBuilder;
+    bool mapsDlgOpen = false, mapBuilderWasBusy = false;
+    char mkName[64] = "";
+    int mkSrc = 0, mkCentre = 0, mkAreaMode = 0, mkZ = 15, mkDelete = -1;
+    double mkLat = 0, mkLon = 0, mkR = 10, mkW = 20, mkH = 20;
     TileLayer mapTiles;
     std::string tileReq;
     std::atomic<int> mapTexShown { 0 };
