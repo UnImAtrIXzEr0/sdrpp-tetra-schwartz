@@ -687,6 +687,38 @@ def test_instrument_ui():
         if st().get("drivePoints") != 50:
             stats.test_fail("test_instrument_ui", f"drive map: {st().get('drivePoints')} points shown, expected 50")
             return False
+        # map tiles under the drive map: a test provider with local tiles (file://),
+        # so that no real map service is used by the tests
+        import zlib, struct, math
+        def png(path, rgb):
+            raw = b"".join(b"\x00" + bytes(rgb) * 256 for _ in range(256))
+            def chunk(t, d):
+                return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+            with open(path, "wb") as f:
+                f.write(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 256, 256, 8, 2, 0, 0, 0)) +
+                        chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+        tdir = os.path.join(tmpdir, "tiles")
+        for z in range(8, 18):
+            n = 2 ** z
+            r0, r1 = math.radians(51.33), math.radians(51.29)
+            xa, xb = int((9.43 + 180) / 360 * n), int((9.48 + 180) / 360 * n)
+            ya = int((1 - math.log(math.tan(r0) + 1 / math.cos(r0)) / math.pi) / 2 * n)
+            yb = int((1 - math.log(math.tan(r1) + 1 / math.cos(r1)) / math.pi) / 2 * n)
+            for x in range(xa, xb + 1):
+                for y in range(ya, yb + 1):
+                    os.makedirs(os.path.join(tdir, str(z), str(x)), exist_ok=True)
+                    png(os.path.join(tdir, str(z), str(x), f"{y}.png"), ((x * 40) % 200 + 40, (y * 70) % 200 + 40, 150))
+        ctx.module_cmd("TETRA Analyzer", "inst", "tiles file://" + tdir + "/{z}/{x}/{y}.png")
+        tex = 0
+        for _ in range(20):
+            ctx.sleep(0.5)
+            tex = st().get("mapTextures", 0)
+            if tex > 0:
+                break
+        ctx.module_cmd("TETRA Analyzer", "inst", "tiles off")
+        if tex <= 0:
+            stats.test_fail("test_instrument_ui", "drive map: no map tiles loaded from the test provider")
+            return False
         ctx.module_cmd("TETRA Analyzer", "inst", "mode 1")
         # switch to the classic layout and back (panels are removed and registered again)
         ctx.module_cmd("TETRA Analyzer", "inst", "ui 0")
@@ -710,7 +742,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map, no SDR menu, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map with tiles, no SDR menu, classic and back")
     return True
 
 
@@ -854,7 +886,7 @@ def test_map_export():
     if r.returncode != 0 or bad:
         stats.test_fail("test_map_export", "; ".join(bad) or "failed")
         return False
-    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs), drive map geometry and track correct")
+    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs), drive map geometry, tile maths and track correct")
     return True
 
 

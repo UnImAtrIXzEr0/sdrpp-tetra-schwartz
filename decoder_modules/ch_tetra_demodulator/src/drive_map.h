@@ -17,6 +17,7 @@
 #include <gui/style.h>
 #include "coverage_scale.h"
 #include "drive_track.h"
+#include "map_tiles.h"
 #include "tetra_colors.h"
 #include "tetra_layout.h"
 #include "ui_text.h"
@@ -56,6 +57,9 @@ public:
     bool siteValid = false;       // cell site
     double siteLat = 0, siteLon = 0;
     float crcLimit = 1.0f;
+
+    TileLayer* tiles = nullptr;   // map underneath (nullptr or inactive: grid only)
+    std::string attribution;      // of the map provider, always shown on the map
 
     bool picking = false;         // the next click on the map sets the cell site
     bool siteChanged = false;     // set when the site was picked on the map
@@ -134,13 +138,22 @@ public:
         ImU32 textCol = ImGui::GetColorU32(ImGuiCol_Text);
         ImU32 dimCol = ImGui::GetColorU32(ImGuiCol_TextDisabled);
 
+        bool map = tiles && tiles->isActive();
+        if (map) {
+            // tiles lightened (light theme) or darkened (dark theme) a little, so that the points stand out
+            float a = 0.75f;
+            tiles->draw(dl, p0, p1, cLat, mpp,
+                        [&](double la, double lo) { double x, y; project(la, lo, x, y); return ImVec2((float)(cx + x), (float)(cy + y)); },
+                        [&](double sx, double sy, double& la, double& lo) { unproject(sx - cx, sy - cy, la, lo); }, a);
+        }
         if (haveData) {
-            drawGrid(dl, p0, p1, cx, cy);
+            if (!map) { drawGrid(dl, p0, p1, cx, cy); }
             if (siteValid) { drawSite(dl, p0, p1, cx, cy, true); }
             drawPoints(dl, p0, p1, cx, cy, pts, hovered);
             if (siteValid) { drawSite(dl, p0, p1, cx, cy, false); }
             if (curValid) { drawCurrent(dl, cx, cy, curLat, curLon, curCourse); }
             drawScaleBar(dl, p0, p1);
+            if (map) { drawAttribution(dl, p0, p1); }
             drawNorth(dl, p0, p1);
         }
         else {
@@ -300,7 +313,8 @@ private:
             project(p.lat, p.lon, x, y);
             ImVec2 s((float)(cx + x), (float)(cy + y));
             dl->AddCircleFilled(s, r, c, 10);
-            if (!p.service) { dl->AddCircle(s, r, rim, 10, 1.0f); }
+            // thin rim so that the colours stand out on a map: dark, light for "no service"
+            dl->AddCircle(s, r, p.service ? IM_COL32(20, 20, 20, 200) : rim, 10, 1.0f);
         }
         if (hoverIdx >= 0) {
             double x, y;
@@ -338,6 +352,7 @@ private:
         float px = (float)(len / mpp);
         float x1 = p1.x - 14 * us, x0 = x1 - px, y = p1.y - 14 * us;
         ImU32 c = ImGui::GetColorU32(ImGuiCol_Text);
+        backdrop(dl, ImVec2(x0 - 6 * us, y - 8 * us - ImGui::GetTextLineHeight()), ImVec2(x1 + 6 * us, y + 5 * us));
         dl->AddLine(ImVec2(x0, y), ImVec2(x1, y), c, 2 * us);
         dl->AddLine(ImVec2(x0, y - 6 * us), ImVec2(x0, y), c, 2 * us);
         dl->AddLine(ImVec2(x1, y - 6 * us), ImVec2(x1, y), c, 2 * us);
@@ -346,11 +361,30 @@ private:
         dl->AddText(ImVec2((x0 + x1) * 0.5f - ts.x * 0.5f, y - 6 * us - ts.y), c, t.c_str());
     }
 
+    static void backdrop(ImDrawList* dl, ImVec2 a, ImVec2 b) {
+        ImVec4 bg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+        bg.w = 0.7f;
+        dl->AddRectFilled(a, b, ImGui::ColorConvertFloat4ToU32(bg), 3 * style::uiScale);
+    }
+
+    // source of the map, bottom right above the scale bar (required by the providers)
+    void drawAttribution(ImDrawList* dl, ImVec2 p0, ImVec2 p1) {
+        if (attribution.empty()) { return; }
+        float us = style::uiScale;
+        ImVec2 ts = ImGui::CalcTextSize(attribution.c_str(), nullptr, false, (p1.x - p0.x) * 0.6f);
+        ImVec2 a(p1.x - ts.x - 14 * us, p1.y - 14 * us - ImGui::GetTextLineHeight() - 10 * us - ts.y - 4 * us);
+        ImVec4 bg = ImGui::GetStyleColorVec4(ImGuiCol_PopupBg);
+        bg.w = 0.8f;
+        dl->AddRectFilled(ImVec2(a.x - 4 * us, a.y - 2 * us), ImVec2(a.x + ts.x + 4 * us, a.y + ts.y + 2 * us), ImGui::ColorConvertFloat4ToU32(bg), 2 * us);
+        dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), a, ImGui::GetColorU32(ImGuiCol_Text), attribution.c_str(), nullptr, (p1.x - p0.x) * 0.6f);
+    }
+
     void drawNorth(ImDrawList* dl, ImVec2 p0, ImVec2 p1) {
         float us = style::uiScale;
         ImU32 c = ImGui::GetColorU32(ImGuiCol_Text);
         ImVec2 ts = ImGui::CalcTextSize("N");
         float x = p1.x - 22 * us, y = p0.y + 10 * us;
+        backdrop(dl, ImVec2(x - 11 * us, y - 4 * us), ImVec2(x + 11 * us, y + 22 * us + ts.y));
         dl->AddTriangleFilled(ImVec2(x, y), ImVec2(x - 7 * us, y + 18 * us), ImVec2(x + 7 * us, y + 18 * us), c);
         dl->AddText(ImVec2(x - ts.x * 0.5f, y + 20 * us), c, "N");
     }

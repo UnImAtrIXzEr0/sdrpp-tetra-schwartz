@@ -56,6 +56,25 @@ int main(int argc, char** argv) {
         double d2 = drivemap::distanceM(51.3, 9.45, 51.3 + 5000 / drivemap::M_PER_DEG, 9.45);
         check(std::fabs(d1 - 5000) < 2.0 && std::fabs(d2 - 5000) < 0.5, "local projection within 2 m on 5 km");
     }
+    // map tiles: Web Mercator tile coordinates (reference: OSM slippy map formulas), zoom choice, URLs
+    {
+        double tx, ty, la, lo;
+        tiles::toTile(50.1109, 8.6821, 13, tx, ty);
+        check(std::fabs(tx - 4293.566009) < 1e-5 && std::fabs(ty - 2774.343445) < 1e-5, "tile coordinates at z13");
+        tiles::fromTile(tx, ty, 13, la, lo);
+        check(std::fabs(la - 50.1109) < 1e-9 && std::fabs(lo - 8.6821) < 1e-9, "tile coordinates round trip");
+        // z13 at 50 N: 12.3 m per tile pixel; z19 is OSM's limit
+        check(tiles::zoomFor(50.0, 12.3, 19) == 13 && tiles::zoomFor(50.0, 0.01, 19) == 19 && tiles::zoomFor(50.0, 1e6, 19) == 0, "zoom for the view");
+        check(tiles::expand("https://a/{z}/{x}/{y}.png", 13, 4293, 2774) == "https://a/13/4293/2774.png" &&
+              tiles::expand("w/{z}/{y}/{x}.jpg", 5, 1, 2) == "w/5/2/1.jpg", "tile URL");
+        uint64_t k = tiles::key(19, 274877, 179000);
+        check(tiles::keyZ(k) == 19 && tiles::keyX(k) == 274877 && tiles::keyY(k) == 179000, "tile key");
+        auto pv = tiles::providers(2026);
+        bool attr = !pv.empty();
+        for (auto& p : pv) { attr = attr && !p.attribution.empty() && p.url.find("{z}") != std::string::npos; }
+        check(attr && pv[1].attribution.find("BKG (2026)") != std::string::npos, "providers with attribution");
+    }
+
     // drive track: ring capacity and change detection
     DriveTrack tr;
     std::vector<DrivePoint> cp;

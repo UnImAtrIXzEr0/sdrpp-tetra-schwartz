@@ -217,6 +217,11 @@ namespace ui_text {
             { "Position of the base station antenna, decimal degrees (north and east positive).", "Position der Antenne der Basisstation, Dezimalgrad (Nord und Ost positiv)." },
             { "No GPS samples yet - connect the GPS receiver (softkey GPS...).", "Noch keine GPS-Messpunkte - GPS-Empfänger verbinden (Softkey GPS...)." },
             { "Click on the map to set the cell site (right click: cancel)", "In die Karte klicken, um den Standort zu setzen (Rechtsklick: Abbruch)" },
+            { "Map", "Karte" },
+            { "Off", "Aus" },
+            { "Map: offline", "Karte: offline" },
+            { "Satellite (Sentinel-2)", "Satellit (Sentinel-2)" },
+            { "Only the tiles in view are loaded; cached 30 days.", "Geladen wird nur der sichtbare Ausschnitt; 30 Tage zwischengespeichert." },
         };
         auto it = de.find(en);
         return it == de.end() ? en : it->second;

@@ -230,6 +230,18 @@ public:
         if (config.conf[name].contains("gpsPort")) { gpsPort = config.conf[name]["gpsPort"]; }
         if (config.conf[name].contains("gpsBaud")) { gpsBaud = config.conf[name]["gpsBaud"]; }
         if (config.conf[name].contains("mapMetric")) { mapMetric = config.conf[name]["mapMetric"]; }
+        {
+            time_t now = time(nullptr);
+            struct tm lt;
+            isoLocalTm(now, lt);
+            mapProviders = tiles::providers(lt.tm_year + 1900);
+            if (config.conf[name].contains("mapTiles")) {
+                std::string k = config.conf[name]["mapTiles"];
+                for (int i = 0; i < (int)mapProviders.size(); i++) { if (mapProviders[i].key == k) { mapTileSel = i; } }
+            }
+            mapTiles.setCacheDir(logFolder.expandString("%ROOT%") + "/map_cache");
+            mapTiles.setUserAgent(aiaUserAgent());
+        }
         loadTiles();
         loadInstConfig();
         if (config.conf[name].contains("listen") && config.conf[name]["listen"].is_object()) {
@@ -542,6 +554,11 @@ public:
                 else { settingsPage = std::clamp(pg, 0, 9); settingsOpen = true; }
             }
             else if (k == "rf") { rfOpen = (v == "1"); }
+            else if (k == "tiles") {
+                // "off", a provider key, or a test template file://.../{z}/{x}/{y}.png
+                std::lock_guard<std::mutex> lck(driveReqMtx);
+                tileReq = v.empty() ? "off" : v;
+            }
             else if (k == "drive" || k == "site") {
                 std::lock_guard<std::mutex> lck(driveReqMtx);
                 (k == "drive" ? driveLoadReq : driveSiteReq) = v;
@@ -553,9 +570,10 @@ public:
                        ", \"main\": " + std::to_string(instMainCur) + ", \"bottom\": " + (bottomRegistered ? "true" : "false") +
                        ", \"frames\": " + std::to_string(frameCount.load()) +
                        ", \"menuDisabled\": " + (gui::mainWindow.menuDisabled ? "true" : "false") +
-                       ", \"drivePoints\": " + std::to_string(drivePtsShown.load()) + "}";
+                       ", \"drivePoints\": " + std::to_string(drivePtsShown.load()) +
+                       ", \"mapTextures\": " + std::to_string(mapTexShown.load()) + "}";
             }
-            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|settings|rf|drive|site|state <value>\"}"; }
+            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|settings|rf|drive|site|tiles|state <value>\"}"; }
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -4287,6 +4305,19 @@ private:
                 sr.swap(driveSiteReq);
             }
             if (!dr.empty()) { loadDrive(dr); }
+            std::string tr;
+            {
+                std::lock_guard<std::mutex> lck(driveReqMtx);
+                tr.swap(tileReq);
+            }
+            if (tr == "off") { mapTileSel = -1; }
+            else if (tr.rfind("file://", 0) == 0) {
+                testProvider = { "test", "Test", tr, 18, "test tiles" };
+                mapTileSel = -2;
+            }
+            else if (!tr.empty()) {
+                for (int i = 0; i < (int)mapProviders.size(); i++) { if (mapProviders[i].key == tr) { mapTileSel = i; } }
+            }
             double la, lo;
             if (!sr.empty() && sscanf(sr.c_str(), "%lf %lf", &la, &lo) == 2) { setSite(true, la, lo); }
         }
@@ -4315,11 +4346,33 @@ private:
             tw::TextDisabled("%d %s", (int)drivePts.size(), ui_text::T("points"));
         }
         if (!driveLoadErr.empty()) { ImGui::SameLine(); tw::TextColored(tc::bad(), "%s", driveLoadErr.c_str()); }
+        std::string ts = mapTiles.status();
+        if (ts == "offline") { ImGui::SameLine(); tw::TextColored(tc::warn(), "%s", ui_text::T("Map: offline")); }
         const char* last = driveLoaded ? ui_text::T("Live") : ui_text::T("Clear");
-        float wr = tw::buttonWidth(ui_text::T("Fit")) + tw::chipWidth(ui_text::T("Follow")) + tw::buttonWidth(last) + 2 * ImGui::GetStyle().ItemSpacing.x;
+        std::string mapBtn = std::string(ui_text::T("Map")) + ": " +
+                             (mapTileSel >= 0 && mapTileSel < (int)mapProviders.size() ? ui_text::T(mapProviders[mapTileSel].name.c_str()) : mapTileSel == -2 ? "Test" : ui_text::T("Off"));
+        float wr = tw::buttonWidth(mapBtn.c_str()) + tw::buttonWidth(ui_text::T("Fit")) + tw::chipWidth(ui_text::T("Follow")) + tw::buttonWidth(last) + 3 * ImGui::GetStyle().ItemSpacing.x;
         ImGui::SameLine();
         float xr = ImGui::GetWindowContentRegionMax().x - wr;
         if (xr > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(xr); }
+        if (ImGui::Button((mapBtn + "##_drv_mapsel_" + name).c_str())) { ImGui::OpenPopup(CONCAT("##_drv_mappop_", name)); }
+        if (ImGui::BeginPopup(CONCAT("##_drv_mappop_", name))) {
+            int sel = mapTileSel;
+            if (ImGui::Selectable(ui_text::T("Off"), sel == -1)) { sel = -1; }
+            for (int i = 0; i < (int)mapProviders.size(); i++) {
+                if (ImGui::Selectable(ui_text::T(mapProviders[i].name.c_str()), sel == i)) { sel = i; }
+            }
+            ImGui::Separator();
+            tw::TextDisabled("%s", ui_text::T("Only the tiles in view are loaded; cached 30 days."));
+            if (sel != mapTileSel) {
+                mapTileSel = sel;
+                config.acquire();
+                config.conf[name]["mapTiles"] = sel >= 0 ? mapProviders[sel].key : std::string();
+                config.release(true);
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine();
         if (ImGui::Button(ui_text::L("Fit", "_drv_fit_" + name).c_str())) { driveMap.requestFit(); driveMap.follow = false; }
         ImGui::SameLine();
         tw::Chip(ui_text::L("Follow", "_drv_follow_" + name).c_str(), &driveMap.follow, !driveLoaded || gps.isRunning());
@@ -4336,10 +4389,15 @@ private:
             }
         }
 
+        const tiles::Provider* prov = mapTileSel >= 0 && mapTileSel < (int)mapProviders.size() ? &mapProviders[mapTileSel] : (mapTileSel == -2 ? &testProvider : nullptr);
+        mapTiles.setProvider(prov);
+        driveMap.tiles = &mapTiles;
+        driveMap.attribution = prov ? prov->attribution : std::string();
         GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
         float course = (g.valid && g.speedKmh >= 3.0) ? (float)g.courseDeg : NAN;
         driveMap.draw(CONCAT("##_drv_map_", name), ImGui::GetContentRegionAvail(), drivePts, g.valid, g.lat, g.lon, course);
         drivePtsShown = (int)drivePts.size();
+        mapTexShown = mapTiles.textureCount();
         if (driveMap.siteChanged) {
             driveMap.siteChanged = false;
             setSite(true, driveMap.siteLat, driveMap.siteLon);
@@ -6423,6 +6481,13 @@ private:
     std::mutex driveReqMtx;
     std::string driveLoadReq, driveSiteReq;
     std::atomic<int> drivePtsShown { 0 };
+    // map tiles under the drive map
+    std::vector<tiles::Provider> mapProviders;
+    tiles::Provider testProvider;
+    int mapTileSel = -1;   // -1 off, -2 test provider (debug command)
+    TileLayer mapTiles;
+    std::string tileReq;
+    std::atomic<int> mapTexShown { 0 };
     std::string trendFileError;
     std::mutex trendReqMtx;
     std::string trendLoadReq;   // debug: open this CSV log in the GUI thread
