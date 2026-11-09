@@ -128,6 +128,9 @@ def session_a():
             return
         time.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
@@ -212,6 +215,9 @@ def session_b():
             return
         time.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
@@ -239,6 +245,9 @@ def session_c():
             return
         time.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "1")

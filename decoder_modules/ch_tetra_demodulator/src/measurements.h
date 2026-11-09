@@ -3,6 +3,7 @@
 // per second in its own thread (independent of whether the GUI menu is open),
 // keeps the latest snapshot for the GUI and optionally appends it to a CSV file.
 
+#include "drive_track.h"
 #include "iso_time.h"
 #include <algorithm>
 #include <atomic>
@@ -129,6 +130,7 @@ public:
 
     // long-term history (one point per second, 24 h)
     TetraTrendStore& trend() { return trendStore; }
+    DriveTrack& drive() { return driveTrack; }
 
     // ---- event log (sync loss / re-lock / gain and AFC steps) ----
     struct Event {
@@ -461,6 +463,7 @@ private:
             snap = s;
         }
         addTrend(s);
+        addDrive(s);
         writeLog(s);
     }
 
@@ -534,6 +537,29 @@ public:
     }
 
 private:
+    // one drive-track sample per second with GPS fix (same values as the CSV log)
+    void addDrive(const TetraMeasSnapshot& s) {
+        if (!s.gps.valid) { return; }
+        DrivePoint p;
+        p.t = s.timestamp;
+        p.lat = s.gps.lat;
+        p.lon = s.gps.lon;
+        p.dbm = s.levelCalDb != 0.0f;
+        p.level = s.levelDbfs + s.levelCalDb;
+        p.mer = s.merDb;
+        p.ber = (float)s.ber;
+        double ok = 0, fail = 0;
+        for (int i = 0; i < 4; i++) { ok += s.crcOk[i]; fail += s.crcFail[i]; }
+        p.crcPct = (float)(ok + fail > 0 ? 100.0 * fail / (ok + fail) : 100.0);
+        if (s.gps.speedKmh >= 3.0) { p.courseDeg = (float)s.gps.courseDeg; }
+        p.service = (s.rxState == 2) && s.cellMatch != 0;
+        p.mcc = s.mcc;
+        p.mnc = s.mnc;
+        p.cc = s.cc;
+        p.dlHz = (double)s.dlFreq;
+        driveTrack.add(p);
+    }
+
     void addTrend(const TetraMeasSnapshot& s) {
         TetraTrendPoint p;
         p.t = s.timestamp;
@@ -558,6 +584,7 @@ private:
     }
 
     TetraTrendStore trendStore;
+    DriveTrack driveTrack;
     uint32_t prevDlUse[4][4] = {}, baseDlUse[4][4] = {};
     uint32_t prevUlUse[4][3] = {}, baseUlUse[4][3] = {};
     bool useInit = false, useReset = false;

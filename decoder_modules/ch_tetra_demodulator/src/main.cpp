@@ -60,6 +60,7 @@
 #include "gps.h"
 #include "propagation.h"
 #include "map_export.h"
+#include "drive_map.h"
 #include "clock_cal.h"
 #include <signal_path/source_gain_interface.h>
 #include <signal_path/source_freq_interface.h>
@@ -528,7 +529,7 @@ public:
         }
         if (cmd == "inst") {
             // instrument UI: "ui 0|1", "mode 0..3", "view 0..6", "lang en|de", "settings <page>|-1",
-            // "rf 0|1", "state" (tests, screenshots)
+            // "rf 0|1", "drive <csv path>", "site <lat> <lon>", "state" (tests, screenshots)
             std::string k = args.substr(0, args.find(' '));
             std::string v = args.find(' ') == std::string::npos ? "" : args.substr(args.find(' ') + 1);
             if (k == "ui") { instUi = (v == "1"); }
@@ -541,15 +542,20 @@ public:
                 else { settingsPage = std::clamp(pg, 0, 9); settingsOpen = true; }
             }
             else if (k == "rf") { rfOpen = (v == "1"); }
+            else if (k == "drive" || k == "site") {
+                std::lock_guard<std::mutex> lck(driveReqMtx);
+                (k == "drive" ? driveLoadReq : driveSiteReq) = v;
+            }
             else if (k == "state") {
                 // frames: count of per-frame work runs (must keep rising with a module view);
                 // main: key of the shown main view (-1 = waterfall); bottom: strip registered
                 return "{\"mode\": " + std::to_string(instMode) + ", \"view\": " + std::to_string(instView) +
                        ", \"main\": " + std::to_string(instMainCur) + ", \"bottom\": " + (bottomRegistered ? "true" : "false") +
                        ", \"frames\": " + std::to_string(frameCount.load()) +
-                       ", \"menuDisabled\": " + (gui::mainWindow.menuDisabled ? "true" : "false") + "}";
+                       ", \"menuDisabled\": " + (gui::mainWindow.menuDisabled ? "true" : "false") +
+                       ", \"drivePoints\": " + std::to_string(drivePtsShown.load()) + "}";
             }
-            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|settings|rf|state <value>\"}"; }
+            else { return "{\"status\": \"error\", \"message\": \"inst ui|mode|view|lang|settings|rf|drive|site|state <value>\"}"; }
             return "{\"status\": \"ok\"}";
         }
         if (cmd == "set_bursts") {
@@ -2190,7 +2196,8 @@ private:
 
     // ---------------- GPS, cell lock and coverage map ----------------
 
-    void drawGpsCoverage(float menuWidth) {
+    // GPS receiver: port, baud rate, connect and state (classic layout and the GPS dialog)
+    void drawGpsConnect(float menuWidth) {
         ImVec4 good = tc::good();
         ImVec4 warn = tc::warn();
         ImVec4 bad = tc::bad();
@@ -2261,6 +2268,12 @@ private:
             tw::TextColored(good, "%.5f, %.5f", f.lat, f.lon);
             tw::SameTextDisabled(" %d sat, HDOP %.1f, %.0f km/h", f.sats, f.hdop, f.speedKmh);
         }
+    }
+
+    void drawGpsCoverage(float menuWidth) {
+        ImVec4 good = tc::good();
+        ImVec4 bad = tc::bad();
+        drawGpsConnect(menuWidth);
 
         // Cell lock
         ImGui::Separator();
@@ -3529,7 +3542,7 @@ private:
         static const char* keys[] = { "Monitor", "Measure", "Drive test", "Alignment", "Spectrum", "Constellation",
                                       "TX spectrum (ACP)", "Burst (uplink)", "Carriers", "Trends", "Multipath",
                                       "Reset statistics", "Start CSV log", "Stop CSV log", "Create report", "Open log...",
-                                      "Lock cell", "Unlock cell", "Export map", "Set reference", "Play anyway", "Cell details",
+                                      "Lock cell", "Unlock cell", "Export map", "Load drive...", "GPS...", "Cell site...", "Set reference", "Play anyway", "Cell details",
                                       "RF / Gain", "Settings", "Limits: mobile station", "Limits: base station" };
         static const char* toggles[] = { "Mute encrypted", "Hide call control", "8 points (pi/4)", "Remove I/Q offset",
                                          "Analysis", "Channel raster", "Overload check", "Ramp spectrum", "Delta to reference", "Hold" };
@@ -3686,6 +3699,8 @@ private:
         ImGui::EndChild();
         drawSettingsDialog();
         drawCellDetailsDialog();
+        drawGpsDialog();
+        drawSiteDialog();
         drawRfWindow();
     }
 
@@ -3806,13 +3821,16 @@ private:
                 }
                 if (!decLocked) { style::endDisabled(); }
             }
-            std::string logPath = meas.getLogPath();
+            std::string logPath = driveLoaded ? driveLoadedPath : meas.getLogPath();
             bool canExport = !logPath.empty() && !mapExport.busy();
             if (!canExport) { style::beginDisabled(); }
             if (softkey("Export map", "map")) {
                 startMapExport(logPath);
             }
             if (!canExport) { style::endDisabled(); }
+            if (softkey("Load drive...", "loaddrive")) { driveFile.openDialog(); }
+            if (softkey("GPS...", "gpsdlg")) { gpsDlgOpen = true; }
+            if (softkey("Cell site...", "sitedlg")) { siteDlgOpen = true; }
             if (softkey("Create report", "report")) { instReport(); }
             break;
         }
@@ -4237,8 +4255,7 @@ private:
             }
         }
         else if (instMode == IM_DRIVE) {
-            instHeader(ui_text::T("Drive test"), a.x);
-            drawGpsCoverage(ImGui::GetContentRegionAvail().x);
+            drawDriveMain();
         }
         else if (instMode == IM_ALIGN) {
             drawAlignMain();
@@ -4257,7 +4274,185 @@ private:
         ImGui::EndChild();
     }
 
+    // ---- drive test: map of the drive ----
+    void drawDriveMain() {
+        // data: live track, or a drive loaded from a CSV log
+        if (driveFile.pollChanged() && driveFile.pathIsValid()) { loadDrive(driveFile.expandString(driveFile.path)); }
+        {
+            // requests of the debug commands "inst drive" / "inst site" (tests, screenshots)
+            std::string dr, sr;
+            {
+                std::lock_guard<std::mutex> lck(driveReqMtx);
+                dr.swap(driveLoadReq);
+                sr.swap(driveSiteReq);
+            }
+            if (!dr.empty()) { loadDrive(dr); }
+            double la, lo;
+            if (!sr.empty() && sscanf(sr.c_str(), "%lf %lf", &la, &lo) == 2) { setSite(true, la, lo); }
+        }
+        if (!driveLoaded) { driveSeq = meas.drive().copyIfChanged(driveSeq, drivePts); }
+        driveMap.crcLimit = evalView.crcLimit;
+        driveMap.siteValid = propView.bsValid;
+        driveMap.siteLat = propView.bsLat;
+        driveMap.siteLon = propView.bsLon;
+
+        // header: value, number of points / file, fit, follow, clear or back to live
+        int m = std::clamp(mapMetric, 0, 3);
+        std::string seg = std::string(ui_text::T("Level")) + '\0' + ui_text::T("MER") + '\0' + ui_text::T("BER") + '\0' + ui_text::T("Quality") + '\0' + '\0';
+        if (tw::Segmented(CONCAT("_drv_metric_", name), &m, seg.c_str())) {
+            mapMetric = m;
+            config.acquire();
+            config.conf[name]["mapMetric"] = mapMetric;
+            config.release(true);
+        }
+        driveMap.metric = m;
+        ImGui::SameLine();
+        if (driveLoaded) {
+            std::string fn = driveLoadedPath.substr(driveLoadedPath.find_last_of("/\\") == std::string::npos ? 0 : driveLoadedPath.find_last_of("/\\") + 1);
+            tw::TextDisabled("%s: %d %s", fn.c_str(), (int)drivePts.size(), ui_text::T("points"));
+        }
+        else {
+            tw::TextDisabled("%d %s", (int)drivePts.size(), ui_text::T("points"));
+        }
+        if (!driveLoadErr.empty()) { ImGui::SameLine(); tw::TextColored(tc::bad(), "%s", driveLoadErr.c_str()); }
+        const char* last = driveLoaded ? ui_text::T("Live") : ui_text::T("Clear");
+        float wr = tw::buttonWidth(ui_text::T("Fit")) + tw::chipWidth(ui_text::T("Follow")) + tw::buttonWidth(last) + 2 * ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SameLine();
+        float xr = ImGui::GetWindowContentRegionMax().x - wr;
+        if (xr > ImGui::GetCursorPosX()) { ImGui::SetCursorPosX(xr); }
+        if (ImGui::Button(ui_text::L("Fit", "_drv_fit_" + name).c_str())) { driveMap.requestFit(); driveMap.follow = false; }
+        ImGui::SameLine();
+        tw::Chip(ui_text::L("Follow", "_drv_follow_" + name).c_str(), &driveMap.follow, !driveLoaded || gps.isRunning());
+        ImGui::SameLine();
+        if (ImGui::Button((std::string(last) + "##_drv_clr_" + name).c_str())) {
+            if (driveLoaded) {
+                driveLoaded = false;
+                driveLoadedPath.clear();
+                driveSeq = (uint64_t)-1;
+                driveMap.requestFit();
+            }
+            else {
+                meas.drive().clear();
+            }
+        }
+
+        GpsFix g = gps.isRunning() ? gps.get() : GpsFix();
+        float course = (g.valid && g.speedKmh >= 3.0) ? (float)g.courseDeg : NAN;
+        driveMap.draw(CONCAT("##_drv_map_", name), ImGui::GetContentRegionAvail(), drivePts, g.valid, g.lat, g.lon, course);
+        drivePtsShown = (int)drivePts.size();
+        if (driveMap.siteChanged) {
+            driveMap.siteChanged = false;
+            setSite(true, driveMap.siteLat, driveMap.siteLon);
+        }
+    }
+
+    // a drive from a CSV log (samples with GPS fix, same reading as the map export)
+    void loadDrive(const std::string& path) {
+        std::vector<CoverageMapExporter::Row> rows;
+        bool dbm = false;
+        driveLoadErr = CoverageMapExporter::readCsv(path, meas.getCellLock().active, rows, dbm);
+        if (!driveLoadErr.empty()) { return; }
+        drivePts.clear();
+        drivePts.reserve(rows.size());
+        for (auto& r : rows) {
+            DrivePoint p;
+            p.t = r.t;
+            p.lat = r.lat;
+            p.lon = r.lon;
+            p.level = (float)r.level;
+            p.mer = (float)r.mer;
+            p.ber = (r.berS.empty() || r.ber < 0) ? NAN : (float)r.ber;
+            p.crcPct = (float)r.crcPct;
+            p.service = r.service;
+            p.dbm = dbm;
+            p.mcc = atoi(r.mcc.c_str());
+            p.mnc = atoi(r.mnc.c_str());
+            p.cc = atoi(r.cc.c_str());
+            p.dlHz = r.dlHz;
+            drivePts.push_back(p);
+        }
+        driveLoaded = true;
+        driveLoadedPath = path;
+        driveMap.follow = false;
+        driveMap.requestFit();
+    }
+
+    // cell site: shared with the propagation diagram of the classic layout
+    void setSite(bool valid, double lat, double lon) {
+        propView.bsValid = valid;
+        propView.bsLat = lat;
+        propView.bsLon = lon;
+        config.acquire();
+        json& pp = config.conf[name]["prop"];
+        pp["bsValid"] = propView.bsValid;
+        pp["bsLat"] = propView.bsLat;
+        pp["bsLon"] = propView.bsLon;
+        pp["metric"] = propView.metric;
+        config.release(true);
+    }
+
     // ---- dialogs ----
+    void drawGpsDialog() {
+        if (gpsDlgOpen) { ImGui::OpenPopup(CONCAT("GPS receiver###_inst_gps_dlg_", name)); gpsDlgOpen = false; }
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2((std::min)(vs.x * 0.9f, 560.0f * style::uiScale), 0), ImGuiCond_Appearing);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.4f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        bool open = true;
+        if (ImGui::BeginPopupModal((std::string(ui_text::T("GPS receiver")) + "###_inst_gps_dlg_" + name).c_str(), &open)) {
+            drawGpsConnect(ImGui::GetContentRegionAvail().x);
+            ImGui::Spacing();
+            if (ImGui::Button(ui_text::L("Close", "_gps_dlg_close_" + name).c_str())) { ImGui::CloseCurrentPopup(); }
+            ImGui::EndPopup();
+        }
+    }
+
+    void drawSiteDialog() {
+        if (siteDlgOpen) {
+            ImGui::OpenPopup(CONCAT("Cell site###_inst_site_dlg_", name));
+            siteDlgOpen = false;
+            siteEdLat = propView.bsLat;
+            siteEdLon = propView.bsLon;
+        }
+        ImVec2 vs = ImGui::GetMainViewport()->Size;
+        ImGui::SetNextWindowSize(ImVec2((std::min)(vs.x * 0.9f, 520.0f * style::uiScale), 0), ImGuiCond_Appearing);
+        ImGui::SetNextWindowPos(ImVec2(vs.x * 0.5f, vs.y * 0.4f), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        bool open = true;
+        if (ImGui::BeginPopupModal((std::string(ui_text::T("Cell site")) + "###_inst_site_dlg_" + name).c_str(), &open)) {
+            tw::TextDisabled("%s", ui_text::T("Position of the base station antenna, decimal degrees (north and east positive)."));
+            float fw = 160.0f * style::uiScale;
+            tw::Text("%s", ui_text::T("Latitude"));
+            ImGui::SameLine(110.0f * style::uiScale);
+            ImGui::SetNextItemWidth(fw);
+            ImGui::InputDouble(("##_site_lat_" + name).c_str(), &siteEdLat, 0.0, 0.0, "%.6f");
+            tw::Text("%s", ui_text::T("Longitude"));
+            ImGui::SameLine(110.0f * style::uiScale);
+            ImGui::SetNextItemWidth(fw);
+            ImGui::InputDouble(("##_site_lon_" + name).c_str(), &siteEdLon, 0.0, 0.0, "%.6f");
+            siteEdLat = std::clamp(siteEdLat, -90.0, 90.0);
+            siteEdLon = std::clamp(siteEdLon, -180.0, 180.0);
+            ImGui::Spacing();
+            if (ImGui::Button(ui_text::L("Set", "_site_set_" + name).c_str())) {
+                setSite(true, siteEdLat, siteEdLon);
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(ui_text::L("Pick on map", "_site_pick_" + name).c_str())) {
+                driveMap.picking = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (!propView.bsValid) { style::beginDisabled(); }
+            if (ImGui::Button(ui_text::L("Remove", "_site_rm_" + name).c_str())) {
+                setSite(false, propView.bsLat, propView.bsLon);
+                ImGui::CloseCurrentPopup();
+            }
+            if (!propView.bsValid) { style::endDisabled(); }
+            ImGui::SameLine();
+            if (ImGui::Button(ui_text::L("Close", "_site_close_" + name).c_str())) { ImGui::CloseCurrentPopup(); }
+            ImGui::EndPopup();
+        }
+    }
+
     void drawCellDetailsDialog() {
         if (cellDetailsOpen) { ImGui::OpenPopup(CONCAT("Cell details###_inst_cell_dlg_", name)); cellDetailsOpen = false; }
         ImVec2 vs = ImGui::GetMainViewport()->Size;
@@ -6216,6 +6411,18 @@ private:
     // trends, further carriers, burst analysis (v0.18)
     TetraTrendView trendView;
     FileSelect trendFile { "%ROOT%/tetra_logs", { "TETRA CSV logs", "*.csv" } };
+    FileSelect driveFile { "%ROOT%/tetra_logs", { "TETRA CSV logs", "*.csv" } };
+    // drive test map
+    DriveMapView driveMap;
+    std::vector<DrivePoint> drivePts;
+    uint64_t driveSeq = (uint64_t)-1;
+    bool driveLoaded = false;
+    std::string driveLoadedPath, driveLoadErr;
+    bool gpsDlgOpen = false, siteDlgOpen = false;
+    double siteEdLat = 0, siteEdLon = 0;
+    std::mutex driveReqMtx;
+    std::string driveLoadReq, driveSiteReq;
+    std::atomic<int> drivePtsShown { 0 };
     std::string trendFileError;
     std::mutex trendReqMtx;
     std::string trendLoadReq;   // debug: open this CSV log in the GUI thread

@@ -24,6 +24,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include "coverage_scale.h"
 #include "iso_time.h"
 
 #define STB_IMAGE_WRITE_STATIC
@@ -60,8 +61,18 @@ public:
         });
     }
 
-    // Synchronous core (public for tests)
-    std::string run(const std::string& csvPath, Metric metric, bool onlyLockedCell) {
+    // One sample with position from a measurement CSV
+    struct Row {
+        double lat = 0, lon = 0;
+        time_t t = 0;          // 0: no valid time stamp
+        std::string time;      // as in the CSV
+        double level = 0, mer = 0, ber = 0, crcPct = 0, dlHz = 0;
+        std::string berS, mcc, mnc, cc;
+        bool service = false;  // cell received (and matching the lock, if requested)
+    };
+
+    // Reads the samples with GPS fix of a measurement CSV; returns an error text or ""
+    static std::string readCsv(const std::string& csvPath, bool onlyLockedCell, std::vector<Row>& rows, bool& useDbm) {
         std::ifstream in(csvPath);
         if (!in) { return "Cannot read " + csvPath; }
 
@@ -84,8 +95,8 @@ public:
         int cCrcFail[4] = { col("crc_bsch_fail"), col("crc_sb2_fail"), col("crc_ndb_fail"), col("crc_schf_fail") };
         if (cLat < 0 || cLon < 0) { return "CSV has no position columns (log from v0.5.0 or newer needed)"; }
 
-        std::vector<Row> rows;
-        bool useDbm = false;
+        rows.clear();
+        useDbm = false;
         while (std::getline(in, line)) {
             auto f = split(line);
             auto get = [&](int c) { return (c >= 0 && c < (int)f.size()) ? f[c] : std::string(); };
@@ -117,6 +128,15 @@ public:
             rows.push_back(r);
         }
         if (rows.empty()) { return "No samples with GPS position in " + csvPath; }
+        return "";
+    }
+
+    // Synchronous core (public for tests)
+    std::string run(const std::string& csvPath, Metric metric, bool onlyLockedCell) {
+        std::vector<Row> rows;
+        bool useDbm = false;
+        std::string err = readCsv(csvPath, onlyLockedCell, rows, useDbm);
+        if (!err.empty()) { return err; }
 
         // Downsample very long drives so Google Earth / browsers stay responsive
         const size_t MAX_PTS = 20000;
@@ -138,6 +158,7 @@ public:
             p.lon = r.lon;
             p.v = value(r, metric);
             p.service = r.service;
+            if (p.service && std::isnan(p.v)) { continue; }
             char lb[256];
             snprintf(lb, sizeof(lb), "%s | Level %.1f %s | MER %.1f dB | BER %s | CRC errors %.1f %% | MCC %s MNC %s CC %s%s",
                      r.time.c_str(), r.level, useDbm ? "dBm" : "dBFS", r.mer, r.berS.c_str(), r.crcPct,
@@ -169,14 +190,6 @@ public:
     }
 
 private:
-    struct Row {
-        double lat = 0, lon = 0;
-        time_t t = 0;          // 0: no valid time stamp
-        std::string time;      // as in the CSV
-        double level = 0, mer = 0, ber = 0, crcPct = 0, dlHz = 0;
-        std::string berS, mcc, mnc, cc;
-        bool service = false;  // cell received (and matching the lock, if requested)
-    };
 
     struct Pt {
         double lat, lon;
@@ -185,64 +198,16 @@ private:
         std::string label;
     };
 
-    // Fixed scales so maps of different drives are comparable
-    struct Scale {
-        std::string name, unit, title, loText, hiText;
-        double lo = 0, hi = 1;
-        bool logScale = false;
-        bool steps = false;    // three colors only (quality)
-        double norm(double v) const {
-            double t;
-            if (logScale) {
-                double lv = std::log10((std::max)(v, 1e-7));
-                t = (lv - std::log10(lo)) / (std::log10(hi) - std::log10(lo));
-            }
-            else {
-                t = (v - lo) / (hi - lo);
-            }
-            return (std::min)(1.0, (std::max)(0.0, t));
-        }
-    };
-
-    Scale scaleFor(Metric m, bool useDbm) const {
-        Scale s;
-        if (m == METRIC_LEVEL) {
-            if (useDbm) { s.lo = -115; s.hi = -65; s.unit = "dBm"; }
-            else { s.lo = -95; s.hi = -45; s.unit = "dBFS"; }
-            s.name = "Level";
-            s.title = "Level (" + s.unit + ")";
-            s.loText = fmtNum(s.lo);
-            s.hiText = fmtNum(s.hi);
-        }
-        else if (m == METRIC_MER) {
-            s.lo = 5; s.hi = 30; s.unit = "dB"; s.name = "MER";
-            s.title = "MER (dB)";
-            s.loText = "5";
-            s.hiText = "30";
-        }
-        else if (m == METRIC_QUALITY) {
-            s.lo = 0; s.hi = 1; s.unit = "";
-            s.name = "Quality (CRC: red > " + fmtNum(10.0 * crcLimit) + " %, yellow, green <= " + fmtNum(crcLimit) + " %)";
-            s.title = "Quality (CRC errors)";
-            s.loText = "> " + fmtNum(10.0 * crcLimit) + " %";
-            s.hiText = "\xE2\x89\xA4 " + fmtNum(crcLimit) + " %";
-            s.steps = true;
-        }
-        else {
-            s.lo = 1e-1; s.hi = 1e-5; s.unit = ""; s.name = "BER"; s.logScale = true;
-            s.title = "BER";
-            s.loText = "1e-1";
-            s.hiText = "1e-5";
-        }
-        return s;
-    }
+    // Fixed scales so maps of different drives are comparable (coverage_scale.h)
+    using Scale = cov::Scale;
+    Scale scaleFor(Metric m, bool useDbm) const { return cov::scaleFor(m, useDbm, crcLimit); }
 
     double value(const Row& r, Metric m) const {
         switch (m) {
         case METRIC_LEVEL: return r.level;
         case METRIC_MER: return r.mer;
-        case METRIC_BER: return r.ber;
-        default: return r.crcPct <= crcLimit ? 1.0 : r.crcPct <= 10.0 * crcLimit ? 0.5 : 0.0;
+        case METRIC_BER: return (r.berS.empty() || r.ber < 0) ? NAN : r.ber;   // -1: not measured
+        default: return cov::quality(r.crcPct, crcLimit);
         }
     }
 
@@ -339,7 +304,9 @@ private:
             }
             for (auto& r : rows) {
                 if (!r.service) { continue; }
-                placemark(r, "s" + std::to_string((int)std::lround(s.norm(value(r, (Metric)m)) * BINS)));
+                double v = value(r, (Metric)m);
+                if (std::isnan(v)) { continue; }
+                placemark(r, "s" + std::to_string((int)std::lround(s.norm(v) * BINS)));
             }
             o += "</Folder>\n";
         }
@@ -605,13 +572,7 @@ private:
         return out;
     }
 
-    // red -> yellow -> green
-    static void ramp(double t, int& r, int& g, int& b) {
-        if (t < 0.5) { r = 230; g = (int)(40 + 400 * t); b = 40; }
-        else { r = (int)(230 - 400 * (t - 0.5)); g = 230; b = 40; }
-        r = (std::max)(0, (std::min)(255, r));
-        g = (std::max)(0, (std::min)(255, g));
-    }
+    static void ramp(double t, int& r, int& g, int& b) { cov::ramp(t, r, g, b); }
 
     static std::string xmlEscape(const std::string& s) {
         std::string o;

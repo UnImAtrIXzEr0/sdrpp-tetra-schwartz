@@ -137,6 +137,9 @@ def test_tetra_chain():
             return False
         ctx.sleep(1.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         # signal centre of the recording is about -3 kHz
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
@@ -375,6 +378,9 @@ def test_timing_multipath():
             return False
         ctx.sleep(1.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "0")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "100000")
@@ -451,6 +457,9 @@ def test_bursts():
             return False
         ctx.sleep(1.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "0")
         ctx.module_cmd("TETRA Analyzer", "set_bursts", "1")
@@ -531,6 +540,9 @@ def test_layout_stability():
                 return False
             ctx.sleep(2.0)
             ctx.module_cmd("File Source", "set_filename", rec)
+            # the GUI opens the new path again on its next frame (file source menu);
+            # starting from the HTTP thread at the same time races with it in the core
+            ctx.sleep(1.5)
             http_get(ctx.base_url, "/sdr/start")
             ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
             ctx.module_cmd("TETRA Analyzer", "set_layout", "1")   # tiles: Network & cell stays in the menu
@@ -604,6 +616,9 @@ def test_instrument_ui():
             return False
         ctx.sleep(2.0)
         ctx.module_cmd("File Source", "set_filename", rec)
+        # the GUI opens the new path again on its next frame (file source menu);
+        # starting from the HTTP thread at the same time races with it in the core
+        ctx.sleep(1.5)
         http_get(ctx.base_url, "/sdr/start")
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.sleep(6.0)
@@ -659,6 +674,20 @@ def test_instrument_ui():
         ctx.module_cmd("TETRA Analyzer", "inst", "rf 1")
         ctx.sleep(1.0)
         ctx.module_cmd("TETRA Analyzer", "inst", "rf 0")
+        # drive test map: a drive loaded from a CSV log is drawn
+        csv = os.path.join(tmpdir, "drive.csv")
+        with open(csv, "w") as f:
+            f.write("time;level_dbfs;mer_db;rx_state;ber;mcc;mnc;cc;dl_freq_hz;gps_fix;lat;lon\n")
+            for i in range(50):
+                f.write(f"2026-07-01T12:00:{i:02d}+02:00;{-50 - i};{25 - i * 0.3:.1f};2;1e-4;901;9999;1;438237500;1;{51.3 + i * 0.0004:.6f};{9.45 + i * 0.0002:.6f}\n")
+        ctx.module_cmd("TETRA Analyzer", "inst", "mode 2")
+        ctx.module_cmd("TETRA Analyzer", "inst", "drive " + csv)
+        ctx.module_cmd("TETRA Analyzer", "inst", "site 51.31 9.46")
+        ctx.sleep(1.5)
+        if st().get("drivePoints") != 50:
+            stats.test_fail("test_instrument_ui", f"drive map: {st().get('drivePoints')} points shown, expected 50")
+            return False
+        ctx.module_cmd("TETRA Analyzer", "inst", "mode 1")
         # switch to the classic layout and back (panels are removed and registered again)
         ctx.module_cmd("TETRA Analyzer", "inst", "ui 0")
         ctx.sleep(1.0)
@@ -681,7 +710,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, no SDR menu, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map, no SDR menu, classic and back")
     return True
 
 
@@ -769,6 +798,7 @@ def test_map_export():
     tmpdir = tempfile.mkdtemp(prefix="tetra_map_")
     exe = os.path.join(tmpdir, "test_map_export")
     r = subprocess.run([cxx, "-std=c++17", "-I" + d, "-I" + os.path.join(root, "core", "src"),
+                        "-I" + os.path.join(root, "core", "src", "imgui"),
                         os.path.join(here, "gen", "test_map_export.cpp"), "-o", exe],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -824,7 +854,7 @@ def test_map_export():
     if r.returncode != 0 or bad:
         stats.test_fail("test_map_export", "; ".join(bad) or "failed")
         return False
-    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs) correct")
+    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs), drive map geometry and track correct")
     return True
 
 
