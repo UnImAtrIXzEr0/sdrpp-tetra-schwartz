@@ -30,6 +30,7 @@
   <div class="l1"><a href="#s14">14 Alarms</a></div>
   <div class="l1"><a href="#s15">15 Measurement report</a></div>
   <div class="l1"><a href="#s16">16 GPS, coverage measurement and maps</a></div>
+  <div class="l2"><a href="#s16-1">Map of the drive test</a> · <a href="#s16-2">Map background</a> · <a href="#s16-3">Exporting maps</a></div>
   <div class="l1"><a href="#s17">17 Measurement scenarios</a></div>
   <div class="l1"><a href="#s18">18 Troubleshooting</a></div>
   <div class="l2"><a href="#s18-1">Checking USB and lost samples</a></div>
@@ -59,7 +60,7 @@
   <li><b>Burst analysis</b> of handhelds: ramps, length, ripple, time mask, ramp spectrum, noise on the uplink.</li>
   <li><b>Multipath</b>, <b>frequency stability</b> (Allan deviation) and <b>reception limit</b>.</li>
   <li><b>Long-term monitoring:</b> trends up to 24 h, CSV logs, alarms, measurement report.</li>
-  <li><b>Coverage measurement</b> with a GPS mouse and maps for Google Earth and OpenStreetMap.</li>
+  <li><b>Coverage measurement</b> with a GPS mouse: map of the drive in the program (optionally with a map background, also offline), export for Google Earth (KMZ/KML) and OpenStreetMap.</li>
   <li><b>Several carriers</b> compared at the same time.</li>
 </ul>
 </div>
@@ -182,7 +183,7 @@ sdrpp</pre></li>
   <li><b>Top bar:</b> start/stop of the SDR, volume and frequency display (mouse wheel or click on the digits). There is exactly one VFO, the TETRA VFO, and only normal tuning: a click into the waterfall puts the VFO onto that frequency, the centre of the SDR stays where it is. Therefore the VFO selector, <span class="ui">Lock</span>, the centre-tuning button (it would put the channel onto the DC spike in the middle of the band) and the SNR meter are not shown here; level and MER are in the status bar.</li>
   <li><b>Status bar</b> below it: the most important values at a glance (<a href="#s3-1">3.1</a>).</li>
   <li><b>Content column</b> on the far left, with a fixed width: what belongs to the mode – audio and compact cell data (Monitor), measured values with limits, short trends and last analysis results (Measure), large value tiles (Drive test), error components and procedure (Alignment). Its width follows the content in the chosen language and does not change while measuring.</li>
-  <li><b>Main view</b> in the middle: spectrum and waterfall or the chosen view (constellation, TX spectrum, burst, carriers, trends, multipath, drive test, alignment). The sliders <span class="ui">Zoom</span>, <span class="ui">Max</span> and <span class="ui">Min</span> are only shown while the waterfall is visible.</li>
+  <li><b>Main view</b> in the middle: spectrum and waterfall or the chosen view (constellation, TX spectrum, burst, carriers, trends, multipath, map of the drive test, alignment). The sliders <span class="ui">Zoom</span>, <span class="ui">Max</span> and <span class="ui">Min</span> are only shown while the waterfall is visible.</li>
   <li><b>Strip below the main view</b>, only in the mode Monitor: in amateur radio mode <span class="ui">Stations</span>, <span class="ui">Groups</span> and <span class="ui">Traffic</span> (<a href="#s8">chapter 8</a>), in ETSI mode network and cell (<a href="#s7">chapter 7</a>). Its height is set with the divider above it.</li>
   <li><b>Softkey column</b> on the right, as wide as its longest text in the chosen language: the four modes at the top, below them the views or softkeys of the mode, at the very bottom <span class="ui">RF / Gain</span> and <span class="ui">Settings</span>.</li>
   <li><b>Message line</b> at the bottom: notes and warnings, log state and clock on the right (<a href="#s3-1">3.1</a>).</li>
@@ -212,6 +213,7 @@ sdrpp</pre></li>
   <li>Measure and Alignment only: <b>SDR centre on the channel - move it ~100 kHz away</b> (yellow) when the TETRA VFO is less than 15 kHz from the centre of the SDR (<a href="#s4">chapter 4</a>).</li>
   <li>Measure and Alignment only: <b>All measured values within the limits</b> (green).</li>
   <li>Measure only: the topmost measured value of the content column that violates its limit, with value and limit (red).</li>
+  <li>For 15 s the result of <span class="ui">Export map</span> or <span class="ui">Save image</span> (green): <b>Map exported:</b> with the name of the KMZ file and “(+ .kml, .html)”, or <b>Image saved:</b> with the file name (<a href="#s16">chapter 16</a>).</li>
   <li>Otherwise <b>Ready</b>.</li>
 </ol>
 <p>On the right: <b>Log: running</b> (red) or <b>Log: off</b> and the clock.</p>
@@ -222,7 +224,7 @@ sdrpp</pre></li>
 <tr><th style="width:15%">Mode</th><th>Content column and main view</th><th style="width:36%">Softkeys</th></tr>
 <tr><td><span class="ui">Monitor</span></td><td>Left <b>Audio</b> (volume, <span class="ui">Listen to</span>, <span class="ui">Playing</span>, <a href="#s5">chapter 5</a>) and – built-in decoder only – <b>Cell (compact)</b>: <span class="ui">DL / UL</span>, <span class="ui">Carrier / LA</span>, <span class="ui">Timeslots</span>, <span class="ui">Security</span>, <span class="ui">Access</span> (minimum level, maximum transmit power of the radios), <span class="ui">Services</span> (green = offered). In the middle spectrum and waterfall, below it the strip.</td><td><span class="ui">Mute encrypted</span>, <span class="ui">Play anyway</span> (only shown while a call is muted because its encryption is unknown), <span class="ui">Cell details</span>, <span class="ui">Hide call control</span> (amateur radio mode only). <span class="ui">Cell details</span> and <span class="ui">Hide call control</span> only with the built-in decoder.</td></tr>
 <tr><td><span class="ui">Measure</span></td><td>Left <b>Measured values</b> with limits, <b>Trends (10 min)</b> and <b>Last analysis results</b> (<a href="#s6">chapter 6</a>). In the middle the chosen view.</td><td>Views (below) and <span class="ui">Reset statistics</span>, softkeys of the view, <span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>, <span class="ui">Create report</span>.</td></tr>
-<tr><td><span class="ui">Drive test</span></td><td>Left large value tiles (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">Decoder EVM</span>, <span class="ui">Freq. error</span>, <span class="ui">Stations</span>, <span class="ui">GPS</span>; the “i” button shows the explanation), below them position, speed/HDOP, cell lock and the log file. In the middle GPS and coverage map (<a href="#s16">chapter 16</a>).</td><td><span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>, <span class="ui">Lock cell</span> / <span class="ui">Unlock cell</span>, <span class="ui">Export map</span>, <span class="ui">Create report</span>.</td></tr>
+<tr><td><span class="ui">Drive test</span></td><td>Left large value tiles (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">Decoder EVM</span>, <span class="ui">Freq. error</span>, <span class="ui">Stations</span>, <span class="ui">GPS</span>; the “i” button shows the explanation), below them position, speed/HDOP, cell lock and the log file. In the middle the map of the drive (<a href="#s16">chapter 16</a>).</td><td><span class="ui">Start CSV log</span> / <span class="ui">Stop CSV log</span>, <span class="ui">Lock cell</span> / <span class="ui">Unlock cell</span>, <span class="ui">Export map</span>, <span class="ui">Load drive...</span>, <span class="ui">Save image</span>, <span class="ui">GPS...</span>, <span class="ui">Cell site...</span>, <span class="ui">Create report</span>.</td></tr>
 <tr><td><span class="ui">Alignment</span></td><td>Left <b>Error components</b> and <b>Procedure</b>, in the middle four large meters (see below).</td><td><span class="ui">Set reference</span>, <span class="ui">Delta to reference</span>, <span class="ui">Hold</span>, <span class="ui">Limits: base station</span> / <span class="ui">Limits: mobile station</span>.</td></tr>
 </table>
 
@@ -248,7 +250,15 @@ sdrpp</pre></li>
 <figure><img src="shots/inst_const_en.png" style="max-height:105mm"><figcaption>Fig. 4 – Mode <span class="ui">Measure</span>, view <span class="ui">Constellation</span>: measured values, short trends and last analysis results on the left.</figcaption></figure>
 
 <h3>Drive test</h3>
-<p><span class="ui">Lock cell</span> can only be used while the decoder is locked to a cell; afterwards the softkey reads <span class="ui">Unlock cell</span>. <span class="ui">Export map</span> can be used as soon as a CSV log is running or has run, and makes the maps from the current or last log (<a href="#s16">chapter 16</a>). The map value (<span class="ui">Map value</span>) and the GPS connection are in the main view.</p>
+<p>The main view shows the map of the drive; above it you choose the map value (<span class="ui">Level</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Quality</span>) and the map background (button <span class="ui">Map: …</span>). The softkeys:</p>
+<ul>
+  <li><span class="ui">Lock cell</span> can only be used while the decoder is locked to a cell; afterwards the softkey reads <span class="ui">Unlock cell</span>.</li>
+  <li><span class="ui">Export map</span> makes KMZ, KML and HTML map from the current or last CSV log, or from the file loaded with <span class="ui">Load drive...</span>. Usable as soon as a log is running or has run, or a drive is loaded.</li>
+  <li><span class="ui">Load drive...</span> shows a saved CSV log on the map.</li>
+  <li><span class="ui">Save image</span> saves the visible part of the map as PNG in the log folder.</li>
+  <li><span class="ui">GPS...</span> opens the window <span class="ui">GPS receiver</span> (port, baud rate, connect, state), <span class="ui">Cell site...</span> the window <span class="ui">Cell site</span> (position of the base station).</li>
+</ul>
+<p>Details in <a href="#s16">chapter 16</a>.</p>
 
 <h3>Alignment</h3>
 <p>This mode is meant for aligning a transmitter: you adjust something at the transmitter and see at once whether it gets better or worse. The main view shows four meters with limit and scale:</p>
@@ -291,8 +301,8 @@ sdrpp</pre></li>
 
 <h2 id="s3-4">Controls, themes, fonts</h2>
 <ul>
-  <li><b>On/off on the measuring surface:</b> softkeys with <b>: ON</b> / <b>: OFF</b> or <b>chips</b> – rounded switches, filled = on, outlined = off. Chips choose e.g. the curves of the trends (<span class="ui">Show:</span> <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>).</li>
-  <li><b>Either/or:</b> segmented buttons, the chosen one is highlighted: time span of the trends <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span>; <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span>; <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>; frequency of the burst analysis <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> | <span class="ui">TETRA VFO</span>; new entry of the priority list <span class="ui">Group</span> | <span class="ui">Station</span>.</li>
+  <li><b>On/off on the measuring surface:</b> softkeys with <b>: ON</b> / <b>: OFF</b> or <b>chips</b> – rounded switches, filled = on, outlined = off. Chips choose e.g. the curves of the trends (<span class="ui">Show:</span> <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>) or <span class="ui">Follow</span> on the map of the drive test.</li>
+  <li><b>Either/or:</b> segmented buttons, the chosen one is highlighted: map value of the drive test <span class="ui">Level</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Quality</span>; time span of the trends <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span>; <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span>; <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>; frequency of the burst analysis <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> | <span class="ui">TETRA VFO</span>; new entry of the priority list <span class="ui">Group</span> | <span class="ui">Station</span>.</li>
   <li><b>Tooltips:</b> almost every measured value explains itself when the mouse rests on it.</li>
   <li><b>Tables:</b> drag columns to move or resize them, right-click the header to show/hide columns. A click on a column header sorts ascending, a second one descending, a third one removes the sorting (arrow in the header). Cells stay on one line; text that is too long ends with “…”, the full text is in the tooltip. If the table is wider than its space, it can be scrolled sideways while the header row stays. The arrangement is saved.</li>
 </ul>
@@ -313,7 +323,7 @@ sdrpp</pre></li>
 <figure><img src="shots/classic.png" style="max-height:90mm"><figcaption>Fig. 7 – Classic layout with the menu column.</figcaption></figure>
 <ul>
   <li><b>Sections in the TETRA Analyzer:</b> drag them by the grip (six dots on the right of the header); a right-click on the header offers <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. The window icon left of the grip shows the section in its own, freely movable window (icon blue = window open); a second click brings it back. Position and size are saved.</li>
-  <li><b>Tile column:</b> <span class="ui">Layout...</span> next to ETSI/Amateur radio chooses a start assignment: <span class="ui">Measuring station</span> (constellation, measurements, trends; in amateur radio mode stations &amp; traffic as a strip below the waterfall), <span class="ui">Drive test</span> (GPS/map, measurements, trends) or <span class="ui">Classic (all in the menu)</span>. The drop-down in the header of each tile chooses its content (every section and <span class="ui">Values (large)</span>); <span class="ui">+ Tile</span> adds a tile, <span class="ui">x</span> closes it, <span class="ui">Reset</span> restores the preset. The dividers change the sizes; everything is kept over a restart.</li>
+  <li><b>Tile column:</b> <span class="ui">Layout...</span> next to ETSI/Amateur radio chooses a start assignment: <span class="ui">Measuring station</span> (constellation, measurements, trends; in amateur radio mode stations &amp; traffic as a strip below the waterfall), <span class="ui">Drive test</span> (section <span class="ui">GPS &amp; coverage map</span>, measurements, trends; the map of the drive test exists in the instrument view only) or <span class="ui">Classic (all in the menu)</span>. The drop-down in the header of each tile chooses its content (every section and <span class="ui">Values (large)</span>); <span class="ui">+ Tile</span> adds a tile, <span class="ui">x</span> closes it, <span class="ui">Reset</span> restores the preset. The dividers change the sizes; everything is kept over a restart.</li>
   <li><b>Display like an instrument:</b> the menu column can be resized; nothing is clipped and nothing jumps. If a value no longer fits into its line, it moves with its unit into a continuation line; lines that are not always broadcast keep their place.</li>
   <li><b>Touch mode:</b> <span class="ui">Display</span> → <span class="ui">Touch mode (larger controls)</span> enlarges the controls; dragging with a finger on a free spot scrolls. In the classic layout the tile column then becomes the touch view: the frequency large at the top with <span class="ui">−</span> / <span class="ui">+</span> buttons and a selectable step, below it one tile at full size and large tabs to switch. The touch mode has been checked with a mouse; feedback from real touch devices is welcome.</li>
   <li><b>Module Manager:</b> every module with the switches <span class="ui">Menu</span> (show in the menu column) and <span class="ui">On</span>; below it the built-in menus and, under <span class="ui">Sources in the source list</span>, further SDR types for the source list. The SDR in use always stays visible. In the instrument view it is under <span class="ui">Settings</span> → <span class="ui">Modules</span>.</li>
@@ -551,7 +561,7 @@ sdrpp</pre></li>
 <p>In amateur radio mode the program collects all subscribers and groups that appear in the unencrypted signalling of the cell. In the instrument view they are in the mode <span class="ui">Monitor</span> in the strip below the waterfall (height set with the divider above it), in the classic layout in the section <span class="ui">Stations &amp; Traffic</span>. There are three tabs; the number in the tab is the number of entries. The tables can be sorted, rearranged, shown and hidden as described in <a href="#s3-4">chapter 3.4</a>.</p>
 
 <h3>Name lists</h3>
-<p>The state of the name lists is shown under <span class="ui">Settings</span> → <span class="ui">Name lists</span> (classic layout: at the top of the section). Without name lists the strip shows <span class="ui">No name lists - Settings -&gt; Name lists</span>. <span class="ui">Download name lists</span> loads the users (7-digit ISSI) and repeaters (6-digit) from radioid.net and the names of the Brandmeister talk groups into the configuration folder. <span class="ui">Reload files</span> reads them again, e.g. after placing them there by hand without internet (file names in the tooltip and in <a href="#s19-1">appendix 19.1</a>).</p>
+<p>The state of the name lists is shown under <span class="ui">Settings</span> → <span class="ui">Name lists</span> (classic layout: at the top of the section). Without name lists the strip shows <span class="ui">No name lists - Settings -&gt; Name lists</span>. <span class="ui">Download name lists</span> loads the users (7-digit ISSI) and repeaters (6-digit) from radioid.net and the names of the Brandmeister talk groups into the configuration folder. They are fetched with the system's <code>curl</code> program (included in Windows 10 and 11, on Linux package <code>curl</code>); all downloads of the program (name lists, map tiles) identify themselves as <code>SDRPP-AIA/&lt;version&gt;</code> with the address of the project. <span class="ui">Reload files</span> reads them again, e.g. after placing them there by hand without internet (file names in the tooltip and in <a href="#s19-1">appendix 19.1</a>).</p>
 
 <h3>Colours and operation in all tables</h3>
 <ul>
@@ -753,51 +763,139 @@ sdrpp</pre></li>
 
 <!-- ============================================================ -->
 <h1 id="s16" class="pb"><span class="num">16</span>GPS, coverage measurement and maps</h1>
-<p>With a GPS mouse every second of the CSV log gets a position. From this, coverage maps with coloured measurement points and a heatmap are created. In the instrument view this is the mode <span class="ui">Drive test</span>: the main view holds the GPS connection, cell lock, map value and propagation diagram (classic layout: section <span class="ui">GPS &amp; coverage map</span>), the left column large value tiles, the right column the softkeys <span class="ui">Start CSV log</span>, <span class="ui">Lock cell</span>, <span class="ui">Export map</span> and <span class="ui">Create report</span>.</p>
+<p>With a GPS mouse every second of the measurement gets a position. In the instrument view this is the mode <span class="ui">Drive test</span>: the main view holds the map of the drive, the left column large value tiles, the right column the softkeys <span class="ui">Start CSV log</span>, <span class="ui">Lock cell</span>, <span class="ui">Export map</span>, <span class="ui">Load drive...</span>, <span class="ui">Save image</span>, <span class="ui">GPS...</span>, <span class="ui">Cell site...</span> and <span class="ui">Create report</span>. From the CSV log, maps for Google Earth (KMZ/KML) and the browser (OpenStreetMap) are made. Instead of the map, the classic layout has the section <span class="ui">GPS &amp; coverage map</span> (GPS connection, cell lock, <span class="ui">Map value</span>, <span class="ui">Export map (KMZ + OSM)</span>, propagation diagram).</p>
 <figure>
 <svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <g>
-  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 Connect GPS</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">NMEA, port, baud rate</text>
+  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 Connect GPS</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">softkey GPS...</text>
   <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Lock the cell</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">softkey Lock cell</text>
   <rect x="355" y="20" width="150" height="70" rx="9" fill="#1d6fb8"/><text x="430" y="50" fill="#fff" text-anchor="middle" font-weight="700">3 Start the log</text><text x="430" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Start CSV log, drive</text>
   <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Export</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Export map</text>
-  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 View</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">browser / Google Earth</text>
+  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 View</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">Google Earth / browser</text>
   </g>
   <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
 </svg>
-<figcaption>Fig. 19 – Steps of a coverage measurement.</figcaption></figure>
+<figcaption>Fig. 19 – Steps of a coverage measurement. The map of the drive in the main view is made along the way.</figcaption></figure>
 
 <h2>Connecting the GPS mouse</h2>
 <ol class="steps">
   <li>Connect the GPS mouse (USB or serial, NMEA output). On Windows it appears as a COM port, on Linux usually as <code>/dev/ttyACM0</code> or <code>/dev/ttyUSB0</code> (add the user to the <code>dialout</code> group).</li>
-  <li>In the main view of the drive test choose the port (<span class="ui">Rescan</span> refreshes the list), set the baud rate (usually 4800 or 9600) and press <span class="ui">Connect</span>.</li>
-  <li>Wait until position, number of satellites and HDOP are shown. With “Waiting for NMEA data”, port or baud rate are wrong.</li>
+  <li>Softkey <span class="ui">GPS...</span>: in the window <span class="ui">GPS receiver</span> choose the port (<span class="ui">Rescan</span> refreshes the list), set the baud rate (<span class="ui">Baud</span>, usually 4800 or 9600) and press <span class="ui">Connect</span>; <span class="ui">Disconnect</span> disconnects. <span class="ui">Close</span> closes the window. In the classic layout the same controls are in the section <span class="ui">GPS &amp; coverage map</span>.</li>
+  <li>Wait until position, number of satellites, HDOP and speed are shown. With “Waiting for NMEA data”, port or baud rate are wrong; “No GPS fix yet” means: data arrive, but no position yet. The status bar shows <b>GPS</b> “fix, n sat” on the right.</li>
 </ol>
-<h2>Measurement drive</h2>
-<ol class="steps">
-  <li>Let the decoder lock onto the desired cell and press the softkey <span class="ui">Lock cell</span> (or <span class="ui">Lock current cell</span> in the main view): seconds in which another cell or no cell is received then count as “no service”. The locked cell is then shown under <span class="ui">Cell lock</span> (green = received, red = not); <span class="ui">Unlock cell</span> removes the lock.</li>
-  <li>Calibrate the level if possible (<span class="ui">Level cal.</span>, <a href="#s4-4">chapter 4.4</a>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
-  <li><span class="ui">Start CSV log</span> and drive off. Antenna firmly on the roof, same set-up as on earlier drives.</li>
-  <li>After the drive, <span class="ui">Stop CSV log</span>.</li>
-</ol>
-<h2>Creating maps</h2>
-<p><span class="ui">Map value</span> selects the colour scale: <b>Level</b> (−115…−65 dBm or −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> or <b>Quality (CRC)</b> – green up to the CRC limit from chapter 10, yellow up to ten times that, red above; black = no service. The softkey <span class="ui">Export map</span> (classic layout: <span class="ui">Export map (KML + OSM)</span>) writes two files next to the current or last log:</p>
+<p>Port and baud rate are saved; if the GPS was connected when the program was closed, it connects again at the next start.</p>
+
+<h2 id="s16-1">Map of the drive test</h2>
+<p>In the background the program records a point with the measured values for every second with a GPS fix – independent of the CSV log and of the chosen mode, up to 24 hours (after that the oldest points are dropped). This track is kept in memory only and starts empty after a restart; for a permanent record let the CSV log run. The main view of the drive test shows it as a map.</p>
+<figure><img src="shots/inst_drivemap_en.png" style="max-height:100mm"><figcaption>Fig. 20 – Mode <span class="ui">Drive test</span> with the map of a loaded drive, map value <span class="ui">Level</span>, cell site with distance rings, no map background (synthetic example drive).</figcaption></figure>
+<table>
+<tr><th style="width:26%">Header</th><th>Meaning</th></tr>
+<tr><td><span class="ui">Level</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Quality</span></td><td>Map value. It also applies to <span class="ui">Save image</span> and decides which folder is visible in the export; it is saved.</td></tr>
+<tr><td>“n points”</td><td>Number of points; for a loaded drive preceded by the file name. Red next to it: error while loading. Yellow <span class="ui">Map: offline</span>: map tiles cannot be loaded at the moment.</td></tr>
+<tr><td><span class="ui">Map: …</span></td><td>Shows the map background and opens its menu (see below). Default: <span class="ui">Map: Off</span>.</td></tr>
+<tr><td><span class="ui">Fit</span></td><td>Fits the whole drive with the current position into the view and switches <span class="ui">Follow</span> off.</td></tr>
+<tr><td><span class="ui">Follow</span></td><td>Chip: keeps the current GPS position in the centre. With a loaded drive usable only with GPS connected.</td></tr>
+<tr><td><span class="ui">Clear</span> / <span class="ui">Live</span></td><td><span class="ui">Clear</span> deletes the recorded track (not the CSV log). With a loaded drive the button reads <span class="ui">Live</span>: back to the running recording.</td></tr>
+</table>
+<p><b>Operation:</b> The <b>mouse wheel</b> zooms around the mouse position, with <span class="ui">Follow</span> around the current position (0.2 m to 20 km per pixel). <b>Dragging</b> with the left mouse button moves the map and switches <span class="ui">Follow</span> off. A <b>double click</b> fits the whole drive like <span class="ui">Fit</span>. With the mouse on a point, a tooltip shows all values of that second: <span class="ui">Time</span>, <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">BER</span> (if measured), <span class="ui">CRC errors</span>, <span class="ui">Cell</span> (MCC, MNC, CC), <span class="ui">Downlink</span>, <span class="ui">Service</span> (yes/no) and – with the cell site set – <span class="ui">Distance to cell site</span>.</p>
+<p><b>Colours:</b> The points go from red (poor) through yellow to green (good). The scales are fixed so that drives are comparable, and the same as in the export:</p>
+<table class="plain nobreak">
+<tr><th style="width:26%">Map value</th><th>red … green</th></tr>
+<tr><td>Level</td><td>−115 … −65 dBm with level calibration, otherwise −95 … −45 dBFS</td></tr>
+<tr><td>MER</td><td>5 … 30 dB</td></tr>
+<tr><td>BER</td><td>1·10⁻¹ … 1·10⁻⁵, logarithmic; seconds without a BER value are not drawn</td></tr>
+<tr><td>Quality</td><td>three steps by the share of CRC errors in the second: green up to the <span class="ui">CRC limit</span> (<a href="#s10">chapter 10</a>, default 1 %), yellow up to ten times that, red above</td></tr>
+<tr><td>no service</td><td>black with a light rim: the decoder was not locked or, with a locked cell, received another cell</td></tr>
+</table>
+<ul>
+  <li><b>Many points:</b> if several points fall on the same spot when zoomed out (3 pixels), only the newest one is drawn.</li>
+  <li><b>Current position</b> (GPS with fix): white arrow in the direction of travel, below 3 km/h a white circle.</li>
+  <li><b>Cell site</b> of the base station (see below): mast symbol labelled <span class="ui">Cell site</span> above the track, distance rings in 1-2-5 steps with labels below it.</li>
+  <li><b>Scale bar</b> at the bottom right, <b>north arrow</b> at the top right (north is always up), <b>legend</b> at the bottom left (map value, colour bar with the end values, <span class="ui">no service</span>). Without a map background a <b>grid</b> in 1-2-5 metre steps lies under the track.</li>
+  <li>Without points, position and cell site the centre reads: <span class="ui">No GPS samples yet - connect the GPS receiver (softkey GPS...).</span></li>
+</ul>
+
+<h3>Cell site of the base station</h3>
+<p>Softkey <span class="ui">Cell site...</span> opens the window <span class="ui">Cell site</span>: enter the position of the base station antenna in decimal degrees (north and east positive) under <span class="ui">Latitude</span> and <span class="ui">Longitude</span> and press <span class="ui">Set</span>. <span class="ui">Pick on map</span> closes the window; the next click into the map sets the cell site (hint at the top of the map; right click or Esc cancels). <span class="ui">Remove</span> deletes it. The cell site is saved and is the same as in the propagation diagram of the classic layout.</p>
+
+<h2 id="s16-2">Map background</h2>
+<p>The button <span class="ui">Map: …</span> opens the menu: <span class="ui">Off</span> (default: grid only), below it under <span class="ui">Online (only the tiles in view, cached 30 days)</span> the map services, under <span class="ui">Saved maps (offline)</span> your own saved maps and at the bottom <span class="ui">Saved maps...</span> (see below). The choice is saved.</p>
+<table class="nobreak">
+<tr><th style="width:21%">Map</th><th>Area and detail</th><th style="width:27%">Terms</th></tr>
+<tr><td><span class="ui">OpenStreetMap</span></td><td>worldwide, road map, up to zoom level 19.</td><td>© OpenStreetMap contributors (ODbL). May not be saved (tile usage policy of the tile servers).</td></tr>
+<tr><td><span class="ui">TopPlusOpen</span> (BKG)</td><td>world zoom levels 0–13, Europe 14–16, Germany 17–18; outside Germany mostly OpenStreetMap data.</td><td>© BKG, Data licence Germany – attribution 2.0; saving allowed.</td></tr>
+<tr><td><span class="ui">basemap.de</span> (BKG)</td><td>Germany only, up to zoom level 18.</td><td>© GeoBasis-DE / BKG, CC BY 4.0; saving allowed.</td></tr>
+<tr><td><span class="ui">Satellite (Sentinel-2)</span></td><td>worldwide, cloud-free satellite image Sentinel-2 cloudless 2024 (EOX), 10 m resolution, up to zoom level 14; closer in it is enlarged.</td><td>CC BY-NC-SA 4.0 (data from 2018): non-commercial use only; saving allowed.</td></tr>
+</table>
+<ul>
+  <li><b>What is loaded:</b> only the tiles of the visible area, the central ones first – no prefetching, as the tile usage policy of OpenStreetMap requires. The program loads over a single connection with <code>curl</code> (<a href="#s8">chapter 8</a>) and identifies itself as <code>SDRPP-AIA/&lt;version&gt;</code> with the address of the project. While a tile is still missing, the next coarser one is shown enlarged in its place.</li>
+  <li><b>Cache:</b> folder <code>map_cache</code> in the configuration folder, one subfolder per map service. Tiles older than 30 days are loaded again; above 500 MB the oldest are deleted.</li>
+  <li><b>Offline:</b> if the downloads fail, the header shows <span class="ui">Map: offline</span> in yellow. Tiles from the cache are still shown; the program retries failed tiles after 60 s, then at growing intervals up to 1 h. For areas without network save a map beforehand.</li>
+  <li><b>Attribution:</b> the attribution of the map service is always shown at the bottom right of the map (above the scale bar) and is written into the picture by <span class="ui">Save image</span>. Observe the terms of the service when passing pictures on.</li>
+  <li>The tiles are drawn slightly translucent over the background so that the points stay clear; the grid is left out.</li>
+</ul>
+
+<h3>Saved maps (offline)</h3>
+<p>For drives without network an area can be saved beforehand: menu <span class="ui">Map: …</span> → <span class="ui">Saved maps...</span> opens the window <span class="ui">Saved maps</span>.</p>
 <div class="cols">
 <div>
+<ol class="steps">
+  <li>Under <span class="ui">Create a map</span> enter a <span class="ui">Name</span> (default “Map” with the date) and choose the source under <span class="ui">Map</span>: <span class="ui">TopPlusOpen</span>, <span class="ui">basemap.de</span> or <span class="ui">Satellite (Sentinel-2)</span>. OpenStreetMap is not offered – its tile usage policy forbids saving.</li>
+  <li><span class="ui">Centre</span>: <span class="ui">GPS position</span> (needs a fix, otherwise “no GPS fix”), <span class="ui">Map centre</span> (centre of the map of the drive test) or <span class="ui">Coordinates</span> (latitude, longitude in decimal degrees).</li>
+  <li><span class="ui">Area</span>: <span class="ui">Radius</span> in km or <span class="ui">Width x height</span> in km.</li>
+  <li><span class="ui">Detail</span>: zoom level of the finest level, from 8 up to the highest level of the source, with the resolution in metres per pixel (e.g. “15 (3.1 m/pixel)”). Six coarser overview levels are added.</li>
+  <li>Before loading, the line below shows the number of tiles, the estimated size and the zoom range, e.g. “944 tiles, about 19 MB, zoom 9-15” for a 10 km radius and detail 15 in central Europe. More than 30 000 tiles are not possible (“too many: smaller area or less detail”).</li>
+  <li><span class="ui">Create</span> loads the tiles one after the other over one connection, with a progress bar; what fails in the first pass is tried once more at the end. <span class="ui">Cancel</span> stops and deletes the unfinished map. Afterwards “Saved: n tiles.” is shown, if applicable with the number of tiles that could not be loaded.</li>
+</ol>
+</div>
+<div><figure><img src="shots/inst_savedmaps_en.png"><figcaption>Fig. 21 – Window <span class="ui">Saved maps</span>.</figcaption></figure></div>
+</div>
+<p>Each map is kept in its own folder <code>maps/&lt;name&gt;</code> in the configuration folder: the tiles as <code>z/x/y</code> files and <code>map.json</code> with source, area, zoom levels and the attribution including the date of saving. The folder name is made from the name (letters A–Z, digits, <code>-</code>, <code>_</code> and <code>.</code>; spaces become <code>_</code>, other characters such as umlauts are dropped); a name whose folder exists already is refused. Under <span class="ui">Saved maps</span> all maps are listed with source, number of tiles, size and date; <span class="ui">Show</span> chooses the map as background and shows its area, <span class="ui">Delete</span> and then <span class="ui">Really delete?</span> removes it. In the menu <span class="ui">Map: …</span> the maps appear under <span class="ui">Saved maps (offline)</span>; choosing one there also shows the area of the map. A saved map needs no network. Outside its area the background stays empty; closer in than the detail level it is enlarged, zoomed out far beyond the coarsest level the map is hidden.</p>
+
+<h2>Measurement drive</h2>
+<ol class="steps">
+  <li>Connect GPS (softkey <span class="ui">GPS...</span>) and set the <span class="ui">Cell site</span> of the base station, if known.</li>
+  <li>Let the decoder lock onto the desired cell and press the softkey <span class="ui">Lock cell</span>: seconds in which another cell or no cell is received then count as “no service”. The locked cell is then shown in the content column under <span class="ui">Cell lock</span> (green = received, red = not); <span class="ui">Unlock cell</span> removes the lock.</li>
+  <li>Calibrate the level if possible (<span class="ui">Level cal.</span>, <a href="#s4-4">chapter 4.4</a>) and switch <span class="ui">Auto RF gain</span> off for comparable values, or evaluate the level in dBm.</li>
+  <li><span class="ui">Start CSV log</span> and drive off. Antenna firmly on the roof, same set-up as on earlier drives. The map shows the drive as it goes.</li>
+  <li>After the drive, <span class="ui">Stop CSV log</span>.</li>
+</ol>
+<h3>Loading a drive</h3>
+<p><span class="ui">Load drive...</span> shows a saved CSV log on the map – all seconds with a GPS fix, read as for the export. The header shows file name and number of points, <span class="ui">Follow</span> is switched off and the drive is fitted into the view. <span class="ui">Export map</span> and <span class="ui">Save image</span> then refer to this file. <span class="ui">Live</span> returns to the running recording. If a cell lock is active while loading, seconds in which the recording received another cell than the one locked at that time count as “no service”.</p>
+
+<h2 id="s16-3">Exporting maps</h2>
+<p>The softkey <span class="ui">Export map</span> (classic layout: <span class="ui">Export map (KMZ + OSM)</span>) writes three files next to the CSV log (current or last log, or the loaded drive), e.g. for <code>tetra_20261109_073200.csv</code>:</p>
+<table class="plain">
+<tr><th style="width:36%">File</th><th>Content</th></tr>
+<tr><td><code>tetra_20261109_073200.kmz</code></td><td>For Google Earth; works without internet (point symbol and legends are included).</td></tr>
+<tr><td><code>tetra_20261109_073200.kml</code></td><td>The same data as text; Google Earth loads the point symbol from the internet, legends are missing.</td></tr>
+<tr><td><code>tetra_20261109_073200_level_map.html</code></td><td>Map for the browser with the chosen map value (<code>_level</code>, <code>_mer</code>, <code>_ber</code> or <code>_quality</code>).</td></tr>
+</table>
+<p>Afterwards the message line shows “Map exported: …” for 15 s, unless a more important message is pending. Drives with more than 20 000 points are thinned out evenly for the export. If a cell lock is active during the export, “no service” is decided as when loading a drive.</p>
+<div class="cols">
+<div>
+<h3>In Google Earth (KMZ/KML)</h3>
+<p>Open the KMZ file in Google Earth (Google Earth Pro: <i>File → Open</i>; web: <i>Projects → Import KML file</i>). The document name gives cell, downlink frequency and date, e.g. “TETRA coverage - MCC 901 MNC 9999 CC 1, 439.1000 MHz, 2026-11-09” (the cell received most often). It contains:</p>
+<ul>
+  <li>one folder per map value – <i>Level (dBm)</i> or <i>Level (dBFS)</i>, <i>MER (dB)</i>, <i>BER</i>, <i>Quality (CRC errors)</i> – with coloured points on the same scales as on the screen and (KMZ) its legend; the map value chosen at export is visible, the others are switched on with their check box. Seconds without a BER value are left out of the folder <i>BER</i>.</li>
+  <li><i>No service</i> – the points without service (black),</li>
+  <li><i>Route</i> – the route driven as a line.</li>
+</ul>
+<p>Every point carries its time (UTC); Google Earth therefore shows a time slider with which the drive can be played back. A click on a point shows all values: time, level, MER, BER, CRC errors, cell, downlink and service.</p>
 <h3>In the browser (OpenStreetMap)</h3>
 <p>Open <code>…_level_map.html</code> with a double-click (internet connection needed for the map tiles). At the top right the layers <i>Points</i>, <i>Heatmap</i> and <i>No service only</i> can be switched; a click on a point shows time, level, MER, BER and CRC errors.</p>
-<h3>In Google Earth</h3>
-<p>Open <code>…_level.kml</code> in Google Earth (desktop, or web: <i>Projects → Import KML file</i>). Every point is coloured, the description contains the measured values. In Google Earth Pro the file can be combined with elevation profile and terrain.</p>
-<h3>Propagation diagram (from v0.22.2)</h3>
-<p>In the main view of the drive test under <span class="ui">Propagation diagram</span> enter the position of the base station (decimal degrees) or press <span class="ui">Use GPS position</span> next to it. While driving (GPS connected) the program takes 20 level values per second and forms a power average every 50 m travelled: the fast fading (half a wavelength, 35 cm) averages out, the local mean with the shadowing by terrain and buildings remains (Lee: 20–40 wavelengths are enough, 50 m are about 70 at 430 MHz). Standing still does not close a point. The polar plot shows the points around the base station (centre, north up) by distance and bearing; the scale follows the farthest point, the colour scale the smallest and largest value (<span class="ui">Level</span> or <span class="ui">MER</span>). With a locked cell only values of that cell count. The circle marks the current position; a tooltip shows distance, bearing, level and MER of the point under the mouse.</p>
-<h3>Own evaluations</h3>
-<p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route.</p>
 </div>
 <div>
-<figure><img src="shots/map_level.png"><figcaption>Fig. 20 – Coverage map “Level” with heatmap (synthetic example drive).</figcaption></figure>
-<figure><img src="shots/map_quality.png"><figcaption>Fig. 21 – Map “Quality (CRC)” of the same drive.</figcaption></figure>
+<figure><img src="shots/map_level.png"><figcaption>Fig. 22 – HTML map “Level” with heatmap (synthetic example drive).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Fig. 23 – HTML map “Quality (CRC)” of the same drive.</figcaption></figure>
 </div>
 </div>
+<h3>Save image</h3>
+<p><span class="ui">Save image</span> writes the visible part of the map as PNG file <code>drive_map_&lt;date&gt;T&lt;time&gt;.png</code> (e.g. <code>drive_map_2026-11-09T07-32-00.png</code>) into the log folder – at twice the screen resolution (at most 4000 pixels per side), with map background, points, cell site with rings, legend, scale bar, north arrow, a title line (map value, date and time, for a loaded drive the file name) and the burned-in attribution of the map. The tiles used are those already in the cache or in the saved map. The labels in the image are in English. Afterwards the message line shows “Image saved: …” for 15 s. While an export or an image is being written, <span class="ui">Export map</span> and <span class="ui">Save image</span> are disabled.</p>
+<h3>Propagation diagram (classic layout)</h3>
+<p>In the classic layout the section <span class="ui">GPS &amp; coverage map</span> has a polar plot under <span class="ui">Propagation diagram</span>. The position of the base station is the same as under <span class="ui">Cell site...</span>; in the diagram itself it can also be entered (decimal degrees) or taken over with <span class="ui">Use GPS position</span>. While driving (GPS connected) the program takes 20 level values per second and forms a power average every 50 m travelled: the fast fading (half a wavelength, 35 cm) averages out, the local mean with the shadowing by terrain and buildings remains (Lee: 20–40 wavelengths are enough, 50 m are about 70 at 430 MHz). Standing still does not close a point. The polar plot shows the points around the base station (centre, north up) by distance and bearing; the scale follows the farthest point, the colour scale the smallest and largest value (<span class="ui">Level</span> or <span class="ui">MER</span>). With a locked cell only values of that cell count. The circle marks the current position; a tooltip shows distance, bearing, level and MER of the point under the mouse.</p>
+<h3>Own evaluations</h3>
+<p>The CSV log (columns <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) can be opened directly in QGIS (<i>Delimited text</i>, separator semicolon) or a spreadsheet, e.g. for your own heatmaps or profiles along a route. The time column contains the UTC offset (<a href="#s19-2">appendix 19.2</a>).</p>
 <div class="box"><b class="t">Good heatmaps</b>Drive slowly or cover the same route several times – every second is one point. At high speed the points are far apart. Do not mix measurements with different antennas or gain.</div>
 
 <!-- ============================================================ -->
@@ -819,7 +917,7 @@ sdrpp</pre></li>
 <div class="meta">Goal: frequency error in ppb and stability · requires a GPS-disciplined SDR (e.g. Pluto+ with 10 MHz)</div>
 <ol class="steps">
   <li>Connect the SDR to the reference, warm up for at least 15 minutes.</li>
-  <li>Set the frequency reference to “External 10 MHz” (<span class="ui">Frequency reference</span>, currently in the classic layout only, <a href="#s3-3">3.3</a>), then watch <span class="ui">Carrier error</span> in the mode Measure (target: ±200 ppb according to ETSI).</li>
+  <li>Set the frequency reference to “External 10 MHz” (<span class="ui">Frequency reference</span> under <span class="ui">Settings</span> → <span class="ui">SDR &amp; calibration</span> → <span class="ui">Calibration &amp; reference</span>, <a href="#s3-3">3.3</a>), then watch <span class="ui">Carrier error</span> in the mode Measure (target: ±200 ppb according to ETSI).</li>
   <li>View <span class="ui">Trends</span> → tab <span class="ui">Frequency stability</span>: let it run for at least one hour; read the Allan deviation.</li>
   <li>If required, let the measurement run overnight (CSV log) and open the log later.</li>
 </ol></div>
@@ -827,10 +925,10 @@ sdrpp</pre></li>
 <div class="scen"><h3>C · Coverage measurement with heatmap</h3>
 <div class="meta">Goal: coverage map and practical reception limit</div>
 <ol class="steps">
-  <li>Calibrate the level (dBm), Auto RF gain off; mode <span class="ui">Drive test</span>: connect GPS, lock the cell (chapter 16).</li>
-  <li>Start the CSV log, drive through the area – also to the edge of the coverage.</li>
+  <li>Calibrate the level (dBm), Auto RF gain off; mode <span class="ui">Drive test</span>: connect GPS (<span class="ui">GPS...</span>), set the cell site (<span class="ui">Cell site...</span>), lock the cell (chapter 16). On the road without network: save a map of the area beforehand (<span class="ui">Saved maps...</span>).</li>
+  <li>Start the CSV log, drive through the area – also to the edge of the coverage. The map of the drive test shows where you have already measured.</li>
   <li>Load the log in the view <span class="ui">Trends</span> with <span class="ui">Open log...</span> → tab <span class="ui">Level vs. quality</span>: read the reception limit and set the <span class="ui">CRC limit</span> accordingly.</li>
-  <li>Export and compare the <b>Level</b> and <b>Quality (CRC)</b> maps; measure gaps (black) again specifically.</li>
+  <li>In the drive test open the drive with <span class="ui">Load drive...</span>, compare the map values <span class="ui">Level</span> and <span class="ui">Quality</span> and <span class="ui">Export map</span>: the KMZ file contains all map values as folders. Measure gaps (black) again specifically.</li>
 </ol></div>
 
 <div class="scen"><h3>D · Long-term monitoring of a repeater</h3>
@@ -894,6 +992,11 @@ sdrpp</pre></li>
 <tr><td>Pluto shows up as a drive but not in the source list</td><td>udev rule missing (chapter 2.3); then <span class="ui">Refresh</span> (under <span class="ui">RF / Gain</span>).</td></tr>
 <tr><td>“Last analysis results” shows “not measured yet”</td><td>TX, burst and multipath analysis run only in their view; choose the view once.</td></tr>
 <tr><td>Back from the classic layout</td><td><span class="ui">Layout...</span> → <span class="ui">Instrument view</span> (<a href="#s3-5">chapter 3.5</a>).</td></tr>
+<tr><td>Map of the drive test stays empty</td><td>Without a GPS fix no points are recorded: connect GPS (<span class="ui">GPS...</span>), the status bar shows “fix, n sat”. After a restart the track starts empty; open earlier drives with <span class="ui">Load drive...</span>. <span class="ui">Fit</span> brings the drive back into view.</td></tr>
+<tr><td><span class="ui">Map: offline</span>, no map background</td><td>No internet or the map service cannot be reached; cached tiles are still shown, the program tries again later. On Linux <code>curl</code> must be installed. For areas without network save a map beforehand. <span class="ui">basemap.de</span> covers Germany only.</td></tr>
+<tr><td>Saved map: “too many: smaller area or less detail”</td><td>More than 30 000 tiles: reduce the radius or width × height, or choose a lower detail level (each level more roughly quadruples the number). With “A saved map with this name exists already.” choose another name. <span class="ui">Create</span> is disabled with <span class="ui">GPS position</span> and no GPS fix.</td></tr>
+<tr><td>Google Earth shows only part of the points</td><td>The time slider shows only the chosen time range: drag both ends of the slider fully outwards. Also only the folder of the map value chosen at export is switched on; switch the other folders on with their check boxes.</td></tr>
+<tr><td>Times in maps shifted by hours</td><td>Logs up to v0.24.0 contain local time without UTC offset; the program reads them as local time of the computer the export runs on. Export such logs on a computer in the time zone of the measurement.</td></tr>
 </table>
 
 <h2 id="s18-1">Checking USB and lost samples</h2>
@@ -918,13 +1021,15 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 <tr><td><code>tetra_duplex_ham.json</code></td><td>duplex tables (amateur radio)</td></tr>
 <tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>name lists</td></tr>
 <tr><td><code>imgui_layout.ini</code></td><td>window positions and table columns</td></tr>
-<tr><td>log folder</td><td>CSV logs, maps, reports; set under <span class="ui">Settings</span> → <span class="ui">Logging &amp; report</span>. Default on Linux: <code>Documents/SDRPP-AIA</code> in the home folder (folder from <code>XDG_DOCUMENTS_DIR</code>, otherwise <code>~/Documents</code>), on Windows and macOS <code>tetra_logs</code> in the configuration folder. After an update the log folder set before stays in force (it is part of the settings taken over); existing logs stay where they are.</td></tr>
+<tr><td><code>map_cache/</code></td><td>cache of the map tiles (in the configuration folder), one subfolder per map service; 30 days, at most 500 MB. May be deleted.</td></tr>
+<tr><td><code>maps/&lt;name&gt;/</code></td><td>saved maps (in the configuration folder): tiles <code>z/x/y</code> and <code>map.json</code>.</td></tr>
+<tr><td>log folder</td><td>CSV logs (<code>tetra_&lt;date&gt;_&lt;time&gt;.csv</code> with companion files), exported maps (<code>.kmz</code>, <code>.kml</code>, <code>_map.html</code> next to the log), map images (<code>drive_map_&lt;time&gt;.png</code>), reports; set under <span class="ui">Settings</span> → <span class="ui">Logging &amp; report</span>. Default on Linux: <code>Documents/SDRPP-AIA</code> in the home folder (folder from <code>XDG_DOCUMENTS_DIR</code>, otherwise <code>~/Documents</code>), on Windows and macOS <code>tetra_logs</code> in the configuration folder. After an update the log folder set before stays in force (it is part of the settings taken over); existing logs stay where they are.</td></tr>
 </table>
 <h2 id="s19-2">CSV log</h2>
-<p>One line per second, separator semicolon. Companion files: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>.</p>
+<p>One line per second, separator semicolon. Companion files: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>. From v0.25.0 the time column <code>time</code> of all these files holds the local time in ISO 8601 <b>with UTC offset</b>, e.g. <code>2026-11-09T07:32:00+01:00</code>, so that programs in other time zones (Google Earth, spreadsheets) place the values correctly. Logs up to v0.24.0 (without offset) are still read as local time of this computer – in the trends, by the map export and by <span class="ui">Load drive...</span>.</p>
 <table class="plain">
 <tr><th style="width:36%">Columns</th><th>Content</th></tr>
-<tr><td><code>time</code></td><td>local time ISO 8601</td></tr>
+<tr><td><code>time</code></td><td>local time ISO 8601 with UTC offset</td></tr>
 <tr><td><code>level_dbfs</code>, <code>level_dbm</code></td><td>level; dBm only with calibration</td></tr>
 <tr><td><code>mer_db</code>, <code>evm_rms_pct</code>, <code>evm_peak_pct</code></td><td>modulation quality</td></tr>
 <tr><td><code>carrier_offset_hz</code>, <code>carrier_ppm</code>, <code>ref_freq_hz</code>, <code>symbol_rate_ppm</code></td><td>frequency and clock</td></tr>
@@ -945,6 +1050,7 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 <tr><td><b>dBc / dBFS / dBm</b></td><td>relative to the carrier / to full scale / to 1 mW.</td></tr>
 <tr><td><b>EVM, MER</b></td><td>Error Vector Magnitude, Modulation Error Ratio – measures of modulation errors.</td></tr>
 <tr><td><b>GSSI, ISSI</b></td><td>Group and individual subscriber identity (in amateur radio the DMR ID).</td></tr>
+<tr><td><b>KML, KMZ</b></td><td>Keyhole Markup Language – text format for geodata (Google Earth); KMZ is a ZIP file with the KML and its images.</td></tr>
 <tr><td><b>MCC, MNC, CC</b></td><td>Country, network and colour code of the cell.</td></tr>
 <tr><td><b>NTS</b></td><td>Normal Training Sequence – known bit pattern in every burst (synchronisation, channel estimation).</td></tr>
 <tr><td><b>OBW</b></td><td>Occupied Bandwidth – bandwidth containing 99 % of the power.</td></tr>
@@ -954,6 +1060,6 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 </table>
 
 <h2 id="s19-4">Origin and licences</h2>
-<p>SDR++ Air Interface Analyzer (SDR++ AIA) is a modified version (fork) of SDR++ (Alexandre Rouma, ON5RYZ, and contributors) based on SDR++Brown, with the TETRA demodulator plugin by cropinghigh and the osmo-tetra decoder (Osmocom). Licences: GPL-3.0, for osmo-tetra AGPL-3.0; the ETSI speech codec is downloaded from ETSI at build time. Changes of this edition: © 2026 UnImAtrIXzEr0. It is intended exclusively for experimental amateur radio purposes. Details: <code>NOTICE.md</code> and the about dialog in the program. This is not an official release of SDR++ or SDR++Brown. Source code: <code>github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer</code>.</p>
+<p>SDR++ Air Interface Analyzer (SDR++ AIA) is a modified version (fork) of SDR++ (Alexandre Rouma, ON5RYZ, and contributors) based on SDR++Brown, with the TETRA demodulator plugin by cropinghigh and the osmo-tetra decoder (Osmocom). Licences: GPL-3.0, for osmo-tetra AGPL-3.0; the ETSI speech codec is downloaded from ETSI at build time. Name lists and map tiles (OpenStreetMap, TopPlusOpen and basemap.de of the BKG, Sentinel-2 cloudless by EOX) are only downloaded on request; the terms of the providers apply to them (<a href="#s16-2">chapter 16</a>). Changes of this edition: © 2026 UnImAtrIXzEr0. It is intended exclusively for experimental amateur radio purposes. Details: <code>NOTICE.md</code> and the about dialog in the program. This is not an official release of SDR++ or SDR++Brown. Source code: <code>github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer</code>.</p>
 
 </body></html>

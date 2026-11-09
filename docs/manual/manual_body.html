@@ -30,6 +30,7 @@
   <div class="l1"><a href="#s14">14 Alarme</a></div>
   <div class="l1"><a href="#s15">15 Messbericht</a></div>
   <div class="l1"><a href="#s16">16 GPS, Versorgungsmessung und Karten</a></div>
+  <div class="l2"><a href="#s16-1">Karte der Messfahrt</a> · <a href="#s16-2">Kartenhintergrund</a> · <a href="#s16-3">Karten exportieren</a></div>
   <div class="l1"><a href="#s17">17 Messszenarien</a></div>
   <div class="l1"><a href="#s18">18 Fehlersuche</a></div>
   <div class="l2"><a href="#s18-1">USB und Datenverlust prüfen</a></div>
@@ -59,7 +60,7 @@
   <li><b>Burst-Analyse</b> von Handfunkgeräten: Rampen, Länge, Welligkeit, Zeitmaske, Rampen-Spektrum, Störpegel auf dem Uplink.</li>
   <li><b>Mehrwegeempfang</b>, <b>Frequenzstabilität</b> (Allan-Abweichung) und <b>Empfangsgrenze</b>.</li>
   <li><b>Langzeitbeobachtung:</b> Trends bis 24 h, CSV-Logs, Alarme, Messbericht.</li>
-  <li><b>Versorgungsmessung</b> mit GPS-Maus und Karten für Google Earth und OpenStreetMap.</li>
+  <li><b>Versorgungsmessung</b> mit GPS-Maus: Karte der Fahrt im Programm (wahlweise mit Kartenhintergrund, auch offline), Export für Google Earth (KMZ/KML) und OpenStreetMap.</li>
   <li><b>Mehrere Träger</b> gleichzeitig vergleichen.</li>
 </ul>
 </div>
@@ -182,7 +183,7 @@ sdrpp</pre></li>
   <li><b>Obere Leiste:</b> Start/Stopp des SDR, Lautstärke und Frequenzanzeige (Mausrad oder Ziffern anklicken). Es gibt genau einen VFO, den TETRA-VFO, und nur die normale Abstimmung: Ein Klick in den Wasserfall setzt den VFO auf diese Frequenz, die Mitte des SDR bleibt stehen. Deshalb fehlen hier VFO-Auswahl, <span class="ui">Lock</span>, der Knopf für die Mittenabstimmung (sie würde den Kanal auf den Gleichanteil in der Bandmitte legen) und die SNR-Anzeige; Pegel und MER stehen in der Statuszeile.</li>
   <li><b>Statuszeile</b> darunter: die wichtigsten Werte auf einen Blick (<a href="#s3-1">3.1</a>).</li>
   <li><b>Inhaltsspalte</b> ganz links, mit fester Breite: was zum Modus gehört – Audio und kompakte Zellendaten (Monitor), Messwerte mit Grenzwerten, Kurzverläufe und letzte Analyse-Ergebnisse (Messen), große Wertekacheln (Messfahrt), Fehleranteile und Ablauf (Abgleich). Die Breite richtet sich nach dem Inhalt in der gewählten Sprache und ändert sich beim Messen nicht.</li>
-  <li><b>Hauptansicht</b> in der Mitte: Spektrum und Wasserfall oder die gewählte Ansicht (Konstellation, TX-Spektrum, Burst, Träger, Verläufe, Mehrwege, Messfahrt, Abgleich). Die Regler <span class="ui">Zoom</span>, <span class="ui">Max</span> und <span class="ui">Min</span> erscheinen nur, solange der Wasserfall zu sehen ist.</li>
+  <li><b>Hauptansicht</b> in der Mitte: Spektrum und Wasserfall oder die gewählte Ansicht (Konstellation, TX-Spektrum, Burst, Träger, Verläufe, Mehrwege, Karte der Messfahrt, Abgleich). Die Regler <span class="ui">Zoom</span>, <span class="ui">Max</span> und <span class="ui">Min</span> erscheinen nur, solange der Wasserfall zu sehen ist.</li>
   <li><b>Streifen unter der Hauptansicht</b>, nur im Modus Monitor: im Amateurfunkmodus <span class="ui">Stations</span>, <span class="ui">Groups</span> und <span class="ui">Traffic</span> (<a href="#s8">Kapitel 8</a>), im ETSI-Modus Netz und Zelle (<a href="#s7">Kapitel 7</a>). Die Höhe stellt die Trennlinie darüber ein.</li>
   <li><b>Softkey-Spalte</b> rechts, so breit wie ihr längster Text in der gewählten Sprache: oben die vier Modi, darunter die Ansichten bzw. Softkeys des Modus, ganz unten <span class="ui">HF / Verstärkung</span> und <span class="ui">Einstellungen</span>.</li>
   <li><b>Meldezeile</b> unten: Hinweise und Warnungen, rechts Log-Status und Uhrzeit (<a href="#s3-1">3.1</a>).</li>
@@ -212,6 +213,7 @@ sdrpp</pre></li>
   <li>Nur Messen und Abgleich: <b>SDR-Mitte auf dem Kanal - ~100 kHz daneben abstimmen</b> (gelb), wenn der TETRA-VFO weniger als 15 kHz von der Mitte des SDR entfernt ist (<a href="#s4">Kapitel 4</a>).</li>
   <li>Nur Messen und Abgleich: <b>Alle Messwerte innerhalb der Grenzen</b> (grün).</li>
   <li>Nur Messen: der oberste Messwert der Inhaltsspalte, der seine Grenze verletzt, mit Wert und Grenze (rot).</li>
+  <li>15 s lang das Ergebnis von <span class="ui">Karte exportieren</span> bzw. <span class="ui">Bild speichern</span> (grün): <b>Karte exportiert:</b> (Map exported:) mit dem Namen der KMZ-Datei und „(+ .kml, .html)“ bzw. <b>Bild gespeichert:</b> (Image saved:) mit dem Dateinamen (<a href="#s16">Kapitel 16</a>).</li>
   <li>Sonst <b>Bereit</b> (Ready).</li>
 </ol>
 <p>Rechts stehen <b>Log: läuft</b> (rot) bzw. <b>Log: aus</b> und die Uhrzeit.</p>
@@ -222,7 +224,7 @@ sdrpp</pre></li>
 <tr><th style="width:17%">Modus</th><th>Inhaltsspalte und Hauptansicht</th><th style="width:36%">Softkeys</th></tr>
 <tr><td><span class="ui">Monitor</span></td><td>Links <b>Audio</b> (Lautstärke, <span class="ui">Listen to</span>, <span class="ui">Playing</span>, <a href="#s5">Kapitel 5</a>) und – nur mit dem eingebauten Decoder – <b>Zelle (kompakt)</b>: <span class="ui">DL / UL</span>, <span class="ui">Träger / LA</span>, <span class="ui">Zeitschlitze</span>, <span class="ui">Sicherheit</span>, <span class="ui">Zugang</span> (Mindestpegel, höchste Sendeleistung der Funkgeräte), <span class="ui">Dienste</span> (grün = angeboten). In der Mitte Spektrum und Wasserfall, darunter der Streifen.</td><td><span class="ui">Verschlüsselt stumm</span> (Mute encrypted), <span class="ui">Trotzdem abspielen</span> (Play anyway, nur sichtbar, wenn ein Gespräch wegen unbekannter Verschlüsselung stumm ist), <span class="ui">Zelldetails</span> (Cell details), <span class="ui">Ohne Rufsteuerung</span> (Hide call control, nur im Amateurfunkmodus). <span class="ui">Zelldetails</span> und <span class="ui">Ohne Rufsteuerung</span> nur mit dem eingebauten Decoder.</td></tr>
 <tr><td><span class="ui">Messen</span> (Measure)</td><td>Links <b>Messwerte</b> mit Grenzwerten, <b>Verläufe (10 min)</b> und <b>Letzte Analyse-Ergebnisse</b> (<a href="#s6">Kapitel 6</a>). In der Mitte die gewählte Ansicht.</td><td>Ansichten (unten) und <span class="ui">Statistik zurücksetzen</span>, Softkeys der Ansicht, <span class="ui">CSV-Log starten</span> / <span class="ui">CSV-Log beenden</span>, <span class="ui">Bericht erstellen</span>.</td></tr>
-<tr><td><span class="ui">Messfahrt</span> (Drive test)</td><td>Links große Wertekacheln (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">Decoder EVM</span>, <span class="ui">Freq. error</span>, <span class="ui">Stations</span>, <span class="ui">GPS</span>; die Taste „i“ zeigt die Erklärung), darunter Position, Geschwindigkeit/HDOP, Zellsperre und die Log-Datei. In der Mitte GPS und Versorgungskarte (<a href="#s16">Kapitel 16</a>).</td><td><span class="ui">CSV-Log starten</span> / <span class="ui">CSV-Log beenden</span>, <span class="ui">Zelle sperren</span> / <span class="ui">Zelle entsperren</span> (Lock / Unlock cell), <span class="ui">Karte exportieren</span> (Export map), <span class="ui">Bericht erstellen</span>.</td></tr>
+<tr><td><span class="ui">Messfahrt</span> (Drive test)</td><td>Links große Wertekacheln (<span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">Decoder EVM</span>, <span class="ui">Freq. error</span>, <span class="ui">Stations</span>, <span class="ui">GPS</span>; die Taste „i“ zeigt die Erklärung), darunter Position, Geschwindigkeit/HDOP, Zellsperre und die Log-Datei. In der Mitte die Karte der Messfahrt (<a href="#s16">Kapitel 16</a>).</td><td><span class="ui">CSV-Log starten</span> / <span class="ui">CSV-Log beenden</span>, <span class="ui">Zelle sperren</span> / <span class="ui">Zelle entsperren</span> (Lock / Unlock cell), <span class="ui">Karte exportieren</span> (Export map), <span class="ui">Fahrt laden...</span> (Load drive...), <span class="ui">Bild speichern</span> (Save image), <span class="ui">GPS...</span>, <span class="ui">Standort...</span> (Cell site...), <span class="ui">Bericht erstellen</span>.</td></tr>
 <tr><td><span class="ui">Abgleich</span> (Alignment)</td><td>Links <b>Fehleranteile</b> und <b>Ablauf</b>, in der Mitte vier große Zeiger (siehe unten).</td><td><span class="ui">Referenz setzen</span>, <span class="ui">Differenz zur Referenz</span>, <span class="ui">Halten</span>, <span class="ui">Grenzen: Basisstation</span> / <span class="ui">Grenzen: Mobilstation</span>.</td></tr>
 </table>
 
@@ -248,7 +250,15 @@ sdrpp</pre></li>
 <figure><img src="shots/inst_const_de.png" style="max-height:105mm"><figcaption>Abb. 4 – Modus <span class="ui">Messen</span>, Ansicht <span class="ui">Konstellation</span>: links Messwerte, Kurzverläufe und letzte Analyse-Ergebnisse.</figcaption></figure>
 
 <h3>Messfahrt</h3>
-<p><span class="ui">Zelle sperren</span> ist nur bedienbar, solange der Decoder auf eine Zelle eingerastet ist; danach heißt der Softkey <span class="ui">Zelle entsperren</span>. <span class="ui">Karte exportieren</span> ist bedienbar, sobald ein CSV-Log läuft oder gelaufen ist, und erzeugt die Karten aus dem aktuellen bzw. letzten Log (<a href="#s16">Kapitel 16</a>). Der Kartenwert (<span class="ui">Map value</span>) und die GPS-Verbindung stehen in der Hauptansicht.</p>
+<p>Die Hauptansicht zeigt die Karte der Fahrt; darüber wählt man den Kartenwert (<span class="ui">Pegel</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Qualität</span>) und den Kartenhintergrund (Knopf <span class="ui">Karte: …</span>). Die Softkeys:</p>
+<ul>
+  <li><span class="ui">Zelle sperren</span> ist nur bedienbar, solange der Decoder auf eine Zelle eingerastet ist; danach heißt der Softkey <span class="ui">Zelle entsperren</span>.</li>
+  <li><span class="ui">Karte exportieren</span> erzeugt KMZ, KML und HTML-Karte aus dem aktuellen bzw. letzten CSV-Log oder aus der mit <span class="ui">Fahrt laden...</span> geladenen Datei. Bedienbar, sobald ein Log läuft oder gelaufen ist bzw. eine Fahrt geladen ist.</li>
+  <li><span class="ui">Fahrt laden...</span> zeigt einen gespeicherten CSV-Log auf der Karte.</li>
+  <li><span class="ui">Bild speichern</span> speichert den sichtbaren Kartenausschnitt als PNG im Log-Ordner.</li>
+  <li><span class="ui">GPS...</span> öffnet das Fenster <span class="ui">GPS-Empfänger</span> (GPS receiver: Port, Baudrate, Verbinden, Zustand), <span class="ui">Standort...</span> das Fenster <span class="ui">Standort</span> (Position der Basisstation).</li>
+</ul>
+<p>Einzelheiten in <a href="#s16">Kapitel 16</a>.</p>
 
 <h3>Abgleich</h3>
 <p>Der Modus ist für den Abgleich eines Senders gedacht: Man stellt am Sender etwas ein und sieht sofort, ob es besser oder schlechter wird. Die Hauptansicht zeigt vier Zeiger mit Grenze und Skala:</p>
@@ -291,8 +301,8 @@ sdrpp</pre></li>
 
 <h2 id="s3-4">Bedienelemente, Farbschemata, Schrift</h2>
 <ul>
-  <li><b>Ein/Aus auf der Messoberfläche:</b> Softkeys mit <b>: EIN</b> / <b>: AUS</b> oder <b>Chips</b> – runde Schalter, gefüllt = ein, umrandet = aus. Chips wählen z. B. die Kurven der Verläufe (<span class="ui">Show:</span> <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>).</li>
-  <li><b>Entweder-oder:</b> Segmentknöpfe, der gewählte ist hinterlegt: Zeitspanne der Verläufe <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span>; <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span>; <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>; Frequenz der Burst-Analyse <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> | <span class="ui">TETRA VFO</span>; neuer Eintrag der Prioritätsliste <span class="ui">Group</span> | <span class="ui">Station</span>.</li>
+  <li><b>Ein/Aus auf der Messoberfläche:</b> Softkeys mit <b>: EIN</b> / <b>: AUS</b> oder <b>Chips</b> – runde Schalter, gefüllt = ein, umrandet = aus. Chips wählen z. B. die Kurven der Verläufe (<span class="ui">Show:</span> <span class="ui">Level</span>, <span class="ui">MER</span>, <span class="ui">CRC errors</span>, <span class="ui">Carrier offset</span>, <span class="ui">Timeslots</span>, <span class="ui">Bursts/s</span>) oder <span class="ui">Folgen</span> (Follow) auf der Karte der Messfahrt.</li>
+  <li><b>Entweder-oder:</b> Segmentknöpfe, der gewählte ist hinterlegt: Kartenwert der Messfahrt <span class="ui">Pegel</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Qualität</span>; Zeitspanne der Verläufe <span class="ui">10 min</span> | <span class="ui">1 h</span> | <span class="ui">6 h</span> | <span class="ui">12 h</span> | <span class="ui">24 h</span> | <span class="ui">All</span>; <span class="ui">ETSI</span> | <span class="ui">Amateur radio</span>; <span class="ui">Built-in decoder</span> | <span class="ui">NETSYMS over UDP</span>; Frequenz der Burst-Analyse <span class="ui">Uplink (SYSINFO)</span> | <span class="ui">Manual frequency</span> | <span class="ui">TETRA VFO</span>; neuer Eintrag der Prioritätsliste <span class="ui">Group</span> | <span class="ui">Station</span>.</li>
   <li><b>Tooltips:</b> Fast jeder Messwert erklärt sich, wenn die Maus kurz darüber steht.</li>
   <li><b>Tabellen:</b> Spalten mit der Maus verschieben und in der Breite ändern, Rechtsklick auf den Kopf blendet Spalten ein/aus. Ein Klick auf einen Spaltenkopf sortiert auf-, ein zweiter absteigend, ein dritter hebt die Sortierung auf (Pfeil im Kopf). Zellen bleiben einzeilig; zu langer Text endet mit „…“, der volle Text steht im Tooltip. Ist die Tabelle breiter als ihr Platz, lässt sie sich seitlich verschieben, die Kopfzeile bleibt stehen. Die Anordnung wird gespeichert.</li>
 </ul>
@@ -313,7 +323,7 @@ sdrpp</pre></li>
 <figure><img src="shots/classic.png" style="max-height:90mm"><figcaption>Abb. 7 – Klassische Ansicht mit der Menüspalte.</figcaption></figure>
 <ul>
   <li><b>Bereiche im TETRA Analyzer:</b> am Griff (sechs Punkte rechts in der Kopfzeile) verschieben; Rechtsklick auf die Kopfzeile bietet <span class="ui">Move up / Move down / Move to top / Move to bottom / Reset order</span>. Das Fenster-Symbol links vom Griff zeigt den Bereich in einem eigenen, frei verschiebbaren Fenster (Symbol blau = Fenster offen); ein zweiter Klick holt ihn zurück. Position und Größe werden gespeichert.</li>
-  <li><b>Kachelspalte:</b> <span class="ui">Layout...</span> neben ETSI/Amateur radio wählt eine Startbelegung: <span class="ui">Measuring station</span> (Konstellation, Messwerte, Trends; im Amateurfunkbetrieb Stationen &amp; Traffic als Streifen unter dem Wasserfall), <span class="ui">Drive test</span> (GPS/Karte, Messwerte, Trends) oder <span class="ui">Classic (all in the menu)</span>. Das Auswahlmenü im Kopf jeder Kachel wählt ihren Inhalt (jeder Bereich sowie <span class="ui">Values (large)</span>); <span class="ui">+ Tile</span> fügt eine Kachel an, <span class="ui">x</span> schließt sie, <span class="ui">Reset</span> stellt die Vorlage wieder her. Die Trennlinien ändern die Größen; alles bleibt über den Neustart erhalten.</li>
+  <li><b>Kachelspalte:</b> <span class="ui">Layout...</span> neben ETSI/Amateur radio wählt eine Startbelegung: <span class="ui">Measuring station</span> (Konstellation, Messwerte, Trends; im Amateurfunkbetrieb Stationen &amp; Traffic als Streifen unter dem Wasserfall), <span class="ui">Drive test</span> (Bereich <span class="ui">GPS &amp; coverage map</span>, Messwerte, Trends; die Karte der Messfahrt gibt es nur in der Messgeräte-Ansicht) oder <span class="ui">Classic (all in the menu)</span>. Das Auswahlmenü im Kopf jeder Kachel wählt ihren Inhalt (jeder Bereich sowie <span class="ui">Values (large)</span>); <span class="ui">+ Tile</span> fügt eine Kachel an, <span class="ui">x</span> schließt sie, <span class="ui">Reset</span> stellt die Vorlage wieder her. Die Trennlinien ändern die Größen; alles bleibt über den Neustart erhalten.</li>
   <li><b>Anzeige wie ein Messgerät:</b> Die Menüspalte ist in der Breite veränderbar; nichts wird abgeschnitten und nichts springt. Passt ein Wert nicht mehr in die Zeile, rückt er mit seiner Einheit in eine Folgezeile; Zeilen, die nicht immer gesendet werden, behalten ihren Platz.</li>
   <li><b>Touch-Modus:</b> <span class="ui">Display</span> → <span class="ui">Touch mode (larger controls)</span> vergrößert Bedienelemente; Ziehen mit dem Finger auf einer freien Stelle scrollt. In der klassischen Ansicht wird die Kachelspalte dann zur Touch-Ansicht: oben die Frequenz groß mit Tasten <span class="ui">−</span> / <span class="ui">+</span> und wählbarer Schrittweite, darunter eine Kachel in voller Größe und große Reiter zum Umschalten. Der Touch-Modus ist mit Maus geprüft; Rückmeldungen von echten Touch-Geräten sind willkommen.</li>
   <li><b>Module Manager:</b> jedes Modul mit den Schaltern <span class="ui">Menu</span> (in der Menüspalte zeigen) und <span class="ui">On</span>; darunter die eingebauten Menüs und unter <span class="ui">Sources in the source list</span> weitere SDR-Typen für die Quellenliste. Das benutzte SDR bleibt immer sichtbar. In der Messgeräte-Ansicht liegt er unter <span class="ui">Einstellungen</span> → <span class="ui">Module</span>.</li>
@@ -551,7 +561,7 @@ sdrpp</pre></li>
 <p>Im Amateurfunkmodus sammelt das Programm alle Teilnehmer und Gruppen, die in der unverschlüsselten Signalisierung der Zelle vorkommen. In der Messgeräte-Ansicht stehen sie im Modus <span class="ui">Monitor</span> im Streifen unter dem Wasserfall (Höhe mit der Trennlinie darüber einstellbar), in der klassischen Ansicht im Bereich <span class="ui">Stations &amp; Traffic</span>. Es gibt drei Reiter; die Zahl im Reiter ist die Anzahl der Einträge. Die Tabellen lassen sich wie in <a href="#s3-4">Kapitel 3.4</a> beschrieben sortieren, umordnen, ein- und ausblenden.</p>
 
 <h3>Namenslisten</h3>
-<p>Unter <span class="ui">Einstellungen</span> → <span class="ui">Namenslisten</span> (klassische Ansicht: oben im Bereich) steht der Stand der Namenslisten. Fehlen sie, zeigt der Streifen <span class="ui">Keine Namenslisten - Einstellungen -&gt; Namenslisten</span>. <span class="ui">Download name lists</span> lädt die Benutzer (7-stellige ISSI) und Relais (6-stellig) von radioid.net sowie die Namen der Brandmeister-Sprechgruppen in den Konfigurationsordner. <span class="ui">Reload files</span> liest sie neu ein, etwa nachdem man sie ohne Internet von Hand dort abgelegt hat (Dateinamen im Tooltip und in <a href="#s19-1">Anhang 19.1</a>).</p>
+<p>Unter <span class="ui">Einstellungen</span> → <span class="ui">Namenslisten</span> (klassische Ansicht: oben im Bereich) steht der Stand der Namenslisten. Fehlen sie, zeigt der Streifen <span class="ui">Keine Namenslisten - Einstellungen -&gt; Namenslisten</span>. <span class="ui">Download name lists</span> lädt die Benutzer (7-stellige ISSI) und Relais (6-stellig) von radioid.net sowie die Namen der Brandmeister-Sprechgruppen in den Konfigurationsordner. Geladen wird mit dem Programm <code>curl</code> des Systems (bei Windows 10 und 11 enthalten, unter Linux Paket <code>curl</code>); alle Downloads des Programms (Namenslisten, Kartenkacheln) melden sich als <code>SDRPP-AIA/&lt;Version&gt;</code> mit der Adresse des Projekts. <span class="ui">Reload files</span> liest sie neu ein, etwa nachdem man sie ohne Internet von Hand dort abgelegt hat (Dateinamen im Tooltip und in <a href="#s19-1">Anhang 19.1</a>).</p>
 
 <h3>Farben und Bedienung in allen Tabellen</h3>
 <ul>
@@ -753,51 +763,139 @@ sdrpp</pre></li>
 
 <!-- ============================================================ -->
 <h1 id="s16" class="pb"><span class="num">16</span>GPS, Versorgungsmessung und Karten</h1>
-<p>Mit einer GPS-Maus wird jede Sekunde des CSV-Logs mit einer Position versehen. Daraus entstehen Versorgungskarten mit farbigen Messpunkten und einer Heatmap. In der Messgeräte-Ansicht ist das der Modus <span class="ui">Messfahrt</span>: In der Hauptansicht stehen GPS-Verbindung, Zellsperre, Kartenwert und Ausbreitungsdiagramm (klassische Ansicht: Bereich <span class="ui">GPS &amp; coverage map</span>), links große Wertekacheln, rechts die Softkeys <span class="ui">CSV-Log starten</span>, <span class="ui">Zelle sperren</span>, <span class="ui">Karte exportieren</span> und <span class="ui">Bericht erstellen</span>.</p>
+<p>Mit einer GPS-Maus erhält jede Sekunde der Messung eine Position. In der Messgeräte-Ansicht ist das der Modus <span class="ui">Messfahrt</span>: In der Hauptansicht steht die Karte der Fahrt, links stehen große Wertekacheln, rechts die Softkeys <span class="ui">CSV-Log starten</span>, <span class="ui">Zelle sperren</span>, <span class="ui">Karte exportieren</span>, <span class="ui">Fahrt laden...</span>, <span class="ui">Bild speichern</span>, <span class="ui">GPS...</span>, <span class="ui">Standort...</span> und <span class="ui">Bericht erstellen</span>. Aus dem CSV-Log entstehen Karten für Google Earth (KMZ/KML) und den Browser (OpenStreetMap). Die klassische Ansicht hat statt der Karte den Bereich <span class="ui">GPS &amp; coverage map</span> (GPS-Verbindung, Zellsperre, <span class="ui">Map value</span>, <span class="ui">Export map (KMZ + OSM)</span>, Ausbreitungsdiagramm).</p>
 <figure>
 <svg viewBox="0 0 860 120" xmlns="http://www.w3.org/2000/svg" font-family="Inter, sans-serif" font-size="12">
   <g>
-  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 GPS verbinden</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">NMEA, Port, Baudrate</text>
+  <rect x="5" y="20" width="150" height="70" rx="9" fill="#003a6c"/><text x="80" y="50" fill="#fff" text-anchor="middle" font-weight="700">1 GPS verbinden</text><text x="80" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">Softkey GPS...</text>
   <rect x="180" y="20" width="150" height="70" rx="9" fill="#0b4a8b"/><text x="255" y="50" fill="#fff" text-anchor="middle" font-weight="700">2 Zelle sperren</text><text x="255" y="68" fill="#cfe0f3" text-anchor="middle" font-size="10.5">Softkey Zelle sperren</text>
   <rect x="355" y="20" width="150" height="70" rx="9" fill="#1d6fb8"/><text x="430" y="50" fill="#fff" text-anchor="middle" font-weight="700">3 Log starten</text><text x="430" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">CSV-Log starten, fahren</text>
   <rect x="530" y="20" width="150" height="70" rx="9" fill="#2a83c9"/><text x="605" y="50" fill="#fff" text-anchor="middle" font-weight="700">4 Exportieren</text><text x="605" y="68" fill="#e3edf7" text-anchor="middle" font-size="10.5">Karte exportieren</text>
-  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 Ansehen</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">Browser / Google Earth</text>
+  <rect x="705" y="20" width="150" height="70" rx="9" fill="#e3edf7" stroke="#1d6fb8"/><text x="780" y="50" fill="#003a6c" text-anchor="middle" font-weight="700">5 Ansehen</text><text x="780" y="68" fill="#5a6774" text-anchor="middle" font-size="10.5">Google Earth / Browser</text>
   </g>
   <g stroke="#5a6774" stroke-width="1.5" marker-end="url(#ar)"><line x1="155" y1="55" x2="178" y2="55"/><line x1="330" y1="55" x2="353" y2="55"/><line x1="505" y1="55" x2="528" y2="55"/><line x1="680" y1="55" x2="703" y2="55"/></g>
 </svg>
-<figcaption>Abb. 19 – Ablauf einer Versorgungsmessung.</figcaption></figure>
+<figcaption>Abb. 19 – Ablauf einer Versorgungsmessung. Die Karte der Fahrt in der Hauptansicht entsteht dabei von selbst.</figcaption></figure>
 
 <h2>GPS-Maus anschließen</h2>
 <ol class="steps">
   <li>GPS-Maus (USB oder seriell, NMEA-Ausgabe) anschließen. Unter Windows erscheint sie als COM-Port, unter Linux meist als <code>/dev/ttyACM0</code> oder <code>/dev/ttyUSB0</code> (Benutzer in die Gruppe <code>dialout</code> aufnehmen).</li>
-  <li>In der Hauptansicht der Messfahrt den Port wählen (<span class="ui">Rescan</span> aktualisiert die Liste), Baudrate einstellen (meist 4800 oder 9600) und <span class="ui">Connect</span>.</li>
-  <li>Warten, bis Position, Satellitenzahl und HDOP angezeigt werden. Bei „Waiting for NMEA data“ stimmen Port oder Baudrate nicht.</li>
+  <li>Softkey <span class="ui">GPS...</span>: Im Fenster <span class="ui">GPS-Empfänger</span> den Port wählen (<span class="ui">Rescan</span> aktualisiert die Liste), Baudrate einstellen (<span class="ui">Baud</span>, meist 4800 oder 9600) und <span class="ui">Connect</span> drücken; <span class="ui">Disconnect</span> trennt. Das Fenster schließt mit <span class="ui">Schließen</span>. In der klassischen Ansicht stehen dieselben Bedienelemente im Bereich <span class="ui">GPS &amp; coverage map</span>.</li>
+  <li>Warten, bis Position, Satellitenzahl, HDOP und Geschwindigkeit angezeigt werden. Bei „Waiting for NMEA data“ stimmen Port oder Baudrate nicht, „No GPS fix yet“ bedeutet: Daten kommen, aber noch keine Position. Die Statuszeile zeigt rechts <b>GPS</b> „fix, n sat“.</li>
 </ol>
-<h2>Messfahrt</h2>
-<ol class="steps">
-  <li>Den Decoder auf die gewünschte Zelle einrasten lassen und den Softkey <span class="ui">Zelle sperren</span> drücken (oder <span class="ui">Lock current cell</span> in der Hauptansicht): Sekunden, in denen eine andere oder keine Zelle empfangen wird, gelten dann als „keine Versorgung“. Die gesperrte Zelle steht danach unter <span class="ui">Cell lock</span> (grün = wird empfangen, rot = nicht); <span class="ui">Zelle entsperren</span> hebt die Sperre auf.</li>
-  <li>Pegel möglichst kalibrieren (<span class="ui">Level cal.</span>, <a href="#s4-4">Kapitel 4.4</a>) und <span class="ui">Auto RF gain</span> für vergleichbare Werte ausschalten oder den Pegel in dBm auswerten.</li>
-  <li><span class="ui">CSV-Log starten</span> und losfahren. Antenne fest auf dem Dach, gleicher Aufbau wie bei früheren Fahrten.</li>
-  <li>Nach der Fahrt <span class="ui">CSV-Log beenden</span>.</li>
-</ol>
-<h2>Karten erzeugen</h2>
-<p><span class="ui">Map value</span> wählt die Farbskala: <b>Level</b> (−115…−65 dBm bzw. −95…−45 dBFS), <b>MER</b> (5…30 dB), <b>BER</b> oder <b>Quality (CRC)</b> – grün bis zur CRC-Grenze aus Kapitel 10, gelb bis zum Zehnfachen, rot darüber; schwarz = keine Versorgung. Der Softkey <span class="ui">Karte exportieren</span> (klassische Ansicht: <span class="ui">Export map (KML + OSM)</span>) schreibt zwei Dateien neben den aktuellen bzw. letzten Log:</p>
+<p>Port und Baudrate werden gespeichert; war das GPS beim Beenden verbunden, verbindet sich das Programm beim nächsten Start wieder.</p>
+
+<h2 id="s16-1">Karte der Messfahrt</h2>
+<p>Das Programm zeichnet im Hintergrund jede Sekunde mit GPS-Fix einen Punkt mit den Messwerten auf – unabhängig vom CSV-Log und vom gewählten Modus, bis 24 Stunden (danach fallen die ältesten Punkte weg). Diese Spur liegt nur im Speicher und beginnt nach einem Neustart leer; für eine dauerhafte Aufzeichnung den CSV-Log mitlaufen lassen. Die Hauptansicht der Messfahrt zeigt sie als Karte.</p>
+<figure><img src="shots/inst_drivemap_de.png" style="max-height:100mm"><figcaption>Abb. 20 – Modus <span class="ui">Messfahrt</span> mit der Karte einer geladenen Fahrt, Kartenwert <span class="ui">Pegel</span>, Standort mit Entfernungsringen, ohne Kartenhintergrund (synthetische Beispielfahrt).</figcaption></figure>
+<table>
+<tr><th style="width:26%">Kopfzeile</th><th>Bedeutung</th></tr>
+<tr><td><span class="ui">Pegel</span> | <span class="ui">MER</span> | <span class="ui">BER</span> | <span class="ui">Qualität</span></td><td>Kartenwert (Level, MER, BER, Quality). Er gilt auch für <span class="ui">Bild speichern</span> und bestimmt, welcher Ordner im Export sichtbar ist; er wird gespeichert.</td></tr>
+<tr><td>„n Punkte“</td><td>Anzahl der Punkte; bei einer geladenen Fahrt mit dem Dateinamen davor. Rot daneben: Fehler beim Laden. Gelb <span class="ui">Karte: offline</span>: Kartenkacheln lassen sich gerade nicht laden.</td></tr>
+<tr><td><span class="ui">Karte: …</span> (Map: …)</td><td>Zeigt den Kartenhintergrund und öffnet sein Menü (siehe unten). Standard: <span class="ui">Karte: Aus</span>.</td></tr>
+<tr><td><span class="ui">Alles</span> (Fit)</td><td>Passt die ganze Fahrt mit der aktuellen Position in die Ansicht ein und schaltet <span class="ui">Folgen</span> aus.</td></tr>
+<tr><td><span class="ui">Folgen</span> (Follow)</td><td>Chip: hält die aktuelle GPS-Position in der Mitte. Bei einer geladenen Fahrt nur mit verbundenem GPS bedienbar.</td></tr>
+<tr><td><span class="ui">Leeren</span> (Clear) / <span class="ui">Live</span></td><td><span class="ui">Leeren</span> löscht die aufgezeichnete Spur (nicht den CSV-Log). Ist eine Fahrt geladen, steht hier <span class="ui">Live</span>: zurück zur laufenden Aufzeichnung.</td></tr>
+</table>
+<p><b>Bedienung:</b> Das <b>Mausrad</b> zoomt um die Mausposition, bei <span class="ui">Folgen</span> um die aktuelle Position (0,2 m bis 20 km je Bildpunkt). <b>Ziehen</b> mit der linken Maustaste verschiebt die Karte und schaltet <span class="ui">Folgen</span> aus. Ein <b>Doppelklick</b> passt die ganze Fahrt ein wie <span class="ui">Alles</span>. Steht die Maus auf einem Punkt, zeigt ein Tooltip alle Werte dieser Sekunde: <span class="ui">Zeit</span>, <span class="ui">Pegel</span>, <span class="ui">MER</span>, <span class="ui">BER</span> (falls gemessen), <span class="ui">CRC-Fehler</span>, <span class="ui">Zelle</span> (MCC, MNC, CC), <span class="ui">Downlink</span>, <span class="ui">Empfang</span> (ja/nein) und – mit gesetztem Standort – <span class="ui">Abstand zum Standort</span>.</p>
+<p><b>Farben:</b> Die Punkte gehen von rot (schlecht) über gelb nach grün (gut). Die Skalen sind fest, damit Fahrten vergleichbar sind, und dieselben wie im Export:</p>
+<table class="plain nobreak">
+<tr><th style="width:26%">Kartenwert</th><th>rot … grün</th></tr>
+<tr><td>Pegel</td><td>−115 … −65 dBm mit Pegelkalibrierung, sonst −95 … −45 dBFS</td></tr>
+<tr><td>MER</td><td>5 … 30 dB</td></tr>
+<tr><td>BER</td><td>1·10⁻¹ … 1·10⁻⁵, logarithmisch; Sekunden ohne BER-Messwert werden nicht gezeichnet</td></tr>
+<tr><td>Qualität</td><td>drei Stufen nach dem Anteil der CRC-Fehler in der Sekunde: grün bis zur <span class="ui">CRC limit</span> (<a href="#s10">Kapitel 10</a>, Standard 1 %), gelb bis zum Zehnfachen, rot darüber</td></tr>
+<tr><td>kein Empfang</td><td>schwarz mit hellem Rand: Der Decoder war nicht eingerastet oder empfing bei gesperrter Zelle eine andere Zelle</td></tr>
+</table>
+<ul>
+  <li><b>Viele Punkte:</b> Liegen beim Herauszoomen mehrere Punkte auf derselben Stelle (3 Bildpunkte), wird nur der neueste gezeichnet.</li>
+  <li><b>Aktuelle Position</b> (GPS mit Fix): weißer Pfeil in Fahrtrichtung, unter 3 km/h ein weißer Kreis.</li>
+  <li><b>Standort</b> der Basisstation (siehe unten): Mastsymbol mit der Beschriftung <span class="ui">Standort</span> über der Spur, Entfernungsringe in 1-2-5-Schritten mit Beschriftung darunter.</li>
+  <li><b>Maßstab</b> unten rechts, <b>Nordpfeil</b> oben rechts (Norden ist immer oben), <b>Legende</b> unten links (Kartenwert, Farbbalken mit den Endwerten, <span class="ui">kein Empfang</span>). Ohne Kartenhintergrund liegt ein <b>Gitter</b> in 1-2-5-Meter-Schritten unter der Spur.</li>
+  <li>Ohne Punkte, Position und Standort steht in der Mitte: <span class="ui">Noch keine GPS-Messpunkte - GPS-Empfänger verbinden (Softkey GPS...).</span></li>
+</ul>
+
+<h3>Standort der Basisstation</h3>
+<p>Softkey <span class="ui">Standort...</span> öffnet das Fenster <span class="ui">Standort</span> (Cell site): Position der Antenne der Basisstation in Dezimalgrad (Nord und Ost positiv) unter <span class="ui">Breite</span> und <span class="ui">Länge</span> eintragen und <span class="ui">Übernehmen</span> (Set) drücken. <span class="ui">In Karte wählen</span> (Pick on map) schließt das Fenster; der nächste Klick in die Karte setzt den Standort (Hinweis oben in der Karte; Rechtsklick oder Esc bricht ab). <span class="ui">Entfernen</span> (Remove) löscht ihn. Der Standort wird gespeichert und ist derselbe wie im Ausbreitungsdiagramm der klassischen Ansicht.</p>
+
+<h2 id="s16-2">Kartenhintergrund</h2>
+<p>Der Knopf <span class="ui">Karte: …</span> öffnet das Menü: <span class="ui">Aus</span> (Off, Standard: nur das Gitter), darunter unter <span class="ui">Online (nur der sichtbare Ausschnitt, 30 Tage zwischengespeichert)</span> die Kartendienste, unter <span class="ui">Gespeicherte Karten (offline)</span> die eigenen gespeicherten Karten und ganz unten <span class="ui">Gespeicherte Karten...</span> (siehe unten). Die Auswahl wird gespeichert.</p>
+<table class="nobreak">
+<tr><th style="width:21%">Karte</th><th>Gebiet und Detail</th><th style="width:27%">Bedingungen</th></tr>
+<tr><td><span class="ui">OpenStreetMap</span></td><td>weltweit, Straßenkarte, bis Zoomstufe 19.</td><td>© OpenStreetMap-Mitwirkende (ODbL). Darf nicht gespeichert werden (Nutzungsrichtlinie der Kachelserver).</td></tr>
+<tr><td><span class="ui">TopPlusOpen</span> (BKG)</td><td>Welt Zoomstufe 0–13, Europa 14–16, Deutschland 17–18; außerhalb Deutschlands überwiegend Daten von OpenStreetMap.</td><td>© BKG, Datenlizenz Deutschland – Namensnennung 2.0; Speichern erlaubt.</td></tr>
+<tr><td><span class="ui">basemap.de</span> (BKG)</td><td>nur Deutschland, bis Zoomstufe 18.</td><td>© GeoBasis-DE / BKG, CC BY 4.0; Speichern erlaubt.</td></tr>
+<tr><td><span class="ui">Satellit (Sentinel-2)</span></td><td>weltweit, wolkenfreies Satellitenbild Sentinel-2 cloudless 2024 (EOX), 10 m Auflösung, bis Zoomstufe 14; näher heran wird vergrößert.</td><td>CC BY-NC-SA 4.0 (Daten ab 2018): nur nichtkommerziell; Speichern erlaubt.</td></tr>
+</table>
+<ul>
+  <li><b>Was geladen wird:</b> nur die Kacheln des sichtbaren Ausschnitts, die mittleren zuerst – kein Vorausladen, wie es die Nutzungsrichtlinie von OpenStreetMap verlangt. Das Programm lädt über eine einzige Verbindung mit <code>curl</code> (<a href="#s8">Kapitel 8</a>) und meldet sich als <code>SDRPP-AIA/&lt;Version&gt;</code> mit der Adresse des Projekts. Fehlt eine Kachel noch, wird die nächstgröbere vergrößert an ihrer Stelle gezeigt.</li>
+  <li><b>Zwischenspeicher:</b> Ordner <code>map_cache</code> im Konfigurationsordner, je Kartendienst ein Unterordner. Kacheln, die älter als 30 Tage sind, werden neu geladen; über 500 MB werden die ältesten gelöscht.</li>
+  <li><b>Offline:</b> Scheitern die Downloads, steht in der Kopfzeile gelb <span class="ui">Karte: offline</span>. Kacheln aus dem Zwischenspeicher werden weiter gezeigt; fehlgeschlagene Kacheln versucht das Programm nach 60 s erneut, danach in wachsenden Abständen bis zu 1 h. Für Gebiete ohne Netz vorher eine Karte speichern.</li>
+  <li><b>Quellenangabe:</b> Der Quellenvermerk des Kartendienstes steht immer unten rechts in der Karte (über dem Maßstab) und wird in <span class="ui">Bild speichern</span> mit ins Bild geschrieben. Bei Weitergabe von Bildern die Bedingungen des Dienstes beachten.</li>
+  <li>Die Kacheln liegen leicht durchscheinend über dem Hintergrund, damit die Punkte deutlich bleiben; das Gitter entfällt.</li>
+</ul>
+
+<h3>Gespeicherte Karten (offline)</h3>
+<p>Für Fahrten ohne Netz lässt sich ein Gebiet vorher speichern: Menü <span class="ui">Karte: …</span> → <span class="ui">Gespeicherte Karten...</span> öffnet das Fenster <span class="ui">Gespeicherte Karten</span> (Saved maps).</p>
 <div class="cols">
 <div>
+<ol class="steps">
+  <li>Unter <span class="ui">Karte erstellen</span> (Create a map) einen <span class="ui">Name</span> eintragen (Vorgabe „Karte“ mit Datum) und unter <span class="ui">Karte</span> die Quelle wählen: <span class="ui">TopPlusOpen</span>, <span class="ui">basemap.de</span> oder <span class="ui">Satellit (Sentinel-2)</span>. OpenStreetMap wird nicht angeboten – seine Nutzungsrichtlinie verbietet das Speichern.</li>
+  <li><span class="ui">Mitte</span> (Centre): <span class="ui">GPS-Position</span> (braucht einen Fix, sonst „kein GPS-Fix“), <span class="ui">Kartenmitte</span> (Mitte der Karte der Messfahrt) oder <span class="ui">Koordinaten</span> (Breite, Länge in Dezimalgrad).</li>
+  <li><span class="ui">Gebiet</span> (Area): <span class="ui">Radius</span> in km oder <span class="ui">Breite x Höhe</span> in km.</li>
+  <li><span class="ui">Detail</span>: Zoomstufe der feinsten Ebene, ab 8 bis zur höchsten Stufe der Quelle, mit der Auflösung in m je Bildpunkt (z. B. „15 (3.1 m/pixel)“). Dazu kommen sechs gröbere Übersichtsstufen.</li>
+  <li>Vor dem Laden steht darunter, wie viele Kacheln es werden, die geschätzte Größe und der Zoombereich, z. B. „944 Kacheln, etwa 19 MB, Zoom 9-15“ für 10 km Radius und Detail 15 in Mitteleuropa. Mehr als 30 000 Kacheln sind nicht möglich („zu viele: kleineres Gebiet oder weniger Detail“).</li>
+  <li><span class="ui">Erstellen</span> (Create) lädt die Kacheln nacheinander über eine Verbindung, mit Fortschrittsbalken; was im ersten Durchgang scheitert, wird am Ende noch einmal versucht. <span class="ui">Abbrechen</span> (Cancel) bricht ab und löscht die angefangene Karte. Danach steht „Gespeichert: n Kacheln.“ da, gegebenenfalls mit der Zahl der Kacheln, die nicht geladen werden konnten.</li>
+</ol>
+</div>
+<div><figure><img src="shots/inst_savedmaps_de.png"><figcaption>Abb. 21 – Fenster <span class="ui">Gespeicherte Karten</span>.</figcaption></figure></div>
+</div>
+<p>Jede Karte liegt in einem eigenen Ordner <code>maps/&lt;Name&gt;</code> im Konfigurationsordner: die Kacheln als <code>z/x/y</code>-Dateien und <code>map.json</code> mit Quelle, Gebiet, Zoomstufen und dem Quellenvermerk samt Datum des Speicherns. Der Ordnername entsteht aus dem Namen (Buchstaben A–Z, Ziffern, <code>-</code>, <code>_</code> und <code>.</code>; Leerzeichen werden zu <code>_</code>, andere Zeichen wie Umlaute entfallen); einen Namen, dessen Ordner es schon gibt, lehnt das Programm ab. Unter <span class="ui">Gespeicherte Karten</span> stehen alle Karten mit Quelle, Kachelzahl, Größe und Datum; <span class="ui">Anzeigen</span> (Show) wählt die Karte als Hintergrund und zeigt ihr Gebiet, <span class="ui">Löschen</span> (Delete) und danach <span class="ui">Wirklich löschen?</span> entfernt sie. Im Menü <span class="ui">Karte: …</span> erscheinen die Karten unter <span class="ui">Gespeicherte Karten (offline)</span>. Die Auswahl dort zeigt ebenfalls das Gebiet der Karte. Eine gespeicherte Karte braucht kein Netz. Außerhalb ihres Gebiets bleibt der Hintergrund leer; näher heran als die Detailstufe wird vergrößert, weit über die gröbste Stufe hinaus herausgezoomt wird die Karte ausgeblendet.</p>
+
+<h2>Messfahrt</h2>
+<ol class="steps">
+  <li>GPS verbinden (Softkey <span class="ui">GPS...</span>) und den <span class="ui">Standort</span> der Basisstation setzen, falls bekannt.</li>
+  <li>Den Decoder auf die gewünschte Zelle einrasten lassen und den Softkey <span class="ui">Zelle sperren</span> drücken: Sekunden, in denen eine andere oder keine Zelle empfangen wird, gelten dann als „kein Empfang“. Die gesperrte Zelle steht danach in der Inhaltsspalte unter <span class="ui">Cell lock</span> (grün = wird empfangen, rot = nicht); <span class="ui">Zelle entsperren</span> hebt die Sperre auf.</li>
+  <li>Pegel möglichst kalibrieren (<span class="ui">Level cal.</span>, <a href="#s4-4">Kapitel 4.4</a>) und <span class="ui">Auto RF gain</span> für vergleichbare Werte ausschalten oder den Pegel in dBm auswerten.</li>
+  <li><span class="ui">CSV-Log starten</span> und losfahren. Antenne fest auf dem Dach, gleicher Aufbau wie bei früheren Fahrten. Die Karte zeigt die Fahrt laufend.</li>
+  <li>Nach der Fahrt <span class="ui">CSV-Log beenden</span>.</li>
+</ol>
+<h3>Fahrt laden</h3>
+<p><span class="ui">Fahrt laden...</span> (Load drive...) zeigt einen gespeicherten CSV-Log auf der Karte – alle Sekunden mit GPS-Fix, gelesen wie beim Export. Die Kopfzeile nennt Dateiname und Punktzahl, <span class="ui">Folgen</span> wird ausgeschaltet und die Fahrt eingepasst. <span class="ui">Karte exportieren</span> und <span class="ui">Bild speichern</span> beziehen sich dann auf diese Datei. <span class="ui">Live</span> kehrt zur laufenden Aufzeichnung zurück. Ist beim Laden eine Zellsperre aktiv, zählen Sekunden, in denen bei der Aufnahme eine andere als die damals gesperrte Zelle empfangen wurde, als „kein Empfang“.</p>
+
+<h2 id="s16-3">Karten exportieren</h2>
+<p>Der Softkey <span class="ui">Karte exportieren</span> (klassische Ansicht: <span class="ui">Export map (KMZ + OSM)</span>) schreibt drei Dateien neben den CSV-Log (aktueller bzw. letzter Log oder die geladene Fahrt), z. B. für <code>tetra_20261109_073200.csv</code>:</p>
+<table class="plain">
+<tr><th style="width:36%">Datei</th><th>Inhalt</th></tr>
+<tr><td><code>tetra_20261109_073200.kmz</code></td><td>Für Google Earth; funktioniert ohne Internet (Punktsymbol und Legenden sind enthalten).</td></tr>
+<tr><td><code>tetra_20261109_073200.kml</code></td><td>Dieselben Daten als Text; das Punktsymbol lädt Google Earth aus dem Internet, Legenden fehlen.</td></tr>
+<tr><td><code>tetra_20261109_073200_level_map.html</code></td><td>Karte für den Browser mit dem gewählten Kartenwert (<code>_level</code>, <code>_mer</code>, <code>_ber</code> oder <code>_quality</code>).</td></tr>
+</table>
+<p>Die Meldezeile zeigt danach 15 s lang „Karte exportiert: …“, sofern keine wichtigere Meldung ansteht. Fahrten mit mehr als 20 000 Punkten werden für den Export gleichmäßig ausgedünnt. Ist beim Export eine Zellsperre aktiv, gilt für „kein Empfang“ dasselbe wie beim Laden einer Fahrt.</p>
+<div class="cols">
+<div>
+<h3>In Google Earth (KMZ/KML)</h3>
+<p>Die KMZ-Datei in Google Earth öffnen (Google Earth Pro: <i>Datei → Öffnen</i>; Web: <i>Projekte → KML-Datei importieren</i>). Der Dokumentname nennt Zelle, Downlink-Frequenz und Datum, z. B. „TETRA coverage - MCC 901 MNC 9999 CC 1, 439.1000 MHz, 2026-11-09“ (die am häufigsten empfangene Zelle). Darin stehen:</p>
+<ul>
+  <li>je ein Ordner für jeden Kartenwert – <i>Level (dBm)</i> bzw. <i>Level (dBFS)</i>, <i>MER (dB)</i>, <i>BER</i>, <i>Quality (CRC errors)</i> – mit farbigen Punkten nach denselben Skalen wie auf dem Bildschirm und (KMZ) seiner Legende; sichtbar ist der beim Export gewählte Kartenwert, die anderen schaltet man mit ihrem Kästchen ein. Sekunden ohne BER-Messwert fehlen im Ordner <i>BER</i>.</li>
+  <li><i>No service</i> – die Punkte ohne Empfang (schwarz),</li>
+  <li><i>Route</i> – der Fahrweg als Linie.</li>
+</ul>
+<p>Jeder Punkt trägt seine Zeit (UTC); damit zeigt Google Earth einen Zeitschieberegler, mit dem sich die Fahrt abspielen lässt. Ein Klick auf einen Punkt zeigt alle Werte: Zeit, Pegel, MER, BER, CRC-Fehler, Zelle, Downlink und Empfang.</p>
 <h3>Im Browser (OpenStreetMap)</h3>
 <p><code>…_level_map.html</code> mit einem Doppelklick öffnen (Internetverbindung für Kartenkacheln nötig). Oben rechts lassen sich die Ebenen <i>Points</i>, <i>Heatmap</i> und <i>No service only</i> umschalten; ein Klick auf einen Punkt zeigt Zeit, Pegel, MER, BER und CRC-Fehler.</p>
-<h3>In Google Earth</h3>
-<p><code>…_level.kml</code> in Google Earth (Desktop oder Web: <i>Projekte → KML-Datei importieren</i>) öffnen. Jeder Punkt ist farbig, die Beschreibung enthält die Messwerte. In Google Earth Pro lässt sich die Datei mit Höhenprofil und Gelände kombinieren.</p>
-<h3>Ausbreitungsdiagramm (ab v0.22.2)</h3>
-<p>In der Hauptansicht der Messfahrt unter <span class="ui">Propagation diagram</span> die Position der Basisstation eintragen (Dezimalgrad) oder neben ihr <span class="ui">Use GPS position</span> drücken. Während der Fahrt (GPS verbunden) sammelt das Programm 20 Pegelwerte je Sekunde und bildet alle 50 m Fahrstrecke einen Mittelwert über die Leistung: Das schnelle Fading (halbe Wellenlänge, 35 cm) mittelt sich heraus, übrig bleibt der lokale Mittelwert mit der Abschattung durch Gelände und Gebäude (Lee: 20–40 Wellenlängen genügen, 50 m sind rund 70 bei 430 MHz). Stillstand schließt keinen Punkt ab. Das Polardiagramm zeigt die Punkte um die Basisstation (Mitte, Norden oben) nach Entfernung und Richtung; der Maßstab richtet sich nach dem entferntesten Punkt, die Farbskala nach dem kleinsten und größten Wert (<span class="ui">Level</span> oder <span class="ui">MER</span>). Bei gesperrter Zelle zählen nur Werte dieser Zelle. Der Kreis markiert die aktuelle Position, ein Tooltip zeigt Entfernung, Richtung, Pegel und MER des Punktes unter der Maus.</p>
-<h3>Eigene Auswertungen</h3>
-<p>Der CSV-Log (Spalten <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) lässt sich direkt in QGIS (<i>Getrennte Textdatei</i>, Trennzeichen Semikolon) oder einer Tabellenkalkulation öffnen, z. B. für eigene Heatmaps oder Profile entlang einer Strecke.</p>
 </div>
 <div>
-<figure><img src="shots/map_level.png"><figcaption>Abb. 20 – Versorgungskarte „Level“ mit Heatmap (synthetische Beispielfahrt).</figcaption></figure>
-<figure><img src="shots/map_quality.png"><figcaption>Abb. 21 – Karte „Quality (CRC)“ derselben Fahrt.</figcaption></figure>
+<figure><img src="shots/map_level.png"><figcaption>Abb. 22 – HTML-Karte „Level“ mit Heatmap (synthetische Beispielfahrt).</figcaption></figure>
+<figure><img src="shots/map_quality.png"><figcaption>Abb. 23 – HTML-Karte „Quality (CRC)“ derselben Fahrt.</figcaption></figure>
 </div>
 </div>
+<h3>Bild speichern</h3>
+<p><span class="ui">Bild speichern</span> (Save image) schreibt den sichtbaren Kartenausschnitt als PNG-Datei <code>drive_map_&lt;Datum&gt;T&lt;Uhrzeit&gt;.png</code> (z. B. <code>drive_map_2026-11-09T07-32-00.png</code>) in den Log-Ordner – in doppelter Bildschirmauflösung (höchstens 4000 Bildpunkte je Seite), mit Kartenhintergrund, Punkten, Standort mit Ringen, Legende, Maßstab, Nordpfeil, einer Titelzeile (Kartenwert, Datum und Uhrzeit, bei geladener Fahrt der Dateiname) und dem fest eingezeichneten Quellenvermerk der Karte. Verwendet werden die Kacheln, die bereits im Zwischenspeicher bzw. in der gespeicherten Karte liegen. Die Beschriftungen im Bild sind englisch. Die Meldezeile zeigt danach 15 s lang „Bild gespeichert: …“. Solange ein Export oder ein Bild geschrieben wird, sind <span class="ui">Karte exportieren</span> und <span class="ui">Bild speichern</span> gesperrt.</p>
+<h3>Ausbreitungsdiagramm (klassische Ansicht)</h3>
+<p>In der klassischen Ansicht steht im Bereich <span class="ui">GPS &amp; coverage map</span> unter <span class="ui">Propagation diagram</span> ein Polardiagramm. Die Position der Basisstation ist dieselbe wie unter <span class="ui">Standort...</span>; im Diagramm selbst lässt sie sich ebenfalls eintragen (Dezimalgrad) oder mit <span class="ui">Use GPS position</span> übernehmen. Während der Fahrt (GPS verbunden) sammelt das Programm 20 Pegelwerte je Sekunde und bildet alle 50 m Fahrstrecke einen Mittelwert über die Leistung: Das schnelle Fading (halbe Wellenlänge, 35 cm) mittelt sich heraus, übrig bleibt der lokale Mittelwert mit der Abschattung durch Gelände und Gebäude (Lee: 20–40 Wellenlängen genügen, 50 m sind rund 70 bei 430 MHz). Stillstand schließt keinen Punkt ab. Das Polardiagramm zeigt die Punkte um die Basisstation (Mitte, Norden oben) nach Entfernung und Richtung; der Maßstab richtet sich nach dem entferntesten Punkt, die Farbskala nach dem kleinsten und größten Wert (<span class="ui">Level</span> oder <span class="ui">MER</span>). Bei gesperrter Zelle zählen nur Werte dieser Zelle. Der Kreis markiert die aktuelle Position, ein Tooltip zeigt Entfernung, Richtung, Pegel und MER des Punktes unter der Maus.</p>
+<h3>Eigene Auswertungen</h3>
+<p>Der CSV-Log (Spalten <code>lat</code>, <code>lon</code>, <code>level_dbm</code> …) lässt sich direkt in QGIS (<i>Getrennte Textdatei</i>, Trennzeichen Semikolon) oder einer Tabellenkalkulation öffnen, z. B. für eigene Heatmaps oder Profile entlang einer Strecke. Die Zeitspalte enthält den UTC-Versatz (<a href="#s19-2">Anhang 19.2</a>).</p>
 <div class="box"><b class="t">Gute Heatmaps</b>Langsam fahren oder öfter dieselbe Strecke – jede Sekunde ist ein Punkt. Bei hoher Geschwindigkeit liegen die Punkte weit auseinander. Messungen mit unterschiedlicher Antenne oder Verstärkung nicht mischen.</div>
 
 <!-- ============================================================ -->
@@ -819,7 +917,7 @@ sdrpp</pre></li>
 <div class="meta">Ziel: Frequenzfehler in ppb und Stabilität · benötigt GPS-gestütztes SDR (z. B. Pluto+ an 10 MHz)</div>
 <ol class="steps">
   <li>SDR an die Referenz anschließen, mindestens 15 Minuten aufwärmen.</li>
-  <li>Die Frequenzreferenz auf „External 10 MHz“ stellen (<span class="ui">Frequency reference</span>, derzeit nur in der klassischen Ansicht, <a href="#s3-3">3.3</a>), dann <span class="ui">Trägerablage</span> im Modus Messen beobachten (Ziel: ±200 ppb nach ETSI).</li>
+  <li>Die Frequenzreferenz auf „External 10 MHz“ stellen (<span class="ui">Frequency reference</span> unter <span class="ui">Einstellungen</span> → <span class="ui">SDR &amp; Kalibrierung</span> → <span class="ui">Kalibrierung &amp; Referenz</span>, <a href="#s3-3">3.3</a>), dann <span class="ui">Trägerablage</span> im Modus Messen beobachten (Ziel: ±200 ppb nach ETSI).</li>
   <li>Ansicht <span class="ui">Verläufe</span> → Reiter <span class="ui">Frequency stability</span>: mindestens eine Stunde laufen lassen; Allan-Abweichung ablesen.</li>
   <li>Bei Bedarf die Messung über Nacht laufen lassen (CSV-Log) und den Log später öffnen.</li>
 </ol></div>
@@ -827,10 +925,10 @@ sdrpp</pre></li>
 <div class="scen"><h3>C · Versorgungsmessung mit Heatmap</h3>
 <div class="meta">Ziel: Karte der Versorgung und praktische Empfangsgrenze</div>
 <ol class="steps">
-  <li>Pegel kalibrieren (dBm), Auto RF gain aus; Modus <span class="ui">Messfahrt</span>: GPS verbinden, Zelle sperren (Kapitel 16).</li>
-  <li>CSV-Log starten, Gebiet abfahren – auch bis zum Rand der Versorgung.</li>
+  <li>Pegel kalibrieren (dBm), Auto RF gain aus; Modus <span class="ui">Messfahrt</span>: GPS verbinden (<span class="ui">GPS...</span>), Standort setzen (<span class="ui">Standort...</span>), Zelle sperren (Kapitel 16). Ohne Netz unterwegs: vorher eine Karte des Gebiets speichern (<span class="ui">Gespeicherte Karten...</span>).</li>
+  <li>CSV-Log starten, Gebiet abfahren – auch bis zum Rand der Versorgung. Die Karte der Messfahrt zeigt dabei, wo schon gemessen wurde.</li>
   <li>Log in der Ansicht <span class="ui">Verläufe</span> mit <span class="ui">Protokoll öffnen...</span> laden → Reiter <span class="ui">Level vs. quality</span>: Empfangsgrenze ablesen und <span class="ui">CRC limit</span> passend setzen.</li>
-  <li>Karten <b>Level</b> und <b>Quality (CRC)</b> exportieren und vergleichen; Lücken (schwarz) gezielt nachmessen.</li>
+  <li>In der Messfahrt die Fahrt mit <span class="ui">Fahrt laden...</span> öffnen, die Kartenwerte <span class="ui">Pegel</span> und <span class="ui">Qualität</span> vergleichen und <span class="ui">Karte exportieren</span>: Die KMZ-Datei enthält alle Kartenwerte als Ordner. Lücken (schwarz) gezielt nachmessen.</li>
 </ol></div>
 
 <div class="scen"><h3>D · Langzeitüberwachung eines Relais</h3>
@@ -894,6 +992,11 @@ sdrpp</pre></li>
 <tr><td>Pluto als Laufwerk sichtbar, aber nicht in der Quellenliste</td><td>udev-Regel fehlt (Kapitel 2.3); danach <span class="ui">Refresh</span> (unter <span class="ui">HF / Verstärkung</span>).</td></tr>
 <tr><td>„Letzte Analyse-Ergebnisse“ zeigt „noch nicht gemessen“</td><td>TX-, Burst- und Mehrwege-Analyse laufen nur in ihrer Ansicht; die Ansicht einmal wählen.</td></tr>
 <tr><td>Zurück aus der klassischen Ansicht</td><td><span class="ui">Layout...</span> → <span class="ui">Instrument view</span> (<a href="#s3-5">Kapitel 3.5</a>).</td></tr>
+<tr><td>Karte der Messfahrt bleibt leer</td><td>Ohne GPS-Fix entstehen keine Punkte: GPS verbinden (<span class="ui">GPS...</span>), Statuszeile zeigt „fix, n sat“. Nach einem Neustart beginnt die Spur leer; frühere Fahrten mit <span class="ui">Fahrt laden...</span> öffnen. <span class="ui">Alles</span> holt die Fahrt zurück in die Ansicht.</td></tr>
+<tr><td><span class="ui">Karte: offline</span>, kein Kartenhintergrund</td><td>Kein Internet oder Kartendienst nicht erreichbar; zwischengespeicherte Kacheln werden weiter gezeigt, das Programm versucht es später erneut. Unter Linux muss <code>curl</code> installiert sein. Für Gebiete ohne Netz vorher eine Karte speichern. <span class="ui">basemap.de</span> gibt es nur für Deutschland.</td></tr>
+<tr><td>Gespeicherte Karte: „zu viele: kleineres Gebiet oder weniger Detail“</td><td>Mehr als 30 000 Kacheln: Radius bzw. Breite × Höhe verkleinern oder eine kleinere Detailstufe wählen (jede Stufe mehr vervierfacht etwa die Zahl). Bei „Eine gespeicherte Karte mit diesem Namen gibt es schon.“ einen anderen Namen wählen. <span class="ui">Erstellen</span> ist mit <span class="ui">GPS-Position</span> ohne GPS-Fix gesperrt.</td></tr>
+<tr><td>Google Earth zeigt nur einen Teil der Punkte</td><td>Der Zeitschieberegler zeigt nur den gewählten Zeitbereich: beide Enden des Schiebers ganz nach außen ziehen. Außerdem ist nur der Ordner des beim Export gewählten Kartenwerts eingeschaltet; die anderen Ordner per Kästchen einschalten.</td></tr>
+<tr><td>Zeiten in Karten um Stunden verschoben</td><td>Logs bis v0.24.0 enthalten die Ortszeit ohne UTC-Versatz; das Programm liest sie als Ortszeit des Rechners, auf dem exportiert wird. Solche Logs auf einem Rechner in der Zeitzone der Messung exportieren.</td></tr>
 </table>
 
 <h2 id="s18-1">USB und Datenverlust prüfen</h2>
@@ -918,13 +1021,15 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 <tr><td><code>tetra_duplex_ham.json</code></td><td>Duplex-Tabellen (Amateurfunk)</td></tr>
 <tr><td><code>radioid_user.csv</code>, <code>radioid_rptrs.json</code>, <code>brandmeister_talkgroups.json</code></td><td>Namenslisten</td></tr>
 <tr><td><code>imgui_layout.ini</code></td><td>Fensterpositionen und Tabellenspalten</td></tr>
-<tr><td>Log-Ordner</td><td>CSV-Logs, Karten, Berichte; einstellbar unter <span class="ui">Einstellungen</span> → <span class="ui">Protokoll &amp; Bericht</span>. Vorgabe unter Linux: <code>Dokumente/SDRPP-AIA</code> im Benutzerordner (Ordner laut <code>XDG_DOCUMENTS_DIR</code>, sonst <code>~/Documents</code>), unter Windows und macOS <code>tetra_logs</code> im Konfigurationsordner. Nach einem Update gilt der bisher eingestellte Log-Ordner weiter (er gehört zu den übernommenen Einstellungen); vorhandene Logs bleiben, wo sie sind.</td></tr>
+<tr><td><code>map_cache/</code></td><td>Zwischenspeicher der Kartenkacheln (im Konfigurationsordner), je Kartendienst ein Unterordner; 30 Tage, höchstens 500 MB. Kann gelöscht werden.</td></tr>
+<tr><td><code>maps/&lt;Name&gt;/</code></td><td>Gespeicherte Karten (im Konfigurationsordner): Kacheln <code>z/x/y</code> und <code>map.json</code>.</td></tr>
+<tr><td>Log-Ordner</td><td>CSV-Logs (<code>tetra_&lt;Datum&gt;_&lt;Uhrzeit&gt;.csv</code> mit Begleitdateien), exportierte Karten (<code>.kmz</code>, <code>.kml</code>, <code>_map.html</code> neben dem Log), Kartenbilder (<code>drive_map_&lt;Zeit&gt;.png</code>), Berichte; einstellbar unter <span class="ui">Einstellungen</span> → <span class="ui">Protokoll &amp; Bericht</span>. Vorgabe unter Linux: <code>Dokumente/SDRPP-AIA</code> im Benutzerordner (Ordner laut <code>XDG_DOCUMENTS_DIR</code>, sonst <code>~/Documents</code>), unter Windows und macOS <code>tetra_logs</code> im Konfigurationsordner. Nach einem Update gilt der bisher eingestellte Log-Ordner weiter (er gehört zu den übernommenen Einstellungen); vorhandene Logs bleiben, wo sie sind.</td></tr>
 </table>
 <h2 id="s19-2">CSV-Log</h2>
-<p>Eine Zeile pro Sekunde, Trennzeichen Semikolon. Begleitdateien: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>.</p>
+<p>Eine Zeile pro Sekunde, Trennzeichen Semikolon. Begleitdateien: <code>_events.csv</code>, <code>_stations.csv</code>, <code>_traffic.csv</code>, <code>_carriers.csv</code>. Die Zeitspalte <code>time</code> aller dieser Dateien enthält ab v0.25.0 die Ortszeit nach ISO 8601 <b>mit UTC-Versatz</b>, z. B. <code>2026-11-09T07:32:00+01:00</code>, damit Programme in anderen Zeitzonen (Google Earth, Tabellenkalkulation) die Werte richtig einordnen. Logs bis v0.24.0 (ohne Versatz) liest das Programm weiterhin als Ortszeit dieses Rechners – in den Verläufen, beim Kartenexport und bei <span class="ui">Fahrt laden...</span>.</p>
 <table class="plain">
 <tr><th style="width:36%">Spalten</th><th>Inhalt</th></tr>
-<tr><td><code>time</code></td><td>Ortszeit ISO 8601</td></tr>
+<tr><td><code>time</code></td><td>Ortszeit ISO 8601 mit UTC-Versatz</td></tr>
 <tr><td><code>level_dbfs</code>, <code>level_dbm</code></td><td>Pegel; dBm nur mit Kalibrierung</td></tr>
 <tr><td><code>mer_db</code>, <code>evm_rms_pct</code>, <code>evm_peak_pct</code></td><td>Modulationsqualität</td></tr>
 <tr><td><code>carrier_offset_hz</code>, <code>carrier_ppm</code>, <code>ref_freq_hz</code>, <code>symbol_rate_ppm</code></td><td>Frequenz und Takt</td></tr>
@@ -945,6 +1050,7 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 <tr><td><b>dBc / dBFS / dBm</b></td><td>bezogen auf den Träger / auf Vollaussteuerung / auf 1 mW.</td></tr>
 <tr><td><b>EVM, MER</b></td><td>Error Vector Magnitude, Modulation Error Ratio – Maße für Modulationsfehler.</td></tr>
 <tr><td><b>GSSI, ISSI</b></td><td>Gruppen- bzw. Einzelteilnehmerkennung (im Amateurfunk DMR-ID).</td></tr>
+<tr><td><b>KML, KMZ</b></td><td>Keyhole Markup Language – Textformat für Geodaten (Google Earth); KMZ ist eine ZIP-Datei mit der KML und den Bildern dazu.</td></tr>
 <tr><td><b>MCC, MNC, CC</b></td><td>Länder-, Netz- und Farbcode der Zelle.</td></tr>
 <tr><td><b>NTS</b></td><td>Normal Training Sequence – bekannte Bitfolge in jedem Burst (Synchronisation, Kanalschätzung).</td></tr>
 <tr><td><b>OBW</b></td><td>Occupied Bandwidth – Bandbreite mit 99 % der Leistung.</td></tr>
@@ -954,6 +1060,6 @@ time iio_readdev -u usb: -b 262144 -s 40000000 cf-ad9361-lpc voltage0 voltage1 &
 </table>
 
 <h2 id="s19-4">Herkunft und Lizenzen</h2>
-<p>SDR++ Air Interface Analyzer (SDR++ AIA) ist eine veränderte Fassung (Fork) von SDR++ (Alexandre Rouma, ON5RYZ, und Mitwirkende) auf Basis von SDR++Brown, mit dem TETRA-Demodulator-Plugin von cropinghigh und dem Decoder osmo-tetra (Osmocom). Lizenzen: GPL-3.0, für osmo-tetra AGPL-3.0; der ETSI-Sprachcodec wird beim Bauen von ETSI geladen. Änderungen dieser Ausgabe: © 2026 UnImAtrIXzEr0. Sie ist ausschließlich für experimentelle Amateurfunkzwecke bestimmt. Details: <code>NOTICE.md</code> und der Info-Dialog im Programm. Dies ist keine offizielle Veröffentlichung von SDR++ oder SDR++Brown. Quellcode: <code>github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer</code>.</p>
+<p>SDR++ Air Interface Analyzer (SDR++ AIA) ist eine veränderte Fassung (Fork) von SDR++ (Alexandre Rouma, ON5RYZ, und Mitwirkende) auf Basis von SDR++Brown, mit dem TETRA-Demodulator-Plugin von cropinghigh und dem Decoder osmo-tetra (Osmocom). Lizenzen: GPL-3.0, für osmo-tetra AGPL-3.0; der ETSI-Sprachcodec wird beim Bauen von ETSI geladen. Namenslisten und Kartenkacheln (OpenStreetMap, TopPlusOpen und basemap.de des BKG, Sentinel-2 cloudless von EOX) werden nur auf Anforderung geladen; für sie gelten die Bedingungen der Anbieter (<a href="#s16-2">Kapitel 16</a>). Änderungen dieser Ausgabe: © 2026 UnImAtrIXzEr0. Sie ist ausschließlich für experimentelle Amateurfunkzwecke bestimmt. Details: <code>NOTICE.md</code> und der Info-Dialog im Programm. Dies ist keine offizielle Veröffentlichung von SDR++ oder SDR++Brown. Quellcode: <code>github.com/UnImAtrIXzEr0/sdrpp-air-interface-analyzer</code>.</p>
 
 </body></html>

@@ -5,8 +5,10 @@ Session A: the bundled TETRA recording (Monitor, Measure with its views,
 Drive test, Alignment, Settings, RF / Gain, trends of a synthetic log,
 report, one picture of the classic layout). Session B: a synthetic
 two-frequency recording (burst analysis with timing and ramp spectrum,
-multipath). Output: PNG files in the given folder; a name ending in _en /
-_de shows the program in that language."""
+multipath). Session C: ETSI mode (network and cell). Session D: drive test
+map of a synthetic drive and the saved maps dialog. Output: PNG files in
+the given folder; a name ending in _en / _de shows the program in that
+language."""
 
 import os
 import shutil
@@ -106,6 +108,46 @@ def make_demo_log(path, hours=6.0):
                  f"{mer:.2f}" if rx == 2 else "", f"{100 * 10 ** (-mer / 20):.2f}" if rx == 2 else "", f"{rnd.gauss(4, 2):.1f}",
                  str(rx), str(int(72 * (1 - p_err))), str(lost), str(ok_n - fail), str(fail), "4", "0",
                  "439100000", f"{ppb * 0.4391:.2f}"] + [f"{x:.1f}" for x in ts]
+            f.write(";".join(v) + "\n")
+
+
+# fictional cell site of the synthetic drive (as in doc_map.cpp)
+SITE = (50.1109, 8.6821)
+
+
+def make_demo_drive(path):
+    """Synthetic 30-minute drive around the fictional cell site SITE (no real
+    measurement): level falling with the distance, a shadowed stretch, seconds
+    without service far out. Time stamps with UTC offset (logs since v0.25.0)."""
+    import math
+    import random
+    rnd = random.Random(5)
+    lat0, lon0 = SITE
+    kx = 111.2 * math.cos(math.radians(lat0))
+    lat, lon, hd = lat0 - 0.010, lon0 - 0.035, 0.6
+    cols = ["time", "level_dbfs", "level_dbm", "mer_db", "ber", "rx_state", "cell_match", "mcc", "mnc", "cc", "dl_freq_hz",
+            "crc_ndb_ok", "crc_ndb_fail", "crc_schf_ok", "crc_schf_fail", "gps_fix", "lat", "lon", "speed_kmh"]
+    with open(path, "w") as f:
+        f.write(";".join(cols) + "\n")
+        for i in range(1800):
+            hd += 0.05 * rnd.gauss(0, 1)
+            # keep within about 4 km x 5 km around the site: turn back towards it
+            if abs(lat - lat0) > 0.035 or abs(lon - lon0) > 0.07:
+                hd = math.atan2((lon0 - lon) * kx, (lat0 - lat) * 111.2) + rnd.gauss(0, 0.3)
+            lat += 0.00009 * math.cos(hd)
+            lon += 0.00014 * math.sin(hd)
+            dkm = math.hypot((lat - lat0) * 111.2, (lon - lon0) * kx)
+            dbm = -52.0 - 30.0 * math.log10(max(dkm, 0.2) / 0.2) + 4.0 * rnd.gauss(0, 1)
+            if math.sin(lon * 900) > 0.8:   # shadowed stretches
+                dbm -= 12.0
+            svc = dbm > -112.0
+            fail = 0 if dbm > -100 else 1 if dbm > -108 else 4
+            t = f"2026-11-03T{10 + i // 3600:02d}:{(i // 60) % 60:02d}:{i % 60:02d}+01:00"
+            v = [t, f"{dbm + 40:.1f}", f"{dbm:.1f}",
+                 f"{min(30.0, (dbm + 118) * 0.6 + rnd.gauss(0, 1.5)):.2f}" if svc else "",
+                 f"{min(0.2, 10 ** (-(dbm + 130) / 12)):.2e}" if svc else "",
+                 "2" if svc else "0", "1" if svc else "0", "901", "9999", "1", "439100000",
+                 str(30 - fail), str(fail), "4", "0", "1", f"{lat:.6f}", f"{lon:.6f}", "35"]
             f.write(";".join(v) + "\n")
 
 
@@ -255,7 +297,35 @@ def session_c():
         grab("inst_network", (482, 404, 730, 410))
 
 
+def session_d():
+    """Drive test: the map of a synthetic drive (loaded from a CSV log) with
+    the cell site, and the dialog of the saved maps. No map tiles: the
+    screenshots never use a real map service."""
+    src = T.recording()
+    tmp = tempfile.mkdtemp(prefix="doc_d_")
+    drive = os.path.join(tmp, "tetra_20261103_100000.csv")
+    make_demo_drive(drive)
+    cfg = base_cfg(src)
+    cfg["TETRA Analyzer"]["instMode"] = 2
+    with SDRPPTestContext() as ctx:
+        ctx.write_configs(cfg)
+        if not ctx.start():
+            print("start failed")
+            return
+        time.sleep(2.0)
+        # the SDR is not started: the map shows the loaded drive only
+        inst(ctx, "mode 2", "drive " + drive, "site %.4f %.4f" % SITE, wait=3.0)
+        for lang in LANGS:
+            inst(ctx, "lang " + lang, wait=2.0)
+            grab("inst_drivemap_" + lang)
+        # the dialog is modal and stays open: all map pictures first
+        for lang in LANGS:
+            inst(ctx, "lang " + lang, "mapsdlg", wait=2.0)
+            grab("inst_savedmaps_" + lang, (380, 100, 840, 800))
+
+
 if __name__ == "__main__":
     session_a()
     session_b()
     session_c()
+    session_d()
