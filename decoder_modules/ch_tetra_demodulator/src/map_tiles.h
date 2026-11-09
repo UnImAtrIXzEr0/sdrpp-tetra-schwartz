@@ -187,6 +187,22 @@ public:
 
     bool isActive() const { return !provKey.empty(); }
 
+    // zoom of the tiles drawn last (-1: none); GUI thread
+    int lastZoom = -1;
+
+    // file of a tile on disk (saved map or cache), "" when there is none
+    std::string tileFile(int z, int x, int y) {
+        tiles::Provider p;
+        {
+            std::lock_guard<std::mutex> lck(mtx);
+            if (!active) { return ""; }
+            p = prov;
+        }
+        std::string f = p.local ? tiles::expand(p.url, z, x, y) : cachePath(p, tiles::key(z, x, y));
+        std::error_code ec;
+        return std::filesystem::exists(f, ec) ? f : std::string();
+    }
+
     // Draws the tiles of the view. toScreen: geographic position -> screen position.
     // GUI thread.
     void draw(ImDrawList* dl, ImVec2 p0, ImVec2 p1, double cLat, double mpp,
@@ -202,6 +218,7 @@ public:
             minZ = prov.minZoom;
         }
         int z = tiles::zoomFor(cLat, mpp, maxZ, minZ);
+        lastZoom = z;
         // tile range of the view (from the four corners)
         double x0 = 1e18, x1 = -1e18, y0 = 1e18, y1 = -1e18;
         ImVec2 corners[4] = { p0, ImVec2(p1.x, p0.y), ImVec2(p0.x, p1.y), p1 };

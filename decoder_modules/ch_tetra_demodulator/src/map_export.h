@@ -18,6 +18,7 @@
 #include <cstring>
 #include <ctime>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -25,7 +26,9 @@
 #include <thread>
 #include <vector>
 #include "coverage_scale.h"
+#include "drive_track.h"
 #include "iso_time.h"
+#include "map_tiles.h"
 
 #define STB_IMAGE_WRITE_STATIC
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -187,6 +190,230 @@ public:
         size_t noSvc = std::count_if(rows.begin(), rows.end(), [](const Row& r) { return !r.service; });
         return "Exported " + std::to_string(rows.size()) + " points (" + std::to_string(noSvc) + " without service): " +
                kmzPath + ", " + kmlPath + " and " + htmlPath;
+    }
+
+    // ---- map image (PNG) of the drive map ----
+    struct MapImageSpec {
+        std::string path;
+        int w = 1600, h = 1200;          // output pixels
+        double cLat = 0, cLon = 0, mpp = 10;   // view centre, metres per output pixel
+        std::vector<DrivePoint> pts;
+        int metric = 0;
+        bool siteValid = false;
+        double siteLat = 0, siteLon = 0;
+        int tileZ = -1;                  // -1: no map
+        std::function<std::string(int, int, int)> tileFile;   // z, x, y -> file ("" none)
+        std::string attribution, title;
+        float tileAlpha = 0.75f;
+        int bgR = 200, bgG = 205, bgB = 210;
+        float scale = 2.0f;              // size of symbols and texts against the screen
+    };
+
+    void exportImageAsync(const MapImageSpec& spec) {
+        if (isBusy.exchange(true)) { return; }
+        if (worker.joinable()) { worker.join(); }
+        worker = std::thread([this, spec]() {
+            setStatus(renderMapImage(spec));
+            isBusy = false;
+        });
+    }
+
+    // Software rendering (independent of the screen): tiles from the cache or the
+    // saved map, grid without a map, cell site with rings, points, legend, scale
+    // bar, north arrow, title and the attribution of the map
+    std::string renderMapImage(const MapImageSpec& sp) {
+        const double M = 6371008.8 * tiles::PI / 180.0;
+        const double kx = M * std::cos(sp.cLat * tiles::PI / 180), ky = M;
+        int W = sp.w, H = sp.h;
+        Canvas cv(W, H);
+        cv.rect(0, 0, W, H, sp.bgR, sp.bgG, sp.bgB, 1.0);
+        auto toPx = [&](double lat, double lon, double& x, double& y) {
+            x = W * 0.5 + (lon - sp.cLon) * kx / sp.mpp;
+            y = H * 0.5 - (lat - sp.cLat) * ky / sp.mpp;
+        };
+        float k = sp.scale;
+        std::vector<unsigned char> ttf;
+        stbtt_fontinfo fi;
+        const stbtt_fontinfo* font = loadFont(fontPath, ttf, fi);
+        auto textW = [&](float px, const std::string& t) { Canvas d(1, 1); return drawText(d, font, px, 0, 0, t, true); };
+
+        if (sp.tileZ >= 0 && sp.tileFile) {
+            // tile coordinates per column (longitude) and per row (latitude)
+            int z = sp.tileZ;
+            std::vector<double> tx(W), ty(H);
+            for (int x = 0; x < W; x++) {
+                double lon = sp.cLon + (x + 0.5 - W * 0.5) * sp.mpp / kx, a, b;
+                tiles::toTile(sp.cLat, lon, z, a, b);
+                tx[x] = a;
+            }
+            for (int y = 0; y < H; y++) {
+                double lat = sp.cLat - (y + 0.5 - H * 0.5) * sp.mpp / ky, a, b;
+                tiles::toTile(lat, sp.cLon, z, a, b);
+                ty[y] = b;
+            }
+            struct Img { int w = 0, h = 0; std::vector<uint8_t> px; };
+            std::map<uint64_t, Img> imgs;
+            auto get = [&](int x, int y) -> const Img* {
+                uint64_t key = tiles::key(z, x, y);
+                auto it = imgs.find(key);
+                if (it == imgs.end()) {
+                    Img im;
+                    std::string f = sp.tileFile(z, x, y);
+                    int w, h, n;
+                    stbi_uc* d = f.empty() ? nullptr : stbi_load(f.c_str(), &w, &h, &n, 4);
+                    if (d) { im.w = w; im.h = h; im.px.assign(d, d + (size_t)w * h * 4); stbi_image_free(d); }
+                    it = imgs.emplace(key, std::move(im)).first;
+                }
+                return it->second.w ? &it->second : nullptr;
+            };
+            int n = 1 << z;
+            for (int y = 0; y < H; y++) {
+                for (int x = 0; x < W; x++) {
+                    double fx = tx[x], fy = ty[y];
+                    if (fx < 0 || fy < 0 || fx >= n || fy >= n) { continue; }
+                    int ix = (int)fx, iy = (int)fy;
+                    const Img* im = get(ix, iy);
+                    if (!im) { continue; }
+                    // bilinear sample inside the tile
+                    double u = (fx - ix) * im->w - 0.5, v = (fy - iy) * im->h - 0.5;
+                    int u0 = std::clamp((int)std::floor(u), 0, im->w - 1), v0 = std::clamp((int)std::floor(v), 0, im->h - 1);
+                    int u1 = (std::min)(u0 + 1, im->w - 1), v1 = (std::min)(v0 + 1, im->h - 1);
+                    double au = std::clamp(u - u0, 0.0, 1.0), av = std::clamp(v - v0, 0.0, 1.0);
+                    double c[3];
+                    for (int ch = 0; ch < 3; ch++) {
+                        double p00 = im->px[(v0 * im->w + u0) * 4 + ch], p01 = im->px[(v0 * im->w + u1) * 4 + ch];
+                        double p10 = im->px[(v1 * im->w + u0) * 4 + ch], p11 = im->px[(v1 * im->w + u1) * 4 + ch];
+                        c[ch] = (p00 * (1 - au) + p01 * au) * (1 - av) + (p10 * (1 - au) + p11 * au) * av;
+                    }
+                    cv.blend(x, y, (int)c[0], (int)c[1], (int)c[2], sp.tileAlpha);
+                }
+            }
+        }
+        else {
+            // grid in 1-2-5 metre steps, fixed to the ground
+            double step = drivemapNice(sp.mpp * 120.0 * k);
+            double x0 = sp.cLon * kx - W * 0.5 * sp.mpp, x1 = sp.cLon * kx + W * 0.5 * sp.mpp;
+            for (double g = std::ceil(x0 / step) * step; g <= x1; g += step) {
+                int x = (int)std::lround(W * 0.5 + (g - sp.cLon * kx) / sp.mpp);
+                cv.rect(x, 0, x + 1, H, 110, 115, 120, 0.35);
+            }
+            double y0 = sp.cLat * ky - H * 0.5 * sp.mpp, y1 = sp.cLat * ky + H * 0.5 * sp.mpp;
+            for (double g = std::ceil(y0 / step) * step; g <= y1; g += step) {
+                int y = (int)std::lround(H * 0.5 - (g - sp.cLat * ky) / sp.mpp);
+                cv.rect(0, y, W, y + 1, 110, 115, 120, 0.35);
+            }
+        }
+
+        // cell site: distance rings under the track
+        double sx = 0, sy = 0;
+        if (sp.siteValid) {
+            toPx(sp.siteLat, sp.siteLon, sx, sy);
+            double far = 0;
+            for (int c = 0; c < 4; c++) { far = (std::max)(far, std::hypot((c & 1 ? W : 0) - sx, (c & 2 ? H : 0) - sy) * sp.mpp); }
+            double step = drivemapNice((std::min)(W, H) * 0.5 * sp.mpp / 2.5);
+            int n = 0;
+            for (double r = step; r <= far && n < 40; r += step, n++) {
+                double rp = r / sp.mpp;
+                cv.ring(sx, sy, rp, 1.2 * k, 0, 64, 140, 0.7);
+                char t[32];
+                if (r >= 1000) { snprintf(t, sizeof(t), "%g km", r / 1000); } else { snprintf(t, sizeof(t), "%g m", r); }
+                drawText(cv, font, 13 * k, (int)(sx + 3 * k), (int)(sy - rp - 3 * k), t, false, 0, 64, 140);
+            }
+        }
+
+        // points: like on the screen, one per cell of 3 screen pixels (newest wins), drawn oldest first
+        cov::Scale sc = cov::scaleFor(sp.metric, !sp.pts.empty() && sp.pts.back().dbm, crcLimit);
+        double cell = 3.0 * k;
+        int gw = (int)(W / cell) + 1, gh = (int)(H / cell) + 1;
+        std::vector<unsigned char> occ((size_t)gw * gh, 0);
+        std::vector<size_t> sel;
+        for (size_t i = sp.pts.size(); i-- > 0;) {
+            double x, y;
+            toPx(sp.pts[i].lat, sp.pts[i].lon, x, y);
+            if (x < -10 || y < -10 || x > W + 10 || y > H + 10) { continue; }
+            int gx = std::clamp((int)(x / cell), 0, gw - 1), gy = std::clamp((int)(y / cell), 0, gh - 1);
+            if (occ[(size_t)gy * gw + gx]) { continue; }
+            occ[(size_t)gy * gw + gx] = 1;
+            sel.push_back(i);
+        }
+        for (size_t si = sel.size(); si-- > 0;) {
+            const DrivePoint& p = sp.pts[sel[si]];
+            double x, y;
+            toPx(p.lat, p.lon, x, y);
+            if (!p.service) { cv.disc(x, y, 3.5 * k, 0, 0, 0, 200, 200, 200, 0.5 * k); continue; }
+            double v;
+            switch (sp.metric) {
+            case cov::LEVEL: v = p.level; break;
+            case cov::MER: v = p.mer; break;
+            case cov::BER: v = (std::isnan(p.ber) || p.ber < 0) ? NAN : p.ber; break;
+            default: v = std::isnan(p.crcPct) ? NAN : cov::quality(p.crcPct, crcLimit); break;
+            }
+            if (std::isnan(v)) { continue; }
+            int r, g, b;
+            cov::ramp(sc.norm(v), r, g, b);
+            cv.disc(x, y, 3.5 * k, r, g, b, 20, 20, 20, 0.5 * k);
+        }
+
+        // cell site symbol and label on top
+        if (sp.siteValid) {
+            double hh = 14 * k;
+            for (int y = (int)(sy - hh); y <= (int)(sy + hh * 0.35); y++) {
+                double t = (y - (sy - hh)) / (hh * 1.35);
+                double half = t * hh * 0.45;
+                for (int x = (int)(sx - half - 2 * k); x <= (int)(sx + half + 2 * k); x++) {
+                    double e = std::fabs(std::fabs(x + 0.5 - sx) - half);
+                    if (e < 1.2 * k || y >= (int)(sy + hh * 0.35) - (int)(1.5 * k)) { cv.blend(x, y, 0, 64, 140, 1.0); }
+                }
+            }
+            cv.disc(sx, sy - hh, 3 * k, 0, 64, 140, 0, 64, 140, 0);
+            std::string lbl = "Cell site";
+            int tw = textW(14 * k, lbl);
+            int lx = (int)(sx + hh * 0.7), ly = (int)(sy - hh * 0.3);
+            cv.rect(lx - (int)(2 * k), ly - (int)(2 * k), lx + tw + (int)(2 * k), ly + (int)(16 * k), 240, 242, 245, 0.8);
+            drawText(cv, font, 14 * k, lx, ly + (int)(12 * k), lbl, false, 0, 64, 140);
+        }
+
+        // title strip
+        if (font && !sp.title.empty()) {
+            cv.rect(0, 0, W, (int)(26 * k), 24, 26, 28, 0.8);
+            drawText(cv, font, 16 * k, (int)(10 * k), (int)(18 * k), sp.title);
+        }
+        // north arrow (top right)
+        {
+            double x = W - 22 * k, y = (sp.title.empty() ? 10 : 34) * k;
+            cv.rect((int)(x - 11 * k), (int)(y - 4 * k), (int)(x + 11 * k), (int)(y + 40 * k), 240, 242, 245, 0.7);
+            for (int yy = 0; yy < (int)(18 * k); yy++) {
+                double half = 7 * k * yy / (18 * k);
+                cv.rect((int)(x - half), (int)(y + yy), (int)(x + half + 1), (int)(y + yy + 1), 20, 20, 20, 1.0);
+            }
+            if (font) { drawText(cv, font, 14 * k, (int)(x - textW(14 * k, "N") * 0.5), (int)(y + 34 * k), "N", false, 20, 20, 20); }
+        }
+        // scale bar (bottom right) and attribution above it
+        {
+            double len = drivemapNice(sp.mpp * 140.0 * k);
+            int px = (int)(len / sp.mpp), x1 = W - (int)(14 * k), x0 = x1 - px, y = H - (int)(14 * k);
+            char t[32];
+            if (len >= 1000) { snprintf(t, sizeof(t), "%g km", len / 1000); } else { snprintf(t, sizeof(t), "%g m", len); }
+            cv.rect(x0 - (int)(6 * k), y - (int)(26 * k), x1 + (int)(6 * k), y + (int)(5 * k), 240, 242, 245, 0.7);
+            cv.rect(x0, y - (int)(2 * k), x1, y, 20, 20, 20, 1.0);
+            cv.rect(x0, y - (int)(7 * k), x0 + (int)(2 * k), y, 20, 20, 20, 1.0);
+            cv.rect(x1 - (int)(2 * k), y - (int)(7 * k), x1, y, 20, 20, 20, 1.0);
+            if (font) { drawText(cv, font, 14 * k, (x0 + x1) / 2 - textW(14 * k, t) / 2, y - (int)(9 * k), t, false, 20, 20, 20); }
+            if (font && !sp.attribution.empty()) {
+                int aw = textW(12 * k, sp.attribution);
+                int ax = (std::max)((int)(4 * k), W - aw - (int)(14 * k)), ay = y - (int)(34 * k);
+                cv.rect(ax - (int)(4 * k), ay - (int)(13 * k), ax + aw + (int)(4 * k), ay + (int)(5 * k), 240, 242, 245, 0.8);
+                drawText(cv, font, 12 * k, ax, ay, sp.attribution, false, 20, 20, 20);
+            }
+        }
+        // legend (bottom left), at the scale of the image
+        {
+            Canvas big = legendCanvasScaled(sc, font, k);
+            cv.blit(big, (int)(10 * k), H - big.h - (int)(10 * k));
+        }
+        std::string png = encodePng(cv.px, W, H);
+        if (png.empty() || !writeText(sp.path, png)) { return "Cannot write " + sp.path; }
+        return "Saved " + sp.path;
     }
 
 private:
@@ -373,10 +600,54 @@ private:
         void rect(int x0, int y0, int x1, int y1, int r, int g, int b, double a) {
             for (int y = y0; y < y1; y++) { for (int x = x0; x < x1; x++) { blend(x, y, r, g, b, a); } }
         }
+        // filled circle with a rim (anti-aliased edges)
+        void disc(double cx, double cy, double rad, int r, int g, int b, int rr, int rg, int rb, double rimW) {
+            for (int y = (int)std::floor(cy - rad - 1); y <= (int)std::ceil(cy + rad + 1); y++) {
+                for (int x = (int)std::floor(cx - rad - 1); x <= (int)std::ceil(cx + rad + 1); x++) {
+                    double d = std::hypot(x + 0.5 - cx, y + 0.5 - cy);
+                    double a = std::clamp(rad - d + 0.5, 0.0, 1.0);
+                    if (a <= 0) { continue; }
+                    bool rim = d > rad - rimW;
+                    blend(x, y, rim ? rr : r, rim ? rg : g, rim ? rb : b, a);
+                }
+            }
+        }
+        // circle outline of width w
+        void ring(double cx, double cy, double rad, double w, int r, int g, int b, double a) {
+            int x0 = (std::max)(0, (int)std::floor(cx - rad - w)), x1 = (std::min)(this->w - 1, (int)std::ceil(cx + rad + w));
+            int y0 = (std::max)(0, (int)std::floor(cy - rad - w)), y1 = (std::min)(h - 1, (int)std::ceil(cy + rad + w));
+            for (int y = y0; y <= y1; y++) {
+                double dy = y + 0.5 - cy;
+                if (std::fabs(dy) > rad + w) { continue; }
+                for (int x = x0; x <= x1; x++) {
+                    double d = std::fabs(std::hypot(x + 0.5 - cx, dy) - rad);
+                    double c = std::clamp(w * 0.5 - d + 0.5, 0.0, 1.0);
+                    if (c > 0) { blend(x, y, r, g, b, a * c); }
+                }
+            }
+        }
+        void blit(const Canvas& src, int dx, int dy) {
+            for (int y = 0; y < src.h; y++) {
+                for (int x = 0; x < src.w; x++) {
+                    const uint8_t* p = &src.px[(y * src.w + x) * 4];
+                    if (p[3]) { blend(dx + x, dy + y, p[0], p[1], p[2], p[3] / 255.0); }
+                }
+            }
+        }
     };
 
+    static const stbtt_fontinfo* loadFont(const std::string& path, std::vector<unsigned char>& ttf, stbtt_fontinfo& fi) {
+        if (path.empty()) { return nullptr; }
+        std::ifstream f(path, std::ios::binary);
+        if (!f) { return nullptr; }
+        ttf.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+        if (ttf.empty() || !stbtt_InitFont(&fi, ttf.data(), stbtt_GetFontOffsetForIndex(ttf.data(), 0))) { return nullptr; }
+        return &fi;
+    }
+
     // Draws UTF-8 text with its baseline at y; returns the advance in pixels (0 without font)
-    static int drawText(Canvas& cv, const stbtt_fontinfo* font, float px, int x, int y, const std::string& text, bool measureOnly = false) {
+    static int drawText(Canvas& cv, const stbtt_fontinfo* font, float px, int x, int y, const std::string& text, bool measureOnly = false,
+                        int cr = 240, int cg = 240, int cb = 240) {
         if (!font) { return 0; }
         float scale = stbtt_ScaleForPixelHeight(font, px);
         float pen = (float)x;
@@ -394,7 +665,7 @@ private:
                 if (bm) {
                     int gx = (int)std::lround(pen) + xo, gy = y + yo;
                     for (int yy = 0; yy < bh; yy++) {
-                        for (int xx = 0; xx < bw; xx++) { cv.blend(gx + xx, gy + yy, 240, 240, 240, bm[yy * bw + xx] / 255.0); }
+                        for (int xx = 0; xx < bw; xx++) { cv.blend(gx + xx, gy + yy, cr, cg, cb, bm[yy * bw + xx] / 255.0); }
                     }
                     stbtt_FreeBitmap(bm, nullptr);
                 }
@@ -404,25 +675,32 @@ private:
         return (int)std::lround(pen) - x;
     }
 
-    // Dark box: title, color bar red -> green with the end values, black dot "no service"
     std::string legendPng(const Scale& s) const {
         std::vector<unsigned char> ttf;
         stbtt_fontinfo fi;
-        const stbtt_fontinfo* font = nullptr;
-        if (!fontPath.empty()) {
-            std::ifstream f(fontPath, std::ios::binary);
-            if (f) {
-                ttf.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-                if (!ttf.empty() && stbtt_InitFont(&fi, ttf.data(), stbtt_GetFontOffsetForIndex(ttf.data(), 0))) { font = &fi; }
-            }
-        }
-        const int W = 240, H = font ? 92 : 40, PAD = 10;
+        Canvas cv = legendCanvas(s, loadFont(fontPath, ttf, fi));
+        return encodePng(cv.px, cv.w, cv.h);
+    }
+
+    // Dark box: title, color bar red -> green with the end values, black dot "no service"
+    static double drivemapNice(double v) {
+        if (v <= 0) { return 1; }
+        double e = std::pow(10.0, std::floor(std::log10(v)));
+        double f = v / e;
+        return (f >= 5 ? 5 : f >= 2 ? 2 : 1) * e;
+    }
+
+    static Canvas legendCanvas(const Scale& s, const stbtt_fontinfo* font) { return legendCanvasScaled(s, font, 1.0f); }
+
+    static Canvas legendCanvasScaled(const Scale& s, const stbtt_fontinfo* font, float k) {
+        auto K = [k](double v) { return (int)std::lround(v * k); };
+        const int W = K(240), H = K(font ? 92 : 40), PAD = K(10);
         Canvas cv(W, H);
         cv.rect(0, 0, W, H, 24, 26, 28, 0.85);
         int y = PAD;
         if (font) {
-            drawText(cv, font, 18, PAD, y + 15, s.title);
-            y += 24;
+            drawText(cv, font, 18 * k, PAD, y + K(15), s.title);
+            y += K(24);
         }
         int bx0 = PAD, bx1 = W - PAD;
         for (int x = bx0; x < bx1; x++) {
@@ -430,28 +708,22 @@ private:
             double t = (double)(x - bx0) / (bx1 - bx0 - 1);
             if (s.steps) { t = t < 1.0 / 3 ? 0.0 : t < 2.0 / 3 ? 0.5 : 1.0; }
             ramp(t, r, g, b);
-            cv.rect(x, y, x + 1, y + 14, r, g, b, 1.0);
+            cv.rect(x, y, x + 1, y + K(14), r, g, b, 1.0);
         }
-        y += 14;
+        y += K(14);
         if (font) {
             std::string l = s.loText + (s.unit.empty() || s.title.find('(') != std::string::npos ? "" : " " + s.unit);
             std::string h = s.hiText;
-            drawText(cv, font, 15, bx0, y + 16, l);
+            drawText(cv, font, 15 * k, bx0, y + K(16), l);
             Canvas dummy(1, 1);
-            int hw = drawText(dummy, font, 15, 0, 0, h, true);
-            drawText(cv, font, 15, bx1 - hw, y + 16, h);
-            y += 22;
+            int hw = drawText(dummy, font, 15 * k, 0, 0, h, true);
+            drawText(cv, font, 15 * k, bx1 - hw, y + K(16), h);
+            y += K(22);
             // black dot with a light rim: no service
-            int cx = PAD + 6, cy = y + 9;
-            for (int yy = -7; yy <= 7; yy++) {
-                for (int xx = -7; xx <= 7; xx++) {
-                    double d = std::sqrt((double)(xx * xx + yy * yy));
-                    if (d <= 6.5) { cv.blend(cx + xx, cy + yy, d > 5.0 ? 200 : 0, d > 5.0 ? 200 : 0, d > 5.0 ? 200 : 0, 1.0); }
-                }
-            }
-            drawText(cv, font, 15, PAD + 18, cy + 5, "no service");
+            cv.disc(PAD + 6.5 * k, y + 9.5 * k, 6.5 * k, 0, 0, 0, 200, 200, 200, 1.5 * k);
+            drawText(cv, font, 15 * k, PAD + K(18), y + K(14), "no service");
         }
-        return encodePng(cv.px, W, H);
+        return cv;
     }
 
     // ---- minimal ZIP writer (deflate via stb_image_write, PNGs stored) ----

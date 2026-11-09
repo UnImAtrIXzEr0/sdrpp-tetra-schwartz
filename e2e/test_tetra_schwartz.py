@@ -735,6 +735,18 @@ def test_instrument_ui():
             tex = st().get("mapTextures", 0)
             if tex > 0:
                 break
+        # map image with the saved map underneath
+        ctx.module_cmd("TETRA Analyzer", "inst", "mapimg save")
+        img = {}
+        for _ in range(60):
+            ctx.sleep(0.5)
+            img = ctx.module_cmd("TETRA Analyzer", "inst", "mapimg") or {}
+            if not img.get("busy") and img.get("status"):
+                break
+        ipath = str(img.get("status", ""))[6:]
+        if not (str(img.get("status", "")).startswith("Saved ") and os.path.exists(ipath) and open(ipath, "rb").read(4) == b"\x89PNG"):
+            stats.test_fail("test_instrument_ui", f"map image: {img}")
+            return False
         ctx.module_cmd("TETRA Analyzer", "inst", "tiles off")
         if res.get("status") != "saved" or tex <= 0:
             stats.test_fail("test_instrument_ui", f"saved map: {res}, {tex} tiles shown")
@@ -762,7 +774,7 @@ def test_instrument_ui():
         if not m or m.get("rx_state") != 2:
             stats.test_fail("test_instrument_ui", f"decoder not locked after the UI run: {m}")
             return False
-    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map with tiles and a saved map, no SDR menu, classic and back")
+    stats.test_pass("test_instrument_ui", "4 modes, 7 views, EN/DE, frame work with module view, waterfall back, 10 settings pages, RF window, drive map with tiles, saved map and map image, no SDR menu, classic and back")
     return True
 
 
@@ -906,7 +918,7 @@ def test_map_export():
     if r.returncode != 0 or bad:
         stats.test_fail("test_map_export", "; ".join(bad) or "failed")
         return False
-    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs), drive map geometry, tile maths and track correct")
+    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs), drive map geometry, tile maths, saved map areas, map image and track correct")
     return True
 
 

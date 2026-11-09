@@ -115,5 +115,28 @@ int main(int argc, char** argv) {
         printf("%s\n", r.c_str());
         check(r.rfind("Exported 60 points (6 without service)", 0) == 0, k == 0 ? "export (new log)" : "export (old log)");
     }
+    // map image: rendered without a screen, PNG of the requested size
+    {
+        CoverageMapExporter e;
+        e.fontPath = font;
+        CoverageMapExporter::MapImageSpec sp;
+        sp.path = std::string(dir) + "/map.png";
+        sp.w = 640; sp.h = 480; sp.scale = 1.0f;
+        sp.cLat = 51.31; sp.cLon = 9.455; sp.mpp = 5;
+        for (int i = 0; i < 100; i++) {
+            DrivePoint p;
+            p.lat = 51.30 + i * 0.0002; p.lon = 9.45 + i * 0.0001; p.level = -60.0f - i * 0.4f; p.service = i % 10 != 0;
+            sp.pts.push_back(p);
+        }
+        sp.siteValid = true; sp.siteLat = 51.31; sp.siteLon = 9.46;
+        sp.title = "test";
+        std::string r = e.renderMapImage(sp);
+        FILE* f = fopen(sp.path.c_str(), "rb");
+        unsigned char hdr[24] = {};
+        size_t n = f ? fread(hdr, 1, 24, f) : 0;
+        if (f) { fclose(f); }
+        int w = (hdr[16] << 24) | (hdr[17] << 16) | (hdr[18] << 8) | hdr[19], h = (hdr[20] << 24) | (hdr[21] << 16) | (hdr[22] << 8) | hdr[23];
+        check(r.rfind("Saved ", 0) == 0 && n == 24 && hdr[1] == 'P' && w == 640 && h == 480, "map image 640 x 480 PNG");
+    }
     return fails ? 1 : 0;
 }

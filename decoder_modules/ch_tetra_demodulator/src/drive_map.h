@@ -80,6 +80,8 @@ public:
     double centerLat() const { return cLat; }
     double centerLon() const { return cLon; }
     double metersPerPixel() const { return mpp; }
+    double viewWidth() const { return lastW; }
+    double viewHeight() const { return lastH; }
 
     // geographic <-> pixel offset from the view centre
     void project(double lat, double lon, double& x, double& y) const {

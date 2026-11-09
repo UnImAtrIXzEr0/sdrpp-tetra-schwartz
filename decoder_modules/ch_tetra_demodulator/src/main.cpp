@@ -555,6 +555,10 @@ public:
             }
             else if (k == "rf") { rfOpen = (v == "1"); }
             else if (k == "mapsdlg") { mapsDlgOpen = true; }
+            else if (k == "mapimg") {
+                if (v == "save") { mapImgReq = true; }
+                return "{\"busy\": " + std::string(mapExport.busy() ? "true" : "false") + ", \"status\": \"" + mapExport.status() + "\"}";
+            }
             else if (k == "savemap") {
                 // "<name> <lat> <lon> <radius km> <zoom>" from the test provider (tests)
                 char nm[64] = "";
@@ -3523,6 +3527,25 @@ private:
         ImGui::TextColored(rc, "%s", right.c_str());
     }
 
+    // result of the last map export / map image, shown for 15 s in the message line
+    const std::string& exportNotice() {
+        std::string st = mapExport.busy() ? std::string() : mapExport.status();
+        if (st != exportRaw) {
+            exportRaw = st;
+            exportNoticeT = ImGui::GetTime();
+            // short form: what was written, file name only
+            auto fileOf = [](const std::string& p) { size_t i = p.find_last_of("/\\"); return i == std::string::npos ? p : p.substr(i + 1); };
+            if (st.rfind("Saved ", 0) == 0) { exportLast = std::string(ui_text::T("Image saved:")) + " " + fileOf(st.substr(6)); }
+            else if (st.rfind("Exported ", 0) == 0 && st.find(".kmz") != std::string::npos) {
+                size_t e = st.find(".kmz"), b = st.rfind(": ", e);
+                exportLast = std::string(ui_text::T("Map exported:")) + " " + fileOf(st.substr(b + 2, e + 4 - b - 2)) + " (+ .kml, .html)";
+            }
+            else { exportLast = st; }
+        }
+        static const std::string empty;
+        return (!exportLast.empty() && ImGui::GetTime() - exportNoticeT < 15.0) ? exportLast : empty;
+    }
+
     // ---- message line ----
     void drawMessageBar() {
         const float k = style::uiScale;
@@ -3541,6 +3564,7 @@ private:
         }
         else if ((instMode == IM_MEASURE || instMode == IM_ALIGN) && instWorst == ST_OK) { msg = ui_text::T("All measured values within the limits"); col = tc::good(); }
         else if (instMode == IM_MEASURE && instWorst == ST_BAD) { msg = instWorstText; col = tc::bad(); }
+        else if (!exportNotice().empty()) { msg = exportNotice(); col = tc::good(); }
         else { msg = ui_text::T("Ready"); }
         ImGui::TextColored(col, "%s", msg.c_str());
         // right: log state and time
@@ -3575,7 +3599,7 @@ private:
         static const char* keys[] = { "Monitor", "Measure", "Drive test", "Alignment", "Spectrum", "Constellation",
                                       "TX spectrum (ACP)", "Burst (uplink)", "Carriers", "Trends", "Multipath",
                                       "Reset statistics", "Start CSV log", "Stop CSV log", "Create report", "Open log...",
-                                      "Lock cell", "Unlock cell", "Export map", "Load drive...", "GPS...", "Cell site...", "Set reference", "Play anyway", "Cell details",
+                                      "Lock cell", "Unlock cell", "Export map", "Save image", "Load drive...", "GPS...", "Cell site...", "Set reference", "Play anyway", "Cell details",
                                       "RF / Gain", "Settings", "Limits: mobile station", "Limits: base station" };
         static const char* toggles[] = { "Mute encrypted", "Hide call control", "8 points (pi/4)", "Remove I/Q offset",
                                          "Analysis", "Channel raster", "Overload check", "Ramp spectrum", "Delta to reference", "Hold" };
@@ -3863,6 +3887,9 @@ private:
             }
             if (!canExport) { style::endDisabled(); }
             if (softkey("Load drive...", "loaddrive")) { driveFile.openDialog(); }
+            if (mapExport.busy()) { style::beginDisabled(); }
+            if (softkey("Save image", "mapimg")) { saveMapImage(); }
+            if (mapExport.busy()) { style::endDisabled(); }
             if (softkey("GPS...", "gpsdlg")) { gpsDlgOpen = true; }
             if (softkey("Cell site...", "sitedlg")) { siteDlgOpen = true; }
             if (softkey("Create report", "report")) { instReport(); }
@@ -4321,6 +4348,7 @@ private:
                 sr.swap(driveSiteReq);
             }
             if (!dr.empty()) { loadDrive(dr); }
+            if (mapImgReq.exchange(false)) { saveMapImage(); }
             std::string tr;
             {
                 std::lock_guard<std::mutex> lck(driveReqMtx);
@@ -4429,6 +4457,48 @@ private:
             driveMap.siteChanged = false;
             setSite(true, driveMap.siteLat, driveMap.siteLon);
         }
+    }
+
+    // the drive map as PNG (twice the screen resolution) next to the CSV logs
+    void saveMapImage() {
+        CoverageMapExporter::MapImageSpec sp;
+        double k = 2.0;
+        sp.w = (int)std::clamp(driveMap.viewWidth() * k, 400.0, 4000.0);
+        sp.h = (int)std::clamp(driveMap.viewHeight() * k, 300.0, 4000.0);
+        sp.scale = (float)(k * style::uiScale);
+        sp.cLat = driveMap.centerLat();
+        sp.cLon = driveMap.centerLon();
+        sp.mpp = driveMap.metersPerPixel() / k;
+        sp.pts = drivePts;
+        sp.metric = std::clamp(mapMetric, 0, 3);
+        sp.siteValid = propView.bsValid;
+        sp.siteLat = propView.bsLat;
+        sp.siteLon = propView.bsLon;
+        const tiles::Provider* prov = currentMapProvider();
+        if (prov && mapTiles.isActive() && mapTiles.lastZoom >= 0) {
+            sp.tileZ = mapTiles.lastZoom;
+            TileLayer* tl = &mapTiles;
+            sp.tileFile = [tl](int z, int x, int y) { return tl->tileFile(z, x, y); };
+            sp.attribution = prov->attribution;
+        }
+        std::string now = isoLocalTime(time(nullptr));
+        static const char* mt[4] = { "Level", "MER", "BER", "Quality" };
+        sp.title = std::string("TETRA drive test - ") + mt[sp.metric] + " - " + now.substr(0, 16).replace(10, 1, " ") +
+                   (driveLoaded ? " - " + driveLoadedPath.substr(driveLoadedPath.find_last_of("/\\") == std::string::npos ? 0 : driveLoadedPath.find_last_of("/\\") + 1) : std::string());
+        std::string dir = logFolder.expandString(logFolder.path);
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        char fn[64];
+        snprintf(fn, sizeof(fn), "/drive_map_%s.png", now.substr(0, 19).c_str());
+        std::string f = fn;
+        for (auto& c : f) { if (c == ':') { c = '-'; } }
+        sp.path = dir + f;
+        core::configManager.acquire();
+        std::string res = core::configManager.conf.contains("resourcesDirectory") ? core::configManager.conf["resourcesDirectory"].get<std::string>() : std::string();
+        core::configManager.release();
+        mapExport.fontPath = res.empty() ? std::string() : res + "/fonts/Roboto-Medium.ttf";
+        mapExport.crcLimit = evalView.crcLimit;
+        mapExport.exportImageAsync(sp);
     }
 
     // a drive from a CSV log (samples with GPS fix, same reading as the map export)
@@ -6707,6 +6777,9 @@ private:
     TileLayer mapTiles;
     std::string tileReq;
     std::atomic<int> mapTexShown { 0 };
+    std::string exportLast, exportRaw;
+    std::atomic<bool> mapImgReq { false };
+    double exportNoticeT = -100.0;
     std::string trendFileError;
     std::mutex trendReqMtx;
     std::string trendLoadReq;   // debug: open this CSV log in the GUI thread
