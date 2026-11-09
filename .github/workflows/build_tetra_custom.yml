@@ -114,7 +114,7 @@ jobs:
           run: |
             export E2E_ROOT_DEV="$PWD/e2eroot" E2E_BUILD_DIR="$PWD/build" E2E_BINARY="$PWD/AppDir/usr/bin/sdrpp"
             export LD_LIBRARY_PATH="$PWD/AppDir/usr/lib" SDRPP_APPDIR="$PWD/AppDir" LIBGL_ALWAYS_SOFTWARE=1
-            sudo apt-get install -y imagemagick > /dev/null
+            sudo apt-get install -y imagemagick xdotool > /dev/null
             mkdir -p docshots
             timeout 600 xvfb-run -a -s "-screen 0 1600x1000x24" python3 e2e/doc/doc_screenshots.py "$PWD/docshots" || true
             # example coverage maps (synthetic drive) rendered with the browser of the runner

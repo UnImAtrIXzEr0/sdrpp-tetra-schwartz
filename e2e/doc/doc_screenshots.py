@@ -34,8 +34,12 @@ STRIP = (482, 700, 730, 262)
 
 def grab(name, rect=None):
     # pointer into the corner: no tooltip of the waterfall or a control in the picture
-    subprocess.run(["xdotool", "mousemove", str(W - 1), str(H - 1)], check=False,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # (xdotool missing: picture without moving the pointer instead of no picture at all)
+    try:
+        subprocess.run(["xdotool", "mousemove", str(W - 1), str(H - 1)], check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except FileNotFoundError:
+        pass
     time.sleep(0.3)
     path = os.path.join(OUT, name + ".png")
     subprocess.run(["import", "-window", "root", path], check=False)
