@@ -136,8 +136,9 @@ public:
 
         if (haveData) {
             drawGrid(dl, p0, p1, cx, cy);
-            if (siteValid) { drawSite(dl, p0, p1, cx, cy); }
+            if (siteValid) { drawSite(dl, p0, p1, cx, cy, true); }
             drawPoints(dl, p0, p1, cx, cy, pts, hovered);
+            if (siteValid) { drawSite(dl, p0, p1, cx, cy, false); }
             if (curValid) { drawCurrent(dl, cx, cy, curLat, curLon, curCourse); }
             drawScaleBar(dl, p0, p1);
             drawNorth(dl, p0, p1);
@@ -206,27 +207,31 @@ private:
         }
     }
 
-    void drawSite(ImDrawList* dl, ImVec2 p0, ImVec2 p1, double cx, double cy) {
+    // rings: distance rings (under the track), otherwise the mast symbol and its label (on top)
+    void drawSite(ImDrawList* dl, ImVec2 p0, ImVec2 p1, double cx, double cy, bool rings) {
         float us = style::uiScale;
         double x, y;
         project(siteLat, siteLon, x, y);
         ImVec2 s((float)(cx + x), (float)(cy + y));
         ImU32 col = ImGui::ColorConvertFloat4ToU32(tc::val());
         // distance rings up to the farthest corner of the view
-        double far = 0;
-        ImVec2 corners[4] = { p0, ImVec2(p1.x, p0.y), ImVec2(p0.x, p1.y), p1 };
-        for (auto& c : corners) { far = (std::max)(far, std::hypot(c.x - s.x, c.y - s.y) * mpp); }
-        double viewR = (std::min)(p1.x - p0.x, p1.y - p0.y) * 0.5 * mpp;
-        double step = drivemap::niceStep(viewR / 2.5);
-        ImVec4 rc = tc::val();
-        rc.w = 0.55f;
-        ImU32 ringCol = ImGui::ColorConvertFloat4ToU32(rc);
-        int n = 0;
-        for (double r = step; r <= far && n < 40; r += step, n++) {
-            float rp = (float)(r / mpp);
-            dl->AddCircle(s, rp, ringCol, 128, 1.0f * us);
-            std::string t = drivemap::distText(r);
-            dl->AddText(ImVec2(s.x + 3 * us, s.y - rp - ImGui::GetTextLineHeight()), ringCol, t.c_str());
+        if (rings) {
+            double far = 0;
+            ImVec2 corners[4] = { p0, ImVec2(p1.x, p0.y), ImVec2(p0.x, p1.y), p1 };
+            for (auto& c : corners) { far = (std::max)(far, std::hypot(c.x - s.x, c.y - s.y) * mpp); }
+            double viewR = (std::min)(p1.x - p0.x, p1.y - p0.y) * 0.5 * mpp;
+            double step = drivemap::niceStep(viewR / 2.5);
+            ImVec4 rc = tc::val();
+            rc.w = 0.55f;
+            ImU32 ringCol = ImGui::ColorConvertFloat4ToU32(rc);
+            int n = 0;
+            for (double r = step; r <= far && n < 40; r += step, n++) {
+                float rp = (float)(r / mpp);
+                dl->AddCircle(s, rp, ringCol, 128, 1.0f * us);
+                std::string t = drivemap::distText(r);
+                dl->AddText(ImVec2(s.x + 3 * us, s.y - rp - ImGui::GetTextLineHeight()), ringCol, t.c_str());
+            }
+            return;
         }
         // mast symbol
         float h = 14 * us;
