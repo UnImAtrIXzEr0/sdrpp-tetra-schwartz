@@ -140,7 +140,7 @@ namespace module_manager_menu {
         }
 
         // Built-in menus that can be hidden from the menu bar
-        // TETRA-SCHWARTZ: no menu bar while a module shows all settings itself
+        // AIA: no menu bar while a module shows all settings itself
         if (!gui::mainWindow.menuDisabled) { ImGui::TextUnformatted("Built-in menus in the menu bar:"); }
         if (!gui::mainWindow.menuDisabled) {
             static const char* builtins[] = { "VFO Color", "Debug", "Band Plan", "Display", "Theme" };

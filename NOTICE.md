@@ -89,6 +89,12 @@ Their own terms of use apply. The data is only downloaded on request.
 - Roboto Regular and Roboto Medium (Google), Apache License 2.0 – see
   `res/fonts/LICENSE-Roboto.txt` (in the program folder: `share/sdrpp/fonts` or `res/fonts`).
 
+## Bundled single-file libraries
+
+- stb_image_write v1.16 (Sean Barrett), public domain or MIT licence (licence
+  text at the end of `core/src/imgui/stb_image_write.h`): PNG images and the
+  compression of the KMZ files of the map export.
+
 ## Trademarks and names
 
 - **About the name:** “Air Interface Analyzer” describes what the program

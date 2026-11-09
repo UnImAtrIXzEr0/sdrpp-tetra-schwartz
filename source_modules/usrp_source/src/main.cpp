@@ -280,7 +280,7 @@ public:
         masterclocks_ui.clear();
         samplerates.clear();
 
-        // TETRA-SCHWARTZ: "Auto" (key 0) leaves the master clock to the driver, which
+        // AIA: "Auto" (key 0) leaves the master clock to the driver, which
         // picks one that the requested sample rate divides into (B2xx auto tick rate)
         masterclocks_ui.define(0.0, "Auto", "Auto");
 
@@ -774,7 +774,7 @@ private:
             core::setInputSampleRate(_this->sampleRate);
         }
 
-        // TETRA-SCHWARTZ: the device can only divide its master clock by whole numbers;
+        // AIA: the device can only divide its master clock by whole numbers;
         // show what it really runs at instead of the requested list entry
         if (_this->running && _this->requestedRate > 0.0 && std::abs(_this->sampleRate - _this->requestedRate) > 1.0) {
             SmGui::Text(("Runs at " + std::to_string((int)std::lround(_this->sampleRate / 1e3)) + " kS/s (master clock "

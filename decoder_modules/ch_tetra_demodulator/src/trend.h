@@ -3,6 +3,7 @@
 // and loading of the CSV logs written by TetraMeasurements, so that a past
 // measurement can be shown in the same trend view.
 
+#include "iso_time.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -127,16 +128,8 @@ private:
         }
         return v;
     }
-    // "YYYY-MM-DDTHH:MM:SS" (local time)
-    static time_t parseTime(const std::string& s) {
-        struct tm tmv;
-        memset(&tmv, 0, sizeof(tmv));
-        if (sscanf(s.c_str(), "%d-%d-%dT%d:%d:%d", &tmv.tm_year, &tmv.tm_mon, &tmv.tm_mday, &tmv.tm_hour, &tmv.tm_min, &tmv.tm_sec) != 6) { return 0; }
-        tmv.tm_year -= 1900;
-        tmv.tm_mon -= 1;
-        tmv.tm_isdst = -1;
-        return mktime(&tmv);
-    }
+    // ISO 8601, with or without UTC offset (logs of v0.24.0 and older: local time)
+    static time_t parseTime(const std::string& s) { return parseIsoTime(s); }
 
     std::mutex mtx;
     std::deque<TetraTrendPoint> pts;

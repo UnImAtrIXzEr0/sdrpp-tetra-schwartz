@@ -12,7 +12,7 @@ public:
     bool render(std::string id);
     void setPath(std::string path, bool markChanged = false);
     bool pathIsValid();
-    // TETRA-SCHWARTZ: open the file dialog without drawing the field (e.g. from a softkey)
+    // AIA: open the file dialog without drawing the field (e.g. from a softkey)
     // and poll the result in frames where render() is not called
     void openDialog();
     bool pollChanged();

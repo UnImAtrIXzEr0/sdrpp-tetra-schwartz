@@ -751,7 +751,7 @@ int sdrpp_main(int argc, char* argv[]) {
 
     defConfig["selectedOffset"] = "None";
     defConfig["manualOffset"] = 0.0;
-    defConfig["showMenu"] = false;   // TETRA-SCHWARTZ: instrument UI, menu opened on demand
+    defConfig["showMenu"] = false;   // AIA: instrument UI, menu opened on demand
     defConfig["showWaterfall"] = true;
     defConfig["source"] = "";
     defConfig["decimation"] = 1;

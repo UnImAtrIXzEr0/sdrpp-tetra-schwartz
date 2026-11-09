@@ -31,7 +31,7 @@ public:
     std::set<std::string> hidden;
     bool isHidden(const std::string& name) const { return hidden.count(name) != 0; }
 
-    // TETRA-SCHWARTZ: content of one entry drawn outside the menu (a module's own
+    // AIA: content of one entry drawn outside the menu (a module's own
     // settings pages); false if no entry has this name
     bool drawEntry(const std::string& name);
     // module instance behind an entry, nullptr for core entries and unknown names

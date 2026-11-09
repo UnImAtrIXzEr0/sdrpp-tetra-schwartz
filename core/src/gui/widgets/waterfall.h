@@ -42,7 +42,7 @@ namespace ImGui {
         double bandwidth;
         double snapInterval = 5000;
         int reference = REF_CENTER;
-        // TETRA-SCHWARTZ: no mouse tuning of this VFO (click / drag / wheel);
+        // AIA: no mouse tuning of this VFO (click / drag / wheel);
         // a drag in the spectrum then moves the view instead
         bool positionLocked = false;
 
@@ -281,7 +281,7 @@ namespace ImGui {
         void drawWaterfallImages();
 
         void updateAllVFOs(bool checkRedrawRequired = false);
-        // TETRA-SCHWARTZ: retune the centre by 'freqOffset' while VFOs with
+        // AIA: retune the centre by 'freqOffset' while VFOs with
         // positionLocked keep their absolute frequency (clamped so they stay in the band)
         double shiftCenterKeepLocked(double freqOffset);
         bool calculateVFOSignalInfo(float* fftLine, WaterfallVFO* vfo, float& strength, float& snr);

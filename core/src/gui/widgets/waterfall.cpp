@@ -1266,7 +1266,7 @@ namespace ImGui {
                 smoothingPrimed = true;
             }
             else if (fftSmoothingPower) {
-                // TETRA-SCHWARTZ: exponential average of the power (linear), shown in dB;
+                // AIA: exponential average of the power (linear), shown in dB;
                 // averaging the dB values reads noise about 2.5 dB too low
                 const float toLin = 0.230258509f;   // ln(10) / 10
                 const float toDb = 4.342944819f;    // 10 / ln(10)

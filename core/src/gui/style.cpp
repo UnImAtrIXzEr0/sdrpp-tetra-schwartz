@@ -37,7 +37,7 @@ namespace style {
         ImFontGlyphRangesBuilder baseBuilder;
         baseBuilder.AddRanges(fonts->GetGlyphRangesDefault());
         baseBuilder.AddRanges(fonts->GetGlyphRangesCyrillic());
-        // TETRA-SCHWARTZ: Greek capital delta, en dash, ellipsis, <= >= (all in Roboto)
+        // AIA: Greek capital delta, en dash, ellipsis, <= >= (all in Roboto)
         static const ImWchar extraRange[] = { 0x0394, 0x0394, 0x2013, 0x2013, 0x2026, 0x2026, 0x2264, 0x2265, 0 };
         baseBuilder.AddRanges(extraRange);
         baseBuilder.BuildRanges(&baseRanges);
@@ -57,7 +57,7 @@ namespace style {
         hugeBuilder.BuildRanges(&hugeRanges);
         
         // Add bigger fonts for frequency select and title
-        // TETRA-SCHWARTZ: one family (Roboto), Regular for text, Medium for values
+        // AIA: one family (Roboto), Regular for text, Medium for values
         std::string regular = resDir + "/fonts/Roboto-Regular.ttf";
         if (!std::filesystem::is_regular_file(wstr::str2wstr(regular))) { regular = resDir + "/fonts/Roboto-Medium.ttf"; }
         baseFont = fonts->AddFontFromFileTTF(regular.c_str(), 18.0f * uiScale, NULL, baseRanges.Data);

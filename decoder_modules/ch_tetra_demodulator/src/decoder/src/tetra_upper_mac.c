@@ -239,7 +239,7 @@ static int rx_resrc(struct tetra_tmvsap_prim *tmvp, struct tetra_mac_state *tms)
 		msg->len = (uint16_t)(msg->tail - msg->head);
 	}
 
-	/* TETRA-SCHWARTZ: no decryption (amateur radio edition); encrypted
+	/* AIA: no decryption (amateur radio edition); encrypted
 	 * elements stay encrypted and are not decoded further */
 
 	/* We now have accurate length and start of TM-SDU, set LLC start in msg->l2h */

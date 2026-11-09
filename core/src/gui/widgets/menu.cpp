@@ -8,7 +8,7 @@
 Menu::Menu() {
 }
 
-// TETRA-SCHWARTZ: no enable checkbox on the TETRA demodulator header - a stray
+// AIA: no enable checkbox on the TETRA demodulator header - a stray
 // click there switched the whole decoder off. Shown again only if the module
 // is disabled anyway, so it can always be switched back on.
 static bool showEnableBox(const std::string& name, ModuleManager::Instance* inst) {

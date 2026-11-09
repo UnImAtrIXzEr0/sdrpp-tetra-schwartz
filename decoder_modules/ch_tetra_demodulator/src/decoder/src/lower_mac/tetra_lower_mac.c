@@ -304,7 +304,7 @@ void tp_sap_udata_ind(enum tp_sap_data_type type, int blk_num, const uint8_t *bi
 	case TPSAP_T_SCH_F:
 		tup->lchan = TETRA_LC_SCH_F;
 		//Process voice frame
-		/* TETRA-SCHWARTZ "Listen to": only the first traffic slot of a TDMA frame
+		/* AIA "Listen to": only the first traffic slot of a TDMA frame
 		 * that the listen mask allows goes through the codec. The ETSI codec has
 		 * one state only - decoding several calls in turn would mix them. */
 		if (tms->cur_burst.is_traffic) {

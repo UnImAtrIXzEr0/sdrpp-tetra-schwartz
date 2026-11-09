@@ -393,7 +393,7 @@ struct tetra_mac_state {
 	void* put_voice_data_ctx;
 	int last_frame;
 	int curr_active_timeslot;
-	int listen_mask;		/* TETRA-SCHWARTZ: bit n-1 = timeslot n may be played */
+	int listen_mask;		/* AIA: bit n-1 = timeslot n may be played */
 	int voice_skip;
 	int voice_tn;			/* timeslot of the last played voice frame */
 	/* speech bursts through the codec: CRC of the protected class bits (BFI of

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-E2E tests for the SDR++ TETRA-SCHWARTZ edition (headless, e.g. under xvfb).
+E2E tests for SDR++ Air Interface Analyzer (headless, e.g. under xvfb).
 
 1. Fresh start: an almost empty config, so all edition defaults and config
    migrations run with every module loaded (themes, hidden menus and sources,
@@ -751,10 +751,87 @@ def test_clock_cal():
     return True
 
 
+def test_map_export():
+    """Map export for Google Earth (map_export.h): KMZ and KML with one
+    folder per value, no-service points, route, time stamps in UTC and the
+    legend/point images in the KMZ; time stamps of new logs (with UTC offset)
+    and old logs (local time) both converted correctly."""
+    stats.test_start("test_map_export")
+    import subprocess, zipfile
+    import xml.etree.ElementTree as ET
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(here)
+    d = os.path.join(root, "decoder_modules", "ch_tetra_demodulator", "src")
+    cxx = os.environ.get("CXX", "g++")
+    if shutil.which(cxx) is None:
+        stats.test_pass("test_map_export", f"skipped (no C++ compiler '{cxx}')")
+        return True
+    tmpdir = tempfile.mkdtemp(prefix="tetra_map_")
+    exe = os.path.join(tmpdir, "test_map_export")
+    r = subprocess.run([cxx, "-std=c++17", "-I" + d, "-I" + os.path.join(root, "core", "src"),
+                        os.path.join(here, "gen", "test_map_export.cpp"), "-o", exe],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        stats.test_fail("test_map_export", "compile error: " + r.stderr[-400:])
+        return False
+    font = os.path.join(root, "root", "res", "fonts", "Roboto-Medium.ttf")
+    env = dict(os.environ, TZ="Europe/Berlin")
+    r = subprocess.run([exe, tmpdir, font], capture_output=True, text=True, timeout=60, env=env)
+    stats.info(r.stdout.strip())
+    bad = [l for l in r.stdout.splitlines() if l.startswith("FAIL")]
+    ns = {"k": "http://www.opengis.net/kml/2.2"}
+    try:
+        for name in ("drive_new", "drive_old"):
+            z = zipfile.ZipFile(os.path.join(tmpdir, name + ".kmz"))
+            if z.testzip() is not None:
+                bad.append(name + ": KMZ CRC error")
+            names = set(z.namelist())
+            want = {"doc.kml", "files/dot.png"} | {f"files/legend_{m}.png" for m in ("level", "mer", "ber", "quality")}
+            if names != want:
+                bad.append(f"{name}: KMZ contents {sorted(names)}")
+            for n in want - {"doc.kml"}:
+                if n in names and not z.read(n).startswith(b"\x89PNG"):
+                    bad.append(f"{name}: {n} is no PNG")
+            for kind, src in (("kmz", z.read("doc.kml")), ("kml", open(os.path.join(tmpdir, name + ".kml"), "rb").read())):
+                doc = ET.fromstring(src).find("k:Document", ns)
+                folders = {f.findtext("k:name", None, ns): f for f in doc.findall("k:Folder", ns)}
+                exp = ["Level (dBm)", "MER (dB)", "BER", "Quality (CRC errors)", "No service", "Route"]
+                if list(folders) != exp:
+                    bad.append(f"{name}.{kind}: folders {list(folders)}")
+                    continue
+                for fn in exp[:4]:
+                    n = len(folders[fn].findall("k:Placemark", ns))
+                    if n != 54:
+                        bad.append(f"{name}.{kind}: {fn} has {n} points, expected 54")
+                    vis = folders[fn].findtext("k:visibility", None, ns)
+                    if vis != ("1" if fn == "MER (dB)" else "0"):
+                        bad.append(f"{name}.{kind}: {fn} visibility {vis}")
+                    ov = len(folders[fn].findall("k:ScreenOverlay", ns))
+                    if ov != (1 if kind == "kmz" else 0):
+                        bad.append(f"{name}.{kind}: {fn} has {ov} legends")
+                if len(folders["No service"].findall("k:Placemark", ns)) != 6:
+                    bad.append(f"{name}.{kind}: no-service points")
+                when = doc.find("k:Folder/k:Placemark/k:TimeStamp/k:when", ns)
+                if when is None or when.text != "2026-07-01T10:00:00Z":
+                    bad.append(f"{name}.{kind}: first time stamp {None if when is None else when.text}")
+                if "MCC 901 MNC 9999 CC 1, 390.0125 MHz, 2026-07-01" not in (doc.findtext("k:name", "", ns)):
+                    bad.append(f"{name}.{kind}: name {doc.findtext('k:name', '', ns)}")
+                href = doc.find("k:Style/k:IconStyle/k:Icon/k:href", ns).text
+                if (href == "files/dot.png") != (kind == "kmz"):
+                    bad.append(f"{name}.{kind}: icon {href}")
+    except Exception as ex:
+        bad.append(f"exception {ex}")
+    if r.returncode != 0 or bad:
+        stats.test_fail("test_map_export", "; ".join(bad) or "failed")
+        return False
+    stats.test_pass("test_map_export", "KMZ/KML folders, legends, time stamps (new and old logs) correct")
+    return True
+
+
 if __name__ == "__main__":
     if not STATS_MODE:
         stats.verbose = True
-        stats.section("SDR++ TETRA-SCHWARTZ edition tests")
+        stats.section("SDR++ Air Interface Analyzer tests")
     r1 = test_fresh_start()
     r2 = test_tetra_chain()
     r3 = test_bursts()
@@ -763,7 +840,8 @@ if __name__ == "__main__":
     r6 = test_instrument_ui()
     r7 = test_listen_mute()
     r8 = test_clock_cal()
-    res = [r1, r2, r3, r4, r5, r6, r7, r8]
+    r9 = test_map_export()
+    res = [r1, r2, r3, r4, r5, r6, r7, r8, r9]
     ok = all(res)
     stats.final_summary(len(res), sum(int(r) for r in res), sum(int(not r) for r in res))
     sys.exit(0 if ok else 1)

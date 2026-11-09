@@ -34,7 +34,7 @@ namespace thememenu {
         // TODO: Not hardcode theme directory
         gui::themeManager.loadThemesFromDir(resDir + "/themes/");
 
-        // TETRA-SCHWARTZ: only the edition's themes (RoSc light, RoSc dark, KeSi);
+        // AIA: only the edition's themes (RoSc light, RoSc dark, KeSi);
         // the plain ImGui styles have no plugin colours and are not offered
         themeNames = gui::themeManager.getThemeNames();
         auto it = std::find(themeNames.begin(), themeNames.end(), "RoSc light");

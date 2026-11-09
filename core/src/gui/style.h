@@ -10,7 +10,7 @@ namespace style {
     SDRPP_EXPORT ImFont* bigFont;
     SDRPP_EXPORT ImFont* mediumFont;
     SDRPP_EXPORT ImFont* hugeFont;
-    // TETRA-SCHWARTZ: Roboto Medium 22 px for prominent values (base text is Roboto Regular 18 px)
+    // AIA: Roboto Medium 22 px for prominent values (base text is Roboto Regular 18 px)
     SDRPP_EXPORT ImFont* valueFont;
     SDRPP_EXPORT float uiScale;
 

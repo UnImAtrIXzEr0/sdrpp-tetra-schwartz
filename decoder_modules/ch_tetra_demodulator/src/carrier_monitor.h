@@ -5,6 +5,7 @@
 // decoding (the osmo-tetra decoder exists once per program). Each carrier is a
 // DSP-only VFO of the IQ front end with its own pi/4-DQPSK demodulator.
 
+#include "iso_time.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -292,14 +293,8 @@ private:
 
     void writeLog(const Carrier& c, time_t t) {
         if (!log) { return; }
-        struct tm lt;
-#ifdef _WIN32
-        localtime_s(&lt, &t);
-#else
-        localtime_r(&t, &lt);
-#endif
-        char ts[32];
-        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &lt);
+        std::string tsS = isoLocalTime(t);
+        const char* ts = tsS.c_str();
         std::string label = c.label;
         for (auto& ch : label) { if (ch == ';') { ch = ','; } }
         fprintf(log, "%s;%s;%.0f;%.1f;", ts, label.c_str(), c.freqHz, c.level);

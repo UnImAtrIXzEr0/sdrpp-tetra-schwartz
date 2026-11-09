@@ -48,25 +48,25 @@ public:
         firstMenuRender = true;
     }
 
-    // TETRA-SCHWARTZ: a module can own a tile column to the right of the waterfall
+    // AIA: a module can own a tile column to the right of the waterfall
     // and a strip below it. The size variables belong to the module (it saves them);
     // the splitters change them. An empty function removes the panel.
     void setSidePanel(std::function<void()> drawFunc, float* width);
-    // TETRA-SCHWARTZ: fixed-width column on the far left (only while the menu is not shown)
+    // AIA: fixed-width column on the far left (only while the menu is not shown)
     void setLeftPanel(std::function<void()> drawFunc, float width);
-    // TETRA-SCHWARTZ: the side panel keeps the width its module sets (no splitter)
+    // AIA: the side panel keeps the width its module sets (no splitter)
     bool sidePanelFixed = false;
     void setBottomPanel(std::function<void()> drawFunc, float* height);
     bool splitterActive() const { return sideDrag || bottomDrag; }
 
-    // TETRA-SCHWARTZ: full-width strip directly below the top bar (above menu, waterfall
+    // AIA: full-width strip directly below the top bar (above menu, waterfall
     // and side panel); drawFunc == nullptr or height <= 0 removes it. height in pixels
     // (already scaled).
     void setTopPanel(std::function<void()> drawFunc, float height);
-    // TETRA-SCHWARTZ: full-width strip at the very bottom of the main window (below all
+    // AIA: full-width strip at the very bottom of the main window (below all
     // columns); drawFunc == nullptr or height <= 0 removes it. height in pixels (already scaled).
     void setMessageBar(std::function<void()> drawFunc, float height);
-    // TETRA-SCHWARTZ: replaces what is drawn inside the "Waterfall" child: when set,
+    // AIA: replaces what is drawn inside the "Waterfall" child: when set,
     // drawFunc is called instead of gui::waterfall.draw(); waterfall mouse input
     // (handleWaterfallInput) and onWaterfallDrawn are skipped while it is set.
     // nullptr = normal waterfall.
@@ -80,9 +80,9 @@ public:
 
     bool logWindow = false;
     bool showMenu = true;
-    // TETRA-SCHWARTZ: a module shows all settings itself - no menu column, no menu button
+    // AIA: a module shows all settings itself - no menu column, no menu button
     bool menuDisabled = false;
-    // TETRA-SCHWARTZ: top bar without VFO selector, tuning-mode button and SNR meter
+    // AIA: top bar without VFO selector, tuning-mode button and SNR meter
     bool compactTopBar = false;
 
     // Mic stream handling

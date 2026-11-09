@@ -39,7 +39,7 @@ namespace displaymenu {
     int fftHoldSpeed = 60;
     bool fftSmoothing = false;
     int fftSmoothingSpeed = 100;
-    // TETRA-SCHWARTZ: spectrum averaging as a time constant, max hold as a decay rate
+    // AIA: spectrum averaging as a time constant, max hold as a decay rate
     float fftAvgTau = 1.0f;      // s
     bool fftAvgPower = true;     // average the power (true) or the dB values
     float fftHoldDecay = 6.0f;   // dB/s, 0 = hold until switched off
@@ -344,7 +344,7 @@ namespace displaymenu {
             core::configManager.conf["lockMenuOrder"] = gui::menu.locked;
             core::configManager.release(true);
         }
-        // TETRA-SCHWARTZ: spectrum averaging (time constant) and max hold (decay rate)
+        // AIA: spectrum averaging (time constant) and max hold (decay rate)
         if (ImGui::Checkbox("Spectrum averaging##_sdrpp", &fftSmoothing)) {
             gui::waterfall.setFFTSmoothing(fftSmoothing);
             core::configManager.acquire();

@@ -1,7 +1,7 @@
 #include "command_args.h"
 #include <filesystem>
 
-// TETRA-SCHWARTZ: a test build (OPT_TETRA_TEST_BUILD) uses its own default config
+// AIA: a test build (OPT_TETRA_TEST_BUILD) uses its own default config
 // folder so it can be used next to the stable version; -r still overrides it.
 // Android keeps its folder (modules and resources live below the root there).
 // v0.24 (rename to "SDR++ Air Interface Analyzer"): the default folder is

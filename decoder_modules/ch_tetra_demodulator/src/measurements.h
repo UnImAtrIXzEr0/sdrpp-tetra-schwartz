@@ -3,6 +3,7 @@
 // per second in its own thread (independent of whether the GUI menu is open),
 // keeps the latest snapshot for the GUI and optionally appends it to a CSV file.
 
+#include "iso_time.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -143,14 +144,8 @@ public:
         }
         std::lock_guard<std::mutex> lck(logMtx);
         if (eventFile) {
-            struct tm lt;
-#ifdef _WIN32
-            localtime_s(&lt, &e.t);
-#else
-            localtime_r(&e.t, &lt);
-#endif
-            char ts[32];
-            strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &lt);
+            std::string tsS = isoLocalTime(e.t);
+            const char* ts = tsS.c_str();
             fprintf(eventFile, "%s;%s\n", ts, text.c_str());
             fflush(eventFile);
         }
@@ -472,14 +467,8 @@ private:
     void writeLog(const TetraMeasSnapshot& s) {
         std::lock_guard<std::mutex> lck(logMtx);
         if (!logFile) { return; }
-        struct tm lt;
-#ifdef _WIN32
-        localtime_s(&lt, &s.timestamp);
-#else
-        localtime_r(&s.timestamp, &lt);
-#endif
-        char ts[32];
-        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &lt);
+        std::string tsS = isoLocalTime(s.timestamp);
+        const char* ts = tsS.c_str();
         fprintf(logFile, "%s;%.1f;%.2f;%.2f;%.1f;%.1f;%.3f;%.0f;%.2f;%d;%u;%u;%u;%.3e;"
                          "%u;%u;%u;%u;%u;%u;%u;%u;%d;%d;%d;%d;%d;%d;%d;%d;%d;",
                 ts, s.levelDbfs, s.merDb, s.evmPct, s.evmPeakPct, s.carrierOffsetHz, s.carrierPpm, s.refFreqHz,
@@ -506,14 +495,8 @@ private:
             auto tr = _subs->takeNewTraffic();
             if (en) {
                 for (auto& e : tr) {
-                    struct tm tl;
-#ifdef _WIN32
-                    localtime_s(&tl, &e.t);
-#else
-                    localtime_r(&e.t, &tl);
-#endif
-                    char tts[32];
-                    strftime(tts, sizeof(tts), "%Y-%m-%dT%H:%M:%S", &tl);
+                    std::string ttsS = isoLocalTime(e.t);
+                    const char* tts = ttsS.c_str();
                     std::string txt = e.text;
                     for (auto& c : txt) { if (c == ';' || c == '\n') { c = ','; } }
                     if (e.hasPos) {

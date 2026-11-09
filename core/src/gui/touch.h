@@ -1,5 +1,5 @@
 #pragma once
-// TETRA-SCHWARTZ touch mode helpers (Display -> Touch mode): drag with the
+// AIA touch mode helpers (Display -> Touch mode): drag with the
 // finger on an empty spot of a window to scroll it, larger touch margins.
 #include <imgui.h>
 #include <gui/menus/display.h>

@@ -2303,13 +2303,12 @@ private:
         bool canExport = !logPath.empty() && !mapExport.busy();
         if (!canExport) { style::beginDisabled(); }
         // instrument view: softkey "Export map"
-        if (!instUi && ImGui::Button(CONCAT("Export map (KML + OSM)##_tetra_map_exp_", name), ImVec2(menuWidth, 0))) {
-            mapExport.crcLimit = evalView.crcLimit;
-            mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
+        if (!instUi && ImGui::Button(CONCAT("Export map (KMZ + OSM)##_tetra_map_exp_", name), ImVec2(menuWidth, 0))) {
+            startMapExport(logPath);
         }
         if (!canExport) { style::endDisabled(); }
         if (!instUi && ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Creates a .kml (Google Earth) and a _map.html (OpenStreetMap)\nnext to the current/last CSV log. Start a CSV log with GPS connected first.");
+            ImGui::SetTooltip("Creates a .kmz and a .kml (Google Earth) and a _map.html (OpenStreetMap)\nnext to the current/last CSV log. Start a CSV log with GPS connected first.");
         }
         if (logPath.empty()) {
             tw::TextDisabled("Start a CSV log (Measurements) to record a drive.");
@@ -3216,6 +3215,16 @@ private:
         }
     }
 
+    // KMZ/KML + HTML map from a CSV log; the legend texts use the program font
+    void startMapExport(const std::string& logPath) {
+        core::configManager.acquire();
+        std::string res = core::configManager.conf.contains("resourcesDirectory") ? core::configManager.conf["resourcesDirectory"].get<std::string>() : std::string();
+        core::configManager.release();
+        mapExport.fontPath = res.empty() ? std::string() : res + "/fonts/Roboto-Medium.ttf";
+        mapExport.crcLimit = evalView.crcLimit;
+        mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
+    }
+
     void loadInstConfig() {
         json& c = config.conf[name];
         if (c.contains("instUi")) { instUi = c["instUi"]; }
@@ -3801,8 +3810,7 @@ private:
             bool canExport = !logPath.empty() && !mapExport.busy();
             if (!canExport) { style::beginDisabled(); }
             if (softkey("Export map", "map")) {
-                mapExport.crcLimit = evalView.crcLimit;
-                mapExport.exportAsync(logPath, (CoverageMapExporter::Metric)mapMetric, meas.getCellLock().active);
+                startMapExport(logPath);
             }
             if (!canExport) { style::endDisabled(); }
             if (softkey("Create report", "report")) { instReport(); }

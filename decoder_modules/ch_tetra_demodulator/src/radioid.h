@@ -5,6 +5,7 @@
 // background thread; the optional download uses the system's curl
 // (Linux, Windows 10/11 ship it), so nothing is installed or changed.
 
+#include "user_agent.h"
 #include <algorithm>
 #include <atomic>
 #include <cctype>
@@ -115,7 +116,7 @@ private:
         std::filesystem::remove(tmp, ec);
 #ifdef _WIN32
         // CreateProcess with CREATE_NO_WINDOW: no console window pops up
-        std::string cmd = "curl.exe -fsSL --max-time 300 -A SDRPP-TETRA -o \"" + tmp + "\" \"" + url + "\"";
+        std::string cmd = "curl.exe -fsSL --max-time 300 -A \"" + aiaUserAgent() + "\" -o \"" + tmp + "\" \"" + url + "\"";
         STARTUPINFOA si;
         PROCESS_INFORMATION pi;
         ZeroMemory(&si, sizeof(si));
@@ -139,7 +140,7 @@ private:
             return o + "'";
         };
         // env -u: don't let curl pick up the AppImage's bundled libraries
-        std::string cmd = "env -u LD_LIBRARY_PATH curl -fsSL --max-time 300 -A 'SDRPP-TETRA' -o " + q(tmp) + " " + q(url) + " >/dev/null 2>&1";
+        std::string cmd = "env -u LD_LIBRARY_PATH curl -fsSL --max-time 300 -A " + q(aiaUserAgent()) + " -o " + q(tmp) + " " + q(url) + " >/dev/null 2>&1";
         int rc = std::system(cmd.c_str());
 #endif
         if (rc != 0 || !std::filesystem::exists(tmp) || std::filesystem::file_size(tmp, ec) < 100) {

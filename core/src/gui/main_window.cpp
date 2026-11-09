@@ -410,7 +410,7 @@ void MainWindow::drawUpperLine(ImGui::WaterfallVFO* vfo) {
     ImGui::SameLine();
 
     ImGui::SetCursorPosY(origY);
-    // TETRA-SCHWARTZ: compact top bar (instrument view): normal tuning only - centre
+    // AIA: compact top bar (instrument view): normal tuning only - centre
     // tuning would put the channel onto the DC spike in the middle of the SDR band
     if (compactTopBar) {
         if (tuningMode != tuner::TUNER_MODE_NORMAL) {
@@ -788,7 +788,7 @@ void MainWindow::draw() {
     // Reset waterfall lock
     lockWaterfallControls = showCredits;
 
-    // TETRA-SCHWARTZ: optional full-width strips (top panel below the top bar, message
+    // AIA: optional full-width strips (top panel below the top bar, message
     // bar at the very bottom). The callables are copied and the layout is decided once
     // per frame, so a module may set or clear them from inside its own draw callbacks:
     // the space is already reserved for this frame.
@@ -815,7 +815,7 @@ void MainWindow::draw() {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        // TETRA-SCHWARTZ: the menu keeps room for a label and a value column
+        // AIA: the menu keeps room for a label and a value column
         // (21 characters wide at the current font size); narrower than that the
         // measured values would only wrap into many short lines
         const float minMenuW = (std::max)(250.0f, ImGui::GetFontSize() * 21.0f);
@@ -847,10 +847,10 @@ void MainWindow::draw() {
     displaymenu::checkKeybinds();
 
     // Left Column
-    // TETRA-SCHWARTZ: optional tile column on the right (4th column after the sliders)
+    // AIA: optional tile column on the right (4th column after the sliders)
     const float splitW = 6.0f * style::uiScale;
     bool haveSide = sidePanelFn && sidePanelW;
-    // TETRA-SCHWARTZ: the zoom / max / min column only belongs to the waterfall;
+    // AIA: the zoom / max / min column only belongs to the waterfall;
     // with a module view in its place the column shrinks to nothing (its content is clipped)
     const float ctrlW = viewFn ? 0.0f : 60.0f * style::uiScale;
     float sideW = 0.0f;
@@ -926,7 +926,7 @@ void MainWindow::draw() {
     this->displayVariousWindows();
 
 
-    // TETRA-SCHWARTZ: optional strip below the waterfall
+    // AIA: optional strip below the waterfall
     bool haveBottom = bottomPanelFn && bottomPanelH;
     float bottomH = 0.0f;
     if (haveBottom) {
@@ -955,7 +955,7 @@ void MainWindow::draw() {
     wfSize.y -= msgReserve;
     ImGui::BeginChild("Waterfall", wfSize);
 
-    // TETRA-SCHWARTZ: a module may replace the waterfall with its own view
+    // AIA: a module may replace the waterfall with its own view
     if (viewFn) {
         viewFn();
     }
@@ -1091,7 +1091,7 @@ void MainWindow::draw() {
     }
     else { sideDrag = false; }
 
-    // TETRA-SCHWARTZ: message bar below all columns
+    // AIA: message bar below all columns
     if (msgH > 0.0f) {
         ImGui::Columns(1);
         ImGui::SetCursorPosY(ImGui::GetWindowContentRegionMax().y - msgH);

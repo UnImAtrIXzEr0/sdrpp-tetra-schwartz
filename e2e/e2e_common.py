@@ -317,7 +317,7 @@ def get_base_config(build_dir: str = DEFAULT_BUILD_DIR, root_dev: str = DEFAULT_
         "sampleRate": 48000.0,
         "modulesDirectory": modules_dir,
         "resourcesDirectory": res_dir,
-        # the tests use the menu; a fresh config starts with it closed (TETRA-SCHWARTZ)
+        # the tests use the menu; a fresh config starts with it closed (AIA)
         "showMenu": True,
         # the existing tests use the classic layout; the instrument UI has its own test
         "TETRA Analyzer": {"instUi": False},
