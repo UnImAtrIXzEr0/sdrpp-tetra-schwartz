@@ -208,6 +208,8 @@ public:
         float tileAlpha = 0.75f;
         int bgR = 200, bgG = 205, bgB = 210;
         float scale = 2.0f;              // size of symbols and texts against the screen
+        // texts in the language of the user interface
+        std::string siteLabel = "Cell site", noServiceLabel = "no service", legendTitle;
     };
 
     void exportImageAsync(const MapImageSpec& spec) {
@@ -367,7 +369,7 @@ public:
                 }
             }
             cv.disc(sx, sy - hh, 3 * k, 0, 64, 140, 0, 64, 140, 0);
-            std::string lbl = "Cell site";
+            std::string lbl = sp.siteLabel;
             int tw = textW(14 * k, lbl);
             int lx = (int)(sx + hh * 0.7), ly = (int)(sy - hh * 0.3);
             cv.rect(lx - (int)(2 * k), ly - (int)(2 * k), lx + tw + (int)(2 * k), ly + (int)(16 * k), 240, 242, 245, 0.8);
@@ -409,7 +411,9 @@ public:
         }
         // legend (bottom left), at the scale of the image
         {
-            Canvas big = legendCanvasScaled(sc, font, k);
+            cov::Scale lsc = sc;
+            if (!sp.legendTitle.empty()) { lsc.title = sp.legendTitle; }
+            Canvas big = legendCanvasScaled(lsc, font, k, sp.noServiceLabel);
             cv.blit(big, (int)(10 * k), H - big.h - (int)(10 * k));
         }
         std::string png = encodePng(cv.px, W, H);
@@ -691,9 +695,9 @@ private:
         return (f >= 5 ? 5 : f >= 2 ? 2 : 1) * e;
     }
 
-    static Canvas legendCanvas(const Scale& s, const stbtt_fontinfo* font) { return legendCanvasScaled(s, font, 1.0f); }
+    static Canvas legendCanvas(const Scale& s, const stbtt_fontinfo* font) { return legendCanvasScaled(s, font, 1.0f, "no service"); }
 
-    static Canvas legendCanvasScaled(const Scale& s, const stbtt_fontinfo* font, float k) {
+    static Canvas legendCanvasScaled(const Scale& s, const stbtt_fontinfo* font, float k, const std::string& noService) {
         auto K = [k](double v) { return (int)std::lround(v * k); };
         const int W = K(240), H = K(font ? 92 : 40), PAD = K(10);
         Canvas cv(W, H);
@@ -722,7 +726,7 @@ private:
             y += K(22);
             // black dot with a light rim: no service
             cv.disc(PAD + 6.5 * k, y + 9.5 * k, 6.5 * k, 0, 0, 0, 200, 200, 200, 1.5 * k);
-            drawText(cv, font, 15 * k, PAD + K(18), y + K(14), "no service");
+            drawText(cv, font, 15 * k, PAD + K(18), y + K(14), noService);
         }
         return cv;
     }

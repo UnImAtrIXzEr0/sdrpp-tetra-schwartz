@@ -111,7 +111,7 @@ def make_demo_log(path, hours=6.0):
             v = [time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(t0 + i)), f"{lvl + 55:.1f}", f"{lvl:.1f}",
                  f"{mer:.2f}" if rx == 2 else "", f"{100 * 10 ** (-mer / 20):.2f}" if rx == 2 else "", f"{rnd.gauss(4, 2):.1f}",
                  str(rx), str(int(72 * (1 - p_err))), str(lost), str(ok_n - fail), str(fail), "4", "0",
-                 "439100000", f"{ppb * 0.4391:.2f}"] + [f"{x:.1f}" for x in ts]
+                 "438237500", f"{ppb * 0.4382375:.2f}"] + [f"{x:.1f}" for x in ts]
             f.write(";".join(v) + "\n")
 
 
@@ -150,7 +150,7 @@ def make_demo_drive(path):
             v = [t, f"{dbm + 40:.1f}", f"{dbm:.1f}",
                  f"{min(30.0, (dbm + 118) * 0.6 + rnd.gauss(0, 1.5)):.2f}" if svc else "",
                  f"{min(0.2, 10 ** (-(dbm + 130) / 12)):.2e}" if svc else "",
-                 "2" if svc else "0", "1" if svc else "0", "901", "9999", "1", "439100000",
+                 "2" if svc else "0", "1" if svc else "0", "901", "9999", "1", "438237500",
                  str(30 - fail), str(fail), "4", "0", "1", f"{lat:.6f}", f"{lon:.6f}", "35"]
             f.write(";".join(v) + "\n")
 
@@ -181,8 +181,8 @@ def session_a():
         ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
         ctx.module_cmd("TETRA Analyzer", "set_afc", "1")
         m = ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
-        if m.get("center_hz"):
-            ctx.module_cmd("TETRA Analyzer", "add_carrier", str(int(m["center_hz"]) + 60000))
+        # further carrier: the next 25 kHz channel above the main carrier
+        ctx.module_cmd("TETRA Analyzer", "add_carrier", "438262500")
         # TX spectrum first: its average and the ACP are then in "Last analysis results"
         inst(ctx, "mode 1", "view 2", wait=25.0)
         for lang in LANGS:
@@ -307,9 +307,12 @@ def session_d():
     screenshots never use a real map service."""
     src = T.recording()
     tmp = tempfile.mkdtemp(prefix="doc_d_")
+    rec = os.path.join(tmp, "baseband_438240500Hz_12-00-00_01-01-2026.wav")
+    if not T.upsample_recording(src, rec):
+        shutil.copyfile(src, rec)
     drive = os.path.join(tmp, "tetra_20261103_100000.csv")
     make_demo_drive(drive)
-    cfg = base_cfg(src)
+    cfg = base_cfg(rec)
     cfg["TETRA Analyzer"]["instMode"] = 2
     with SDRPPTestContext() as ctx:
         ctx.write_configs(cfg)
@@ -317,8 +320,14 @@ def session_d():
             print("start failed")
             return
         time.sleep(2.0)
-        # the SDR is not started: the map shows the loaded drive only
-        inst(ctx, "mode 2", "drive " + drive, "site %.4f %.4f" % SITE, wait=3.0)
+        # the recording runs (status line on the channel of the example), the map
+        # shows the loaded drive
+        ctx.module_cmd("File Source", "set_filename", rec)
+        ctx.sleep(1.5)
+        http_get(ctx.base_url, "/sdr/start")
+        ctx.module_cmd("TETRA Analyzer", "set_offset", "-3000")
+        ctx.module_cmd("TETRA Analyzer", "get_measurements", timeout=8.0)
+        inst(ctx, "mode 2", "drive " + drive, "site %.4f %.4f" % SITE, wait=6.0)
         for lang in LANGS:
             inst(ctx, "lang " + lang, wait=2.0)
             grab("inst_drivemap_" + lang)

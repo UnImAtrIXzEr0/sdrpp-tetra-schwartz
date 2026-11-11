@@ -154,18 +154,20 @@ public:
         ImVec4 val = tc::val(), good = tc::good(), warn = tc::warn(), grey = tc::grey();
         bool cal = levelCal != 0.0f;
         // add a carrier
+        // proposal: the next 25 kHz channel above the main carrier
+        if (addMHz <= 0.0 && mainFreq > 0.0) { addMHz = (mainFreq + 25000.0) / 1e6; }
         ImGui::SetNextItemWidth((std::min)(width * 0.45f, 140.0f * style::uiScale));
         ImGui::InputDouble(("MHz##_cm_f_" + id).c_str(), &addMHz, 0.0125, 0.1, "%.4f");
         tw::SameNext();
         bool full = (int)carriers.size() >= MAX_CARRIERS;
         if (full) { ImGui::BeginDisabled(); }
-        if (tw::SameButtonOrFull(("Add carrier##_cm_add_" + id).c_str())) {
+        if (tw::SameButtonOrFull(ui_text::L("Add carrier", "_cm_add_" + id).c_str())) {
             add("", addMHz * 1e6);
         }
         int newN = 0;
         for (auto& n : neighbours) { if (!hasFreq(n.second) && std::fabs(n.second - mainFreq) > 100.0) { newN++; } }
         if (newN > 0) {
-            std::string b = "Add neighbour cells (" + std::to_string(newN) + ")##_cm_nb_" + id;
+            std::string b = std::string(ui_text::T("Add neighbour cells")) + " (" + std::to_string(newN) + ")###_cm_nb_" + id;
             if (ImGui::Button(b.c_str())) {
                 for (auto& n : neighbours) {
                     if (!hasFreq(n.second) && std::fabs(n.second - mainFreq) > 100.0) { add(n.first, n.second); }
@@ -384,7 +386,7 @@ private:
     std::vector<std::unique_ptr<Carrier>> carriers;
     int nextId = 1;
     bool changed = false;
-    double addMHz = 439.0;
+    double addMHz = 0.0;   // 0: proposed from the main carrier on the first draw
     int spanIdx = 0;
     std::chrono::steady_clock::time_point lastSample;
     FILE* log = nullptr;

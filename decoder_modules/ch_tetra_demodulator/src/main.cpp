@@ -2242,7 +2242,7 @@ private:
 
         // Port selection
         if (running) { style::beginDisabled(); }
-        std::string preview = gpsPort.empty() ? "(select GPS port)" : gpsPort;
+        std::string preview = gpsPort.empty() ? std::string(ui_text::T("(select GPS port)")) : gpsPort;
         ImGui::SetNextItemWidth(menuWidth - ImGui::GetFontSize() * 6);
         if (ImGui::BeginCombo(CONCAT("##_tetra_gps_port_", name), preview.c_str())) {
             for (auto& p : gpsPorts) {
@@ -2253,10 +2253,10 @@ private:
                     config.release(true);
                 }
             }
-            if (gpsPorts.empty()) { tw::TextDisabled("no serial ports found"); }
+            if (gpsPorts.empty()) { tw::TextDisabled("%s", ui_text::T("no serial ports found")); }
             ImGui::EndCombo();
         }
-        if (tw::SameButton(CONCAT("Rescan##_tetra_gps_scan_", name))) { gpsPorts = NmeaGps::listPorts(); }
+        if (tw::SameButton(ui_text::L("Rescan", "_tetra_gps_scan_" + name).c_str())) { gpsPorts = NmeaGps::listPorts(); }
         static const int bauds[] = { 4800, 9600, 19200, 38400, 57600, 115200 };
         static const char* baudTxt = "4800\0" "9600\0" "19200\0" "38400\0" "57600\0" "115200\0";   // separate literals: "\019" would be an octal escape
         int bi = 1;
@@ -2269,11 +2269,11 @@ private:
             config.release(true);
         }
         if (running) { style::endDisabled(); }
-        tw::SameLineFor(tw::buttonWidth("Disconnect"));
+        tw::SameLineFor(tw::buttonWidth(ui_text::T("Disconnect")));
         if (!running) {
             bool can = !gpsPort.empty();
             if (!can) { style::beginDisabled(); }
-            if (ImGui::Button(CONCAT("Connect##_tetra_gps_on_", name), ImVec2(-FLT_MIN, 0))) {
+            if (ImGui::Button(ui_text::L("Connect", "_tetra_gps_on_" + name).c_str(), ImVec2(-FLT_MIN, 0))) {
                 gps.start(gpsPort, gpsBaud);
                 config.acquire();
                 config.conf[name]["gpsEnabled"] = true;
@@ -2282,7 +2282,7 @@ private:
             if (!can) { style::endDisabled(); }
         }
         else {
-            if (ImGui::Button(CONCAT("Disconnect##_tetra_gps_off_", name), ImVec2(-FLT_MIN, 0))) {
+            if (ImGui::Button(ui_text::L("Disconnect", "_tetra_gps_off_" + name).c_str(), ImVec2(-FLT_MIN, 0))) {
                 gps.stop();
                 config.acquire();
                 config.conf[name]["gpsEnabled"] = false;
@@ -2296,10 +2296,10 @@ private:
             tw::TextColored(bad, "%s", err.c_str());
         }
         else if (running && !f.connected) {
-            tw::TextColored(warn, "Waiting for NMEA data (check port/baud rate)");
+            tw::TextColored(warn, "%s", ui_text::T("Waiting for NMEA data (check port/baud rate)"));
         }
         else if (running && !f.valid) {
-            tw::TextColored(warn, "No GPS fix yet (%d satellites)", f.sats);
+            tw::TextColored(warn, ui_text::T("No GPS fix yet (%d satellites)"), f.sats);
         }
         else if (running) {
             tw::TextColored(good, "%.5f, %.5f", f.lat, f.lon);
@@ -3168,9 +3168,9 @@ private:
         else if (m.valid && m.symSync) { snprintf(v[3], 48, "%+.0f Hz*", m.carrierOffsetHz); }
         else { snprintf(v[3], 48, "--"); }
         snprintf(v[4], 48, "%d", (int)subscribers.snapshot().size());
-        if (!gps.isRunning()) { snprintf(v[5], 48, "off"); }
-        else if (!g.valid) { snprintf(v[5], 48, "no fix (%d sat)", g.sats); }
-        else { snprintf(v[5], 48, "fix, %d sat", g.sats); }
+        if (!gps.isRunning()) { snprintf(v[5], 48, "%s", ui_text::T("off")); }
+        else if (!g.valid) { snprintf(v[5], 48, ui_text::T("no fix (%d sat)"), g.sats); }
+        else { snprintf(v[5], 48, ui_text::T("fix, %d sat"), g.sats); }
         static const char* keys[6] = { "Level", "MER", "Decoder EVM", "Freq. error", "Stations", "GPS" };
         static const char* tips[6] = { nullptr, nullptr, nullptr,
                                        "Carrier frequency against the frequency announced by the cell (SYSINFO).\n* = against the TETRA VFO only (no SYSINFO yet).",
@@ -3181,7 +3181,7 @@ private:
         for (int k = 0; k < 6; k++) {
             if (k % cols != 0) { ImGui::SameLine(); }
             ImGui::BeginChild((std::string("##_bigv_") + std::to_string(k) + name).c_str(), ImVec2(cw, ImGui::GetFontSize() * 4.2f), true, ImGuiWindowFlags_NoScrollbar);
-            tw::TextDisabled("%s", keys[k]);
+            tw::TextDisabled("%s", ui_text::T(keys[k]));
             float bs = ImGui::GetFrameHeight() * 1.2f;
             ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - bs - ImGui::GetStyle().ItemSpacing.x);
             ImGui::SmallButton((std::string("i##_bigvi_") + std::to_string(k) + name).c_str());
@@ -3189,7 +3189,7 @@ private:
             if (tipHere) {
                 if (k == 0) { ImGui::SetTooltip("%s", tetra_help::text(tetra_help::LEVEL)); }
                 else if (k == 1 || k == 2) { ImGui::SetTooltip("%s", tetra_help::text(tetra_help::MER)); }
-                else { ImGui::SetTooltip("%s", tips[k]); }
+                else { ImGui::SetTooltip("%s", ui_text::T(tips[k])); }
             }
             ImGui::PushFont(style::bigFont);
             ImGui::TextColored(tc::val(), "%s", v[k]);
@@ -4002,7 +4002,7 @@ private:
         TetraMeasurements::CellLock lock = meas.getCellLock();
         if (lock.active) {
             TetraMeasSnapshot m = meas.get();
-            tw::TextDisabled("Cell lock:"); ImGui::SameLine();
+            tw::TextDisabled("%s", ui_text::T("Cell lock:")); ImGui::SameLine();
             tw::TextColored(m.cellMatch == 1 ? tc::good() : tc::bad(), "%03d/%d CC %d %.4f MHz", lock.mcc, lock.mnc, lock.cc, lock.dlFreq / 1e6);
         }
         if (meas.isLogging()) { tw::TextDisabled("%s", meas.getLogPath().c_str()); }
@@ -4485,7 +4485,10 @@ private:
         }
         std::string now = isoLocalTime(time(nullptr));
         static const char* mt[4] = { "Level", "MER", "BER", "Quality" };
-        sp.title = std::string("TETRA drive test - ") + mt[sp.metric] + " - " + now.substr(0, 16).replace(10, 1, " ") +
+        sp.siteLabel = ui_text::T("Cell site");
+        sp.noServiceLabel = ui_text::T("no service");
+        sp.legendTitle = ui_text::T(cov::scaleFor(sp.metric, !sp.pts.empty() && sp.pts.back().dbm, evalView.crcLimit).title.c_str());
+        sp.title = std::string(ui_text::T("TETRA drive test")) + " - " + ui_text::T(mt[sp.metric]) + " - " + now.substr(0, 16).replace(10, 1, " ") +
                    (driveLoaded ? " - " + driveLoadedPath.substr(driveLoadedPath.find_last_of("/\\") == std::string::npos ? 0 : driveLoadedPath.find_last_of("/\\") + 1) : std::string());
         std::string dir = logFolder.expandString(logFolder.path);
         std::error_code ec;

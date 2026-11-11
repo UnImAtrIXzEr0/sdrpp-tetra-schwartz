@@ -17,6 +17,7 @@
 #include "utils/wstr.h"
 #include <algorithm>
 #include <stdexcept>
+#include <mutex>
 #include "utils/wstr.h"
 #include "server.h"
 #include "file_source.h"
@@ -173,6 +174,12 @@ public:
     // Automation channel — invoked by debug HTTP server
     std::string handleDebugCommand(const std::string& cmd, const std::string& args) override {
         if (cmd == "set_filename" || cmd == "set_path") {
+            // the GUI must not open the same path again while this thread opens it
+            // (both threads in openPath raced in IQFrontEnd::updateFFTPath and on 'reader')
+            {
+                std::lock_guard<std::mutex> lck(cmdPathMtx);
+                cmdOpenedPath = args;
+            }
             config.acquire();
             config.conf["path"] = args;
             config.release(true);
@@ -293,7 +300,19 @@ private:
             config.acquire();
             std::string cfgPath = config.conf["path"];
             config.release();
-            if (!_this->fileSelect.pathIsValid() || (cfgPath != _this->fileSelect.path && !cfgPath.empty())) {
+            bool byCommand = false;
+            {
+                std::lock_guard<std::mutex> lck(_this->cmdPathMtx);
+                if (!_this->cmdOpenedPath.empty() && _this->cmdOpenedPath == cfgPath) {
+                    byCommand = true;
+                    _this->cmdOpenedPath.clear();
+                }
+            }
+            if (byCommand) {
+                // opened by the "set_filename" command already: only show the path
+                _this->fileSelect.setPath(cfgPath, false);
+            }
+            else if (!_this->fileSelect.pathIsValid() || (cfgPath != _this->fileSelect.path && !cfgPath.empty())) {
                 _this->fileSelect.setPath(cfgPath, true);
                 if (_this->fileSelect.pathIsValid()) {
                     if (_this->reader != NULL) {
@@ -494,6 +513,8 @@ private:
     }
 
     FileSelect fileSelect;
+    std::mutex cmdPathMtx;
+    std::string cmdOpenedPath;   // path opened by the "set_filename" command (see menuHandler)
     std::string name;
     dsp::stream<dsp::complex_t> stream;
     SourceManager::SourceHandler handler;
